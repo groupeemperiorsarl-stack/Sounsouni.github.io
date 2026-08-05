@@ -4106,6 +4106,7 @@ var ADMIN_RESTRICTED_ACTIONS = [
   "add-dashboard-partner", "toggle-dashboard-partner", "remove-dashboard-partner",
   "add-api-partner", "toggle-api-partner", "remove-api-partner", "regenerate-api-partner-key",
   "admin-edit-external-parcel", "admin-delete-external-parcel", "approve-parcel-change-request", "reject-parcel-change-request",
+  "toggle-quartier-surcharge", "save-quartier-surcharge-config", "save-quartier-pricing",
   "add-platform-commission", "toggle-platform-commission", "remove-platform-commission"
 ];
 // Actions séparément gérées par les réglages activables (pas dans la
@@ -4623,6 +4624,8 @@ const SECTOR_TYPES = {
   beaute: { icon: 'fa-spa', label: 'Beauté & Bien-être', isService: true },
   automobile: { icon: 'fa-car', label: 'Automobile', isService: true },
   hotellerie: { icon: 'fa-bed', label: 'Hôtellerie', isService: true },
+  decoration: { icon: 'fa-palette', label: 'Décoration', isService: true },
+  evenementiel: { icon: 'fa-champagne-glasses', label: 'Événementiel', isService: true },
   autre: { icon: 'fa-ellipsis', label: 'Autre entreprise', isService: false },
 };
 
@@ -4697,6 +4700,90 @@ function saveQuartiersData(data) {
   render();
 }
 
+// ---------- TARIFICATION PAR QUARTIER (livraison Express) ----------
+// Pour chaque quartier : un prix de base vérifié manuellement, un point
+// central de référence, et la distance de référence jusqu'à notre point
+// de départ — tout modifiable à tout moment. Le GPS du client ne sert
+// qu'à détecter un écart réel (quartier trop vaste), jamais de source
+// unique de vérité — l'expérience a montré le GPS pas assez fiable seul.
+function quartierPricingKey(commune, quartier) { return commune + "::" + quartier; }
+
+function getQuartierPricingData() {
+  if (state.settings) {
+    for (var i = 0; i < state.settings.length; i++) {
+      if (state.settings[i].id === "quartier_pricing") return state.settings[i].data || {};
+    }
+  }
+  return {};
+}
+
+function saveQuartierPricingData(data) {
+  var doc = { id: "quartier_pricing", data: data };
+  var idx = -1;
+  for (var i = 0; i < state.settings.length; i++) {
+    if (state.settings[i].id === "quartier_pricing") { idx = i; break; }
+  }
+  if (idx === -1) state.settings.push(doc); else state.settings[idx] = doc;
+  save();
+  saveDoc("settings", doc);
+}
+
+function getQuartierPricing(commune, quartier) {
+  var all = getQuartierPricingData();
+  return all[quartierPricingKey(commune, quartier)] || null;
+}
+
+// Réglage global de majoration (un seul, s'applique à tous les quartiers)
+// — un seuil de tolérance en km avant de commencer à majorer, puis un
+// montant fixe par km supplémentaire, sans plafond.
+function getQuartierSurchargeConfig() {
+  if (state.settings) {
+    for (var i = 0; i < state.settings.length; i++) {
+      if (state.settings[i].id === "quartier_surcharge_config") {
+        return Object.assign({ enabled: true, thresholdKm: 3, perKmSurcharge: 200 }, state.settings[i].data || {});
+      }
+    }
+  }
+  return { enabled: true, thresholdKm: 3, perKmSurcharge: 200 };
+}
+
+function saveQuartierSurchargeConfig(cfg) {
+  var doc = { id: "quartier_surcharge_config", data: cfg };
+  var idx = -1;
+  for (var i = 0; i < state.settings.length; i++) {
+    if (state.settings[i].id === "quartier_surcharge_config") { idx = i; break; }
+  }
+  if (idx === -1) state.settings.push(doc); else state.settings[idx] = doc;
+  save();
+  saveDoc("settings", doc);
+}
+
+// Calcule le tarif Express pour une commune/quartier donnés, en tenant
+// compte de la position GPS du client SEULEMENT si elle dépasse le seuil
+// de tolérance par rapport à la distance de référence du quartier — sinon
+// le prix de base fixé manuellement s'applique sans changement.
+function getQuartierDeliveryFee(commune, quartier, buyerLat, buyerLng) {
+  var pricing = getQuartierPricing(commune, quartier);
+  var expressCfg = getDeliveryBaseConfig();
+  if (!pricing || pricing.basePrice == null) {
+    // Pas encore de prix vérifié pour ce quartier précis : on retombe sur
+    // le tarif de la commune, en attendant qu'il soit renseigné.
+    return getDeliveryFee("Bamako", commune, "express") || DEFAULT_DELIVERY_FEE;
+  }
+  var basePrice = pricing.basePrice;
+  if (buyerLat == null || buyerLng == null || pricing.centerLat == null || pricing.centerLng == null || pricing.referenceDistanceKm == null) {
+    return basePrice; // pas de quoi comparer, on reste sur le prix vérifié
+  }
+  var realDistance = distanceKm(expressCfg.lat, expressCfg.lng, buyerLat, buyerLng);
+  if (realDistance == null) return basePrice;
+  var surchargeCfg = getQuartierSurchargeConfig();
+  if (!surchargeCfg.enabled) return basePrice;
+  var extraKm = realDistance - pricing.referenceDistanceKm;
+  if (extraKm <= surchargeCfg.thresholdKm) return basePrice;
+  var surcharge = Math.round((extraKm - surchargeCfg.thresholdKm) * surchargeCfg.perKmSurcharge);
+  return basePrice + surcharge;
+}
+
 function getAllQuartiersFlat() {
   var data = getQuartiersData();
   var result = [];
@@ -4745,6 +4832,8 @@ const STORAGE_KEY = "gems_demo_state_v7";
 function defaultState() {
   return {
     profile: null,
+    deviceAccountIds: [], // comptes réellement utilisés SUR CET APPAREIL — jamais synchronisé, sécurité
+    expandedQuartierPricing: {},
     accounts: [],
     onboardMode: null,
     onboardStep: "identity",
@@ -4793,10 +4882,10 @@ function defaultState() {
     adminGateError: "",
     sellerTab: "products",
     adminTab: "dashboard",
-    checkoutForm: { city: CITIES[0], zone: Object.keys(DELIVERY_FEES[CITIES[0]])[0], repere: "", payment: "paiement_livraison", deliveryMode: "express", relaisShopId: null, relaisCommune: "", relaisQuartier: "", buyerLat: null, buyerLng: null, specialInstructions: "" },
+    checkoutForm: { city: CITIES[0], zone: Object.keys(DELIVERY_FEES[CITIES[0]])[0], repere: "", payment: "paiement_livraison", deliveryMode: "express", relaisShopId: null, relaisCommune: "", relaisQuartier: "", expressCommune: "", expressQuartier: "", buyerLat: null, buyerLng: null, buyerGpsAccuracy: null, contactPhone: null, specialInstructions: "" },
     paymentPending: null,
     toastMsg: null,
-    onboardDraft: { name: "", phone: "", email: "", countryCode: "+223", role: "acheteur", sellerType: "particulier", sellerSector: null, shopName: "", shopLat: null, shopLng: null, shopPhone: "", shopAddress: "", commune: "", quartier: "", addressDetail: "", verificationDocUri: null, selfiePhotoUri: null, verificationDocs: [], useAutreQuartier: false, autreQuartierNom: "", autreQuartierLat: null, autreQuartierLng: null, cuisineType: "", openingHours: "", deliveryZone: "", productionType: "agriculture", domaineEnseigne: "", specialiteSante: "", servicesBeaute: "", servicesAuto: "", typeEtablissement: "", nombreChambres: "" },
+    onboardDraft: emptyOnboardDraft(),
     showSellerTypeModal: false,
     showSellerSectorModal: false,
     sellerTypeModalTarget: null,
@@ -4891,8 +4980,14 @@ function defaultState() {
   };
 }
 
-function emptyProductDraft() {
-  return { name: "", price: "", oldPrice: "", stock: "", category: CATEGORIES[1].name, description: "", emoji: "🛍️", images: [], video: null, colors: [], sizes: [], fitNote: "", tieredPricing: [], materiau: "", poidsBijou: "", contenance: "", typePeauUsage: "", ingredientsCosmetique: "", datePeremption: "", marqueElectro: "", modeleElectro: "", etatElectro: "neuf", garantieElectro: "", specsElectro: "", puissanceElectro: "", quantitePoidsAgri: "", uniteVenteAgri: "kg", saisonRecolte: "", fraicheurAgri: "", marqueAuto: "", modeleAuto: "", anneeAuto: "", etatAuto: "neuf", kilometrageAuto: "" };
+function emptyOnboardDraft() {
+  return { name: "", phone: "", email: "", countryCode: "+223", role: "acheteur", sellerType: "particulier", sellerSector: null, shopName: "", shopLat: null, shopLng: null, shopPhone: "", shopAddress: "", commune: "", quartier: "", addressDetail: "", verificationDocUri: null, selfiePhotoUri: null, verificationDocs: [], useAutreQuartier: false, autreQuartierNom: "", autreQuartierLat: null, autreQuartierLng: null, cuisineType: "", openingHours: "", deliveryZone: "", productionType: "agriculture", domaineEnseigne: "", specialiteSante: "", servicesBeaute: "", servicesAuto: "", typeEtablissement: "", nombreChambres: "", servicesDecoration: "", servicesEvenementiel: "", isSecondAccountFlow: false };
+}
+
+function emptyProductDraft(profileForDefault) {
+  var p = profileForDefault;
+  var defaultNonQuantifiable = p && p.sellerType === "entreprise" && (p.sellerSector === "decoration" || p.sellerSector === "evenementiel");
+  return { name: "", price: "", oldPrice: "", stock: "", isQuantifiable: !defaultNonQuantifiable, category: CATEGORIES[1].name, description: "", emoji: "🛍️", images: [], video: null, colors: [], sizes: [], fitNote: "", tieredPricing: [], materiau: "", poidsBijou: "", contenance: "", typePeauUsage: "", ingredientsCosmetique: "", datePeremption: "", marqueElectro: "", modeleElectro: "", etatElectro: "neuf", garantieElectro: "", specsElectro: "", puissanceElectro: "", quantitePoidsAgri: "", uniteVenteAgri: "kg", saisonRecolte: "", fraicheurAgri: "", marqueAuto: "", modeleAuto: "", anneeAuto: "", etatAuto: "neuf", kilometrageAuto: "" };
 }
 
 let state = loadState() || defaultState();
@@ -4945,9 +5040,6 @@ function save() {
   try {
     var localCopy = {};
     for (var k in state) {
-      // En mode Firebase actif, ces clés vivent dans Firestore, pas besoin
-      // de les dupliquer en local. En mode local (test), tout reste ici.
-      if (FIREBASE_ENABLED && SHARED_KEYS.indexOf(k) !== -1) continue;
       // toastMsg est un message éphémère (2,6s) — jamais persisté, sinon il
       // resurgit au prochain chargement si save() tombe juste avant qu'il
       // ne s'efface tout seul.
@@ -5180,12 +5272,9 @@ function registerAccount() {
     }
   }
 
-  // 4ter. Vendeur autre que Particulier : téléphone pro, adresse, GPS obligatoires
+  // 4ter. Vendeur autre que Particulier : adresse, GPS obligatoires (le
+  // téléphone pro reprend automatiquement celui déjà donné à l'étape 1)
   if (d.role === "vendeur" && d.sellerType !== "particulier") {
-    if (!d.shopPhone || !d.shopPhone.trim()) {
-      showToast("❌ Le téléphone professionnel est obligatoire pour ce type de vendeur.");
-      return;
-    }
     if (!d.shopAddress || !d.shopAddress.trim()) {
       showToast("❌ L'adresse est obligatoire pour ce type de vendeur.");
       return;
@@ -5244,7 +5333,7 @@ function registerAccount() {
     sellerType: d.role === "vendeur" ? (d.sellerType || "particulier") : null,
     sellerSector: d.role === "vendeur" ? (d.sellerSector || null) : null,
     shopName: d.role === "vendeur" ? ((d.shopName && d.shopName.trim()) ? d.shopName.trim() : "Boutique de " + d.name.trim()) : (d.role === "point_vente" ? d.shopName.trim() : null),
-    shopPhone: d.role === "vendeur" ? (d.shopPhone || "") : "",
+    shopPhone: d.role === "vendeur" ? fullPhone : "",
     shopAddress: d.role === "vendeur" ? (d.shopAddress || "") : "",
     shopLat: d.role === "point_vente" ? d.shopLat : null,
     commune: d.role === "point_vente" ? d.commune : null,
@@ -5259,6 +5348,8 @@ function registerAccount() {
     specialiteSante: d.role === "vendeur" ? (d.specialiteSante || "") : "",
     servicesBeaute: d.role === "vendeur" ? (d.servicesBeaute || "") : "",
     servicesAuto: d.role === "vendeur" ? (d.servicesAuto || "") : "",
+    servicesDecoration: d.role === "vendeur" ? (d.servicesDecoration || "") : "",
+    servicesEvenementiel: d.role === "vendeur" ? (d.servicesEvenementiel || "") : "",
     typeEtablissement: d.role === "vendeur" ? (d.typeEtablissement || "") : "",
     nombreChambres: d.role === "vendeur" ? (d.nombreChambres || "") : "",
     relaisApplicationStatus: d.role === "point_vente" ? "pending" : null,
@@ -5272,6 +5363,7 @@ function registerAccount() {
   
   state.accounts.push(account);
   state.profile = { ...account };
+  markDeviceAccount(account.id);
 
   // 7bis. Demande Point Relais : soumise à validation admin avant activation
   if (d.role === "point_vente") {
@@ -5330,7 +5422,7 @@ function registerAccount() {
   
   // 10. Changer de vue
   state.view = ROLE_HOME_VIEW[effectiveRole] || "market";
-  state.onboardDraft = { name: "", phone: "", email: "", countryCode: "+223", role: "acheteur", sellerType: "particulier", sellerSector: null, shopName: "", shopLat: null, shopLng: null, shopPhone: "", shopAddress: "", commune: "", quartier: "", addressDetail: "", verificationDocUri: null, selfiePhotoUri: null, verificationDocs: [], useAutreQuartier: false, autreQuartierNom: "", autreQuartierLat: null, autreQuartierLng: null, cuisineType: "", openingHours: "", deliveryZone: "", productionType: "agriculture", domaineEnseigne: "", specialiteSante: "", servicesBeaute: "", servicesAuto: "", typeEtablissement: "", nombreChambres: "" };
+  state.onboardDraft = emptyOnboardDraft();
   state.onboardStep = "identity";
   
   // 11. Notifications
@@ -5396,6 +5488,15 @@ function switchToLinkedAccount(accountId) {
   loginAccount(accountId);
 }
 
+// Marque un compte comme "réellement utilisé sur cet appareil" — c'est
+// cette liste (purement locale, jamais synchronisée) qui décide quels
+// comptes apparaissent dans le sélecteur "Comptes existants".
+function markDeviceAccount(accountId) {
+  if (!state.deviceAccountIds) state.deviceAccountIds = [];
+  if (state.deviceAccountIds.indexOf(accountId) === -1) state.deviceAccountIds.push(accountId);
+  save();
+}
+
 function loginAccount(accountId) {
   var account = null;
   for (var i = 0; i < state.accounts.length; i++) {
@@ -5411,6 +5512,7 @@ function loginAccount(accountId) {
   }
   if (!Array.isArray(account.loginHistory)) account.loginHistory = [];
   account.loginHistory.push(Date.now());
+  markDeviceAccount(account.id);
   if (account.loginHistory.length > 200) account.loginHistory = account.loginHistory.slice(-200);
   state.profile = { ...account };
   state.view = ROLE_HOME_VIEW[account.role] || "market";
@@ -5806,6 +5908,10 @@ function placeOrder() {
       return;
     }
   } else {
+    if (!form.expressCommune || !form.expressQuartier) {
+      showToast("Choisissez votre commune et votre quartier.");
+      return;
+    }
     if (!form.repere.trim()) {
       showToast("Le point de repère est obligatoire.");
       return;
@@ -5823,7 +5929,7 @@ function placeOrder() {
     }
   }
 
-  var deliveryFee = getDeliveryFee(form.city, form.zone, isRelais ? "relais" : "express");
+  var deliveryFee = isRelais ? getDeliveryFee(form.city, form.zone, "relais") : getQuartierDeliveryFee(form.expressCommune, form.expressQuartier, form.buyerLat, form.buyerLng);
   var subtotal = checkoutSubtotal();
   var orderId = uid();
 
@@ -5831,6 +5937,8 @@ function placeOrder() {
     id: orderId,
     buyerId: state.profile.id,
     buyerName: state.profile.name,
+    buyerPhone: state.profile.phone,
+    contactPhone: (form.contactPhone && form.contactPhone.trim()) ? form.contactPhone.trim() : state.profile.phone,
     items: [],
     subtotal: subtotal,
     deliveryFee: deliveryFee,
@@ -8028,6 +8136,7 @@ function buildHTML() {
     return renderPartnerDashboard();
   }
   if (!state.profile) return renderOnboarding();
+  if (state.view === "onboarding") return renderOnboarding();
   var html = renderHeader();
   html += '<main>';
   if (state.view === "market") html += renderMarket();
@@ -8200,8 +8309,10 @@ function renderOnboarding() {
 
   if (mode === "list") {
     var accountsHtml = '';
-    for (var i = 0; i < state.accounts.length; i++) {
-      var a = state.accounts[i];
+    var deviceIds = state.deviceAccountIds || [];
+    var visibleAccounts = state.accounts.filter(function(a) { return deviceIds.indexOf(a.id) !== -1; });
+    for (var i = 0; i < visibleAccounts.length; i++) {
+      var a = visibleAccounts[i];
       accountsHtml += '<button class="account-item" data-action="login-account" data-value="' + a.id + '">';
       accountsHtml += '<div class="account-avatar">' + esc(a.name.slice(0, 1).toUpperCase()) + '</div>';
       accountsHtml += '<div style="flex:1;text-align:left">';
@@ -8362,6 +8473,12 @@ function renderOnboardStepSectorDetails(d) {
     html += '<input class="input" placeholder="Ex : H\u00f4tel, auberge, r\u00e9sidence\u2026" value="' + esc(d.typeEtablissement || '') + '" data-bind="onboardDraft.typeEtablissement" />';
     html += '<label class="field-label">Nombre de chambres</label>';
     html += '<input class="input" type="number" placeholder="Ex : 12" value="' + esc(d.nombreChambres || '') + '" data-bind="onboardDraft.nombreChambres" />';
+  } else if (d.sellerSector === "decoration") {
+    html += '<label class="field-label">Services propos\u00e9s</label>';
+    html += '<input class="input" placeholder="Ex : D\u00e9coration de salle, arches de ballons, location de mobilier\u2026" value="' + esc(d.servicesDecoration || '') + '" data-bind="onboardDraft.servicesDecoration" />';
+  } else if (d.sellerSector === "evenementiel") {
+    html += '<label class="field-label">Services propos\u00e9s</label>';
+    html += '<input class="input" placeholder="Ex : Organisation de mariage, traiteur \u00e9v\u00e9nementiel, sonorisation\u2026" value="' + esc(d.servicesEvenementiel || '') + '" data-bind="onboardDraft.servicesEvenementiel" />';
   }
   html += renderVendorContactFields(d);
   html += '<button class="btn-primary" style="margin-top:22px" data-action="complete-onboarding">Cr\u00e9er mon compte <i class="fa-solid fa-arrow-right"></i></button>';
@@ -8373,13 +8490,11 @@ function renderOnboardStepSectorDetails(d) {
 function renderVendorContactFields(d) {
   var vendorGpsOk = d.shopLat != null && d.shopLng != null;
   var html = '';
-  if (!d.email) {
+  if (!d.email || d.isSecondAccountFlow) {
     html += '<label class="field-label">Email *</label>';
     html += '<input class="input" type="email" placeholder="exemple@email.com" value="' + esc(d.email || '') + '" data-bind="onboardDraft.email" />';
-    html += '<div style="font-size:10.5px;color:var(--text-dim);margin-bottom:10px;">Obligatoire pour ce type de compte.</div>';
+    html += '<div style="font-size:10.5px;color:var(--text-dim);margin-bottom:10px;">Obligatoire pour ce type de compte' + (d.isSecondAccountFlow ? ' — reprend votre email actuel, modifiable si besoin' : '') + '.</div>';
   }
-  html += '<label class="field-label">T\u00e9l\u00e9phone professionnel *</label>';
-  html += '<input class="input" placeholder="Ex : 70 00 00 00" value="' + esc(d.shopPhone || '') + '" data-bind="onboardDraft.shopPhone" />';
   html += '<label class="field-label">Adresse *</label>';
   html += '<input class="input" placeholder="Ex : Rue 123, Hamdallaye ACI 2000" value="' + esc(d.shopAddress || '') + '" data-bind="onboardDraft.shopAddress" />';
   html += '<label class="field-label">Position GPS *</label>';
@@ -8584,7 +8699,7 @@ function renderVendorHubModal() {
       html += '<button class="vendor-hub-card" data-action="switch-to-linked-account" data-value="' + vhAcc.id + '"><i class="fa-solid fa-right-left"></i><div><div class="vh-title">Basculer vers ' + esc(vhAcc.shopName || vhAcc.name) + '</div><div class="vh-sub">' + (ROLE_LABELS[vhAcc.role] || vhAcc.role) + ' — même identité</div></div><i class="fa-solid fa-chevron-right"></i></button>';
     }
   } else {
-    html += '<button class="vendor-hub-card" data-action="show-second-account-info" data-value="1" style="background:var(--bg-body);"><i class="fa-solid fa-circle-info"></i><div><div class="vh-title">Ouvrir une 2ᵉ ou 3ᵉ boutique ?</div><div class="vh-sub">C\'est possible — touchez pour savoir comment</div></div><i class="fa-solid fa-chevron-right"></i></button>';
+    html += '<button class="vendor-hub-card" data-action="show-second-account-info" data-value="1" style="background:var(--bg-body);"><i class="fa-solid fa-circle-plus"></i><div><div class="vh-title">Ouvrir une 2ᵉ ou 3ᵉ boutique</div><div class="vh-sub">Nom et téléphone déjà remplis — juste le reste à compléter</div></div><i class="fa-solid fa-chevron-right"></i></button>';
   }
   html += '</div></div></div>';
   return html;
@@ -9690,8 +9805,8 @@ function renderCheckout() {
   var f = state.checkoutForm;
   var zones = deliveryZonesForCity(f.city);
   var isRelais = f.deliveryMode === "relais";
-  var expressFee = f.buyerLat != null ? computeExpressFeeFromDistance(f.buyerLat, f.buyerLng) : null;
-  var fee = isRelais ? getDeliveryFee(f.city, f.zone, "relais") : (expressFee != null ? expressFee : getDeliveryFee(f.city, f.zone, "express"));
+  var expressFee = (f.expressCommune && f.expressQuartier) ? getQuartierDeliveryFee(f.expressCommune, f.expressQuartier, f.buyerLat, f.buyerLng) : null;
+  var fee = isRelais ? getDeliveryFee(f.city, f.zone, "relais") : (expressFee != null ? expressFee : DEFAULT_DELIVERY_FEE);
   var cityOptions = '';
   for (var i = 0; i < CITIES.length; i++) {
     cityOptions += '<option value="' + CITIES[i] + '" ' + (f.city === CITIES[i] ? 'selected' : '') + '>' + CITIES[i] + '</option>';
@@ -9742,18 +9857,43 @@ function renderCheckout() {
     html += renderRelaisShopPicker();
   } else {
     var kmDistance = f.buyerLat != null ? distanceKm(getDeliveryBaseConfig().lat, getDeliveryBaseConfig().lng, f.buyerLat, f.buyerLng) : null;
+    var qData2 = getQuartiersData();
+    var communeNames2 = Object.keys(qData2);
+    var communeOptions2 = '<option value="">Choisir…</option>';
+    for (var eci = 0; eci < communeNames2.length; eci++) {
+      communeOptions2 += '<option value="' + communeNames2[eci] + '" ' + (f.expressCommune === communeNames2[eci] ? 'selected' : '') + '>' + communeNames2[eci] + '</option>';
+    }
+    var quartierOptions2 = '<option value="">Choisir…</option>';
+    if (f.expressCommune && qData2[f.expressCommune]) {
+      var eqList = qData2[f.expressCommune];
+      for (var eqi = 0; eqi < eqList.length; eqi++) {
+        quartierOptions2 += '<option value="' + eqList[eqi] + '" ' + (f.expressQuartier === eqList[eqi] ? 'selected' : '') + '>' + eqList[eqi] + '</option>';
+      }
+    }
+    html += '<label class="field-label">Commune *</label>';
+    html += '<select class="input" data-bind="checkoutForm.expressCommune" data-action-change="express-commune-changed">' + communeOptions2 + '</select>';
+    html += '<label class="field-label">Quartier *</label>';
+    html += '<select class="input" data-bind="checkoutForm.expressQuartier" ' + (!f.expressCommune ? 'disabled' : '') + '>' + quartierOptions2 + '</select>';
+    if (f.expressCommune && f.expressQuartier) {
+      var estimatedFee = getQuartierDeliveryFee(f.expressCommune, f.expressQuartier, f.buyerLat, f.buyerLng);
+      html += '<div style="font-size:12px;color:var(--success);margin:6px 0 10px;"><i class="fa-solid fa-tag"></i> Tarif estimé pour ce quartier : <strong>' + money(estimatedFee) + '</strong></div>';
+    }
     html += '<label class="field-label">Point de repère *</label>';
     html += '<input class="input" placeholder="Ex : face à la mosquée" value="' + esc(f.repere) + '" data-bind="checkoutForm.repere" />';
-    html += '<label class="field-label">Position exacte *</label>';
-    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:8px;">Le prix Express se calcule sur la distance réelle jusqu\'à votre position — indispensable pour un tarif juste.</div>';
+    html += '<label class="field-label">Téléphone joignable pour cette livraison</label>';
+    html += '<input class="input" placeholder="Ex : 70 00 00 00" value="' + esc(f.contactPhone != null ? f.contactPhone : (state.profile.phone || '')) + '" data-bind="checkoutForm.contactPhone" />';
+    html += '<div style="font-size:10.5px;color:var(--text-dim);margin-bottom:10px;">Par défaut, votre numéro d\'inscription — changez-le si un autre numéro est plus facile à joindre pour cette commande.</div>';
+    html += '<label class="field-label">Position exacte (optionnel — précise le tarif si votre coin du quartier est éloigné)</label>';
     html += '<button type="button" class="btn-secondary" data-action="capture-buyer-gps"><i class="fa-solid fa-location-crosshairs"></i> Localiser ma position</button>';
     html += renderGpsPasteField("checkoutForm.buyerLat", "checkoutForm.buyerLng");
     if (f.buyerLat != null) {
       html += '<div class="glass-card" style="padding:12px;margin-top:10px;background:rgba(46,158,79,0.08);">';
       html += '<div style="font-size:12px;color:var(--success);"><i class="fa-solid fa-check-circle"></i> Position confirmée' + (kmDistance != null ? ' — ' + kmDistance.toFixed(1) + ' km de notre point de départ (' + esc(getDeliveryBaseConfig().label) + ')' : '') + '</div>';
+      if (f.buyerGpsAccuracy) {
+        var accIsPoor = f.buyerGpsAccuracy > 100;
+        html += '<div style="font-size:11px;margin-top:4px;color:' + (accIsPoor ? 'var(--danger)' : 'var(--text-dim)') + ';"><i class="fa-solid fa-crosshairs"></i> Précision : ±' + Math.round(f.buyerGpsAccuracy) + 'm' + (accIsPoor ? ' — signal faible, sortez à l\'extérieur et relocalisez pour un tarif plus juste' : '') + '</div>';
+      }
       html += '</div>';
-    } else {
-      html += '<div style="font-size:11px;color:var(--danger);margin-top:6px"><i class="fa-solid fa-triangle-exclamation"></i> Position requise pour calculer le tarif Express.</div>';
     }
   }
 
@@ -9970,8 +10110,6 @@ function renderSellerProfileSetup() {
   var html = '<div class="section-title"><i class="fa-solid ' + typeInfo.icon + '"></i> Complétez votre profil</div>';
   html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:16px;">Ces informations sont obligatoires pour les vendeurs de type "' + esc(typeInfo.label) + '" avant d\'accéder à votre espace.</div>';
 
-  html += '<label class="field-label">Téléphone professionnel *</label>';
-  html += '<input class="input" placeholder="Ex : 70 00 00 00" value="' + esc(p.shopPhone || '') + '" data-bind="profile.shopPhone" />';
   html += '<label class="field-label">Adresse *</label>';
   html += '<input class="input" placeholder="Ex : Rue 123, Hamdallaye ACI 2000" value="' + esc(p.shopAddress || '') + '" data-bind="profile.shopAddress" />';
   html += '<label class="field-label">Position GPS *</label>';
@@ -10199,6 +10337,8 @@ function renderSellerProducts() {
   }
 
   var stockLabel = 'Stock';
+  if (d.isQuantifiable === undefined) d.isQuantifiable = true;
+  var hideStock = !d.isQuantifiable;
   var typeFields = '';
 
   if (sellerType === 'restaurant') {
@@ -10234,6 +10374,12 @@ function renderSellerProducts() {
       stockLabel = 'Chambres disponibles';
       typeFields = '<label class="field-label">Capacité (personnes)</label><input class="input" type="number" placeholder="Ex: 2" value="' + esc(d.capacite || '') + '" data-bind="productDraft.capacite" />';
       typeFields += '<label class="field-label">Petit-déjeuner inclus</label><select class="input" data-bind="productDraft.petitDejeuner"><option value="non" ' + (d.petitDejeuner === 'non' ? 'selected' : '') + '>Non</option><option value="oui" ' + (d.petitDejeuner === 'oui' ? 'selected' : '') + '>Oui</option></select>';
+    } else if (sellerSector === 'decoration') {
+      typeFields = '<label class="field-label">Type de prestation</label><input class="input" placeholder="Ex: Décoration de salle, arches de ballons…" value="' + esc(d.typePrestationDeco || '') + '" data-bind="productDraft.typePrestationDeco" />';
+      typeFields += '<label class="field-label">Délai de préparation</label><input class="input" placeholder="Ex: 48h, 1 semaine" value="' + esc(d.delaiPreparationDeco || '') + '" data-bind="productDraft.delaiPreparationDeco" />';
+    } else if (sellerSector === 'evenementiel') {
+      typeFields = '<label class="field-label">Type d\'événement</label><input class="input" placeholder="Ex: Mariage, anniversaire, séminaire…" value="' + esc(d.typeEvenement || '') + '" data-bind="productDraft.typeEvenement" />';
+      typeFields += '<label class="field-label">Capacité (invités)</label><input class="input" type="number" placeholder="Ex: 100" value="' + esc(d.capaciteEvenement || '') + '" data-bind="productDraft.capaciteEvenement" />';
     }
     // boutique / autre : pas de champs supplémentaires spécifiques au vendeur
   }
@@ -10321,10 +10467,19 @@ function renderSellerProducts() {
   }
   html += '<label class="field-label">Nom</label>';
   html += '<input class="input" placeholder="Nom du produit" value="' + esc(d.name) + '" data-bind="productDraft.name" />';
-  html += '<div style="display:flex;gap:10px">';
-  html += '<div style="flex:1"><label class="field-label">Prix (FCFA)</label><input class="input" type="number" placeholder="2500" value="' + esc(d.price) + '" data-bind="productDraft.price" /></div>';
-  html += '<div style="flex:1"><label class="field-label">' + esc(stockLabel) + '</label><input class="input" type="number" placeholder="10" value="' + esc(d.stock) + '" data-bind="productDraft.stock" /></div>';
+  html += '<label class="field-label">Ce produit ou service est-il quantifiable ?</label>';
+  html += '<div style="display:flex;gap:8px;margin-bottom:4px;">';
+  html += '<button type="button" class="chip ' + (!hideStock ? 'active' : '') + '" data-action="set-product-quantifiable" data-value="1">Oui — j\'ai un ' + (stockLabel === 'Stock' ? 'stock' : 'nombre') + ' précis</button>';
+  html += '<button type="button" class="chip ' + (hideStock ? 'active' : '') + '" data-action="set-product-quantifiable" data-value="0">Non — sur mesure / au cas par cas</button>';
   html += '</div>';
+  if (hideStock) {
+    html += '<label class="field-label">Prix (FCFA)</label><input class="input" type="number" placeholder="2500" value="' + esc(d.price) + '" data-bind="productDraft.price" />';
+  } else {
+    html += '<div style="display:flex;gap:10px">';
+    html += '<div style="flex:1"><label class="field-label">Prix (FCFA)</label><input class="input" type="number" placeholder="2500" value="' + esc(d.price) + '" data-bind="productDraft.price" /></div>';
+    html += '<div style="flex:1"><label class="field-label">' + esc(stockLabel) + '</label><input class="input" type="number" placeholder="10" value="' + esc(d.stock) + '" data-bind="productDraft.stock" /></div>';
+    html += '</div>';
+  }
   html += '<label class="field-label">Ancien prix (promo)</label>';
   html += '<input class="input" type="number" placeholder="Ex: 3500" value="' + esc(d.oldPrice) + '" data-bind="productDraft.oldPrice" />';
   html += '<label class="field-label">Catégorie</label>';
@@ -10553,6 +10708,23 @@ function renderLivreur() {
       html += '</div>';
       
       html += '<div style="font-size:12.5px;color:var(--text-dim);margin:10px 0 6px"><i class="fa-solid fa-location-dot"></i> ' + o2.city + ', ' + esc(o2.zone) + ' — ' + esc(o2.repere) + '</div>';
+      // Coordonnées complètes acheteur + vendeur(s) — le livreur en a besoin
+      // sur le terrain, pas juste un nom sans moyen de le joindre.
+      html += '<div style="background:var(--bg-body);border-radius:10px;padding:8px 10px;margin-bottom:8px;">';
+      html += '<div style="font-size:11.5px;font-weight:700;color:var(--text-dim);margin-bottom:4px;"><i class="fa-solid fa-address-book"></i> Contacts</div>';
+      var orderContactPhone = o2.contactPhone || o2.buyerPhone;
+      html += '<div style="font-size:12px;margin-bottom:2px;"><i class="fa-solid fa-user"></i> ' + esc(o2.buyerName) + ' (acheteur)' + (orderContactPhone ? ' — <a href="tel:' + esc(orderContactPhone) + '" style="color:var(--accent);font-weight:700;">' + esc(orderContactPhone) + '</a>' : '') + '</div>';
+      var seenSellers2 = {};
+      for (var svi = 0; svi < o2.items.length; svi++) {
+        var svItem = o2.items[svi];
+        if (!svItem.sellerId || seenSellers2[svItem.sellerId]) continue;
+        seenSellers2[svItem.sellerId] = true;
+        var svAcc = null;
+        for (var svj = 0; svj < state.accounts.length; svj++) { if (state.accounts[svj].id === svItem.sellerId) { svAcc = state.accounts[svj]; break; } }
+        var svPhone = svAcc ? (svAcc.shopPhone || svAcc.phone) : null;
+        html += '<div style="font-size:12px;"><i class="fa-solid fa-store"></i> ' + esc(svItem.sellerName || (svAcc ? svAcc.shopName : '')) + ' (vendeur)' + (svPhone ? ' — <a href="tel:' + esc(svPhone) + '" style="color:var(--accent);font-weight:700;">' + esc(svPhone) + '</a>' : '') + '</div>';
+      }
+      html += '</div>';
       for (var m = 0; m < o2.items.length; m++) {
         var it = o2.items[m];
         var itProd = null;
@@ -10811,8 +10983,8 @@ function renderPointVente() {
     var recent = livrees.slice(0, 10);
     for (var m = 0; m < recent.length; m++) {
       var d2 = recent[m];
-      html += '<div class="card-row"><div class="emoji-thumb"><i class="fa-solid fa-circle-check" style="color:var(--success)"></i></div><div style="flex:1"><div style="font-weight:700;font-size:13px">#' + d2.id.slice(-5).toUpperCase() + '</div><div style="font-size:11.5px;color:var(--text-dim)">' + esc(d2.buyerName) + ' · ' + money(d2.total) + '</div></div>' +
-        '<span class="status-pill" style="font-size:10px;">' + (d2.commissionSettled ? 'Réglé' : 'Non réglé') + '</span></div>';
+      html += relaisOrderCard(d2, "historique");
+      html += '<div style="display:flex;justify-content:flex-end;margin:-4px 0 8px;"><span class="status-pill" style="font-size:10px;">' + (d2.commissionSettled ? 'Réglé' : 'Non réglé') + '</span></div>';
     }
   }
 
@@ -10825,7 +10997,27 @@ function relaisOrderCard(order, stage) {
   html += '<span style="font-weight:700">#' + order.id.slice(-5).toUpperCase() + '</span>';
   html += '<span class="status-pill"><i class="fa-solid ' + STATUS_ICONS[order.status] + '"></i> ' + order.status + '</span>';
   html += '</div>';
-  html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:4px"><i class="fa-solid fa-user"></i> ' + esc(order.buyerName) + '</div>';
+  // Acheteur : nom toujours visible ; téléphone masqué 24h après le retrait
+  // (le vrai retrait, pas juste "Livrée" ailleurs dans le flux). Vendeur :
+  // nom visible, jamais son numéro ni son adresse, texte simple non
+  // cliquable — juste pour vérifier, pas pour contacter. Livreur : visible,
+  // utile pour coordonner un dépôt/retrait.
+  var buyerContactHidden = order.status === "Livrée" && order.deliveredAt && (Date.now() - order.deliveredAt) > 24 * 60 * 60 * 1000;
+  html += '<div style="background:var(--bg-body);border-radius:10px;padding:8px 10px;margin-bottom:8px;">';
+  html += '<div style="font-size:11px;font-weight:700;color:var(--text-dim);margin-bottom:4px;"><i class="fa-solid fa-address-book"></i> Contacts</div>';
+  var relaisBuyerPhone = order.contactPhone || order.buyerPhone;
+  html += '<div style="font-size:12px;margin-bottom:2px;"><i class="fa-solid fa-user"></i> ' + esc(order.buyerName) + ' (acheteur)' + (!buyerContactHidden && relaisBuyerPhone ? ' — ' + esc(relaisBuyerPhone) : '') + '</div>';
+  var seenSellersRelais = {};
+  for (var rsi = 0; rsi < order.items.length; rsi++) {
+    var rsItem = order.items[rsi];
+    if (!rsItem.sellerId || seenSellersRelais[rsItem.sellerId]) continue;
+    seenSellersRelais[rsItem.sellerId] = true;
+    html += '<div style="font-size:12px;"><i class="fa-solid fa-store"></i> ' + esc(rsItem.sellerName || '') + ' (vendeur)</div>';
+  }
+  if (order.livreurName) {
+    html += '<div style="font-size:12px;"><i class="fa-solid fa-truck-fast"></i> ' + esc(order.livreurName) + ' (livreur)' + (order.livreurPhone ? ' — <a href="tel:' + esc(order.livreurPhone) + '" style="color:var(--accent);font-weight:700;">' + esc(order.livreurPhone) + '</a>' : '') + '</div>';
+  }
+  html += '</div>';
   for (var i = 0; i < order.items.length; i++) {
     var it = order.items[i];
     var itProd = null;
@@ -10849,7 +11041,7 @@ function relaisOrderCard(order, stage) {
     html += '<button class="btn-secondary" style="flex:0;padding:8px 12px;" data-action="open-scanner" data-target="depot-input-' + order.id + '" data-confirm-action="confirm-depot" data-confirm-value="' + order.id + '"><i class="fa-solid fa-qrcode"></i></button>';
     html += '<button class="btn-primary" style="flex:0;padding:8px 16px;font-size:13px;" data-action="confirm-depot" data-value="' + order.id + '">Valider</button>';
     html += '</div></div>';
-  } else {
+  } else if (stage === "retrait") {
     html += '<div style="margin-top:8px;padding:10px;background:var(--bg-body);border-radius:10px;">';
     html += '<div style="font-size:11px;font-weight:700;color:var(--text-dim);margin-bottom:4px;">🔑 Code Retrait (donné par le client) — valide aussi l\'encaissement</div>';
     html += '<div style="display:flex;gap:8px;">';
@@ -11495,6 +11687,21 @@ function renderAdminQuartiers() {
   var communes = Object.keys(data);
   var html = '';
 
+  // ---- Réglage global de majoration (s'applique à tous les quartiers) ----
+  var surchargeCfg = getQuartierSurchargeConfig();
+  html += '<div class="glass-card" style="padding:14px;margin-bottom:16px;">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+  html += '<div style="font-weight:800;font-size:14px;"><i class="fa-solid fa-route"></i> Majoration distance (tous quartiers)</div>';
+  html += '<div class="toggle-switch ' + (surchargeCfg.enabled ? 'active' : '') + '" data-action="toggle-quartier-surcharge"><div class="toggle-knob"></div></div>';
+  html += '</div>';
+  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;">Si le client est nettement plus loin que la distance de référence de son quartier, une majoration s\'ajoute automatiquement à son prix de base.</div>';
+  html += '<label class="field-label" style="margin-top:0;">Tolérance avant majoration (km)</label>';
+  html += '<input class="input" type="number" id="surcharge-threshold-input" value="' + surchargeCfg.thresholdKm + '" ' + (!surchargeCfg.enabled ? 'disabled' : '') + ' />';
+  html += '<label class="field-label">Montant par km au-delà (FCFA)</label>';
+  html += '<input class="input" type="number" id="surcharge-perkm-input" value="' + surchargeCfg.perKmSurcharge + '" ' + (!surchargeCfg.enabled ? 'disabled' : '') + ' />';
+  html += '<button class="btn-secondary" style="margin-top:10px;" data-action="save-quartier-surcharge-config">Enregistrer</button>';
+  html += '</div>';
+
   // ---- Propositions "Autre quartier" en attente ----
   var pendingQ = state.autreQuartierApplications.filter(function(q) { return q.status === "pending"; });
   html += '<div style="font-weight:800;font-size:14px;margin-bottom:10px;"><i class="fa-solid fa-inbox"></i> Propositions des utilisateurs (' + pendingQ.length + ')</div>';
@@ -11535,10 +11742,29 @@ function renderAdminQuartiers() {
     html += '</div>';
     var qs = data[commune];
     for (var qi = 0; qi < qs.length; qi++) {
+      var qKey = quartierPricingKey(commune, qs[qi]);
+      var qPricing = getQuartierPricing(commune, qs[qi]);
+      var qExpanded = state.expandedQuartierPricing && state.expandedQuartierPricing[qKey];
       html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">';
       html += '<input class="input" style="flex:1;padding:6px 10px;font-size:12px;" value="' + esc(qs[qi]) + '" data-action="admin-rename-quartier" data-commune="' + esc(commune) + '" data-old-name="' + esc(qs[qi]) + '" />';
+      html += '<button class="link-btn" style="font-size:11px;' + (qPricing && qPricing.basePrice != null ? 'color:var(--success);' : '') + '" data-action="toggle-quartier-pricing" data-value="' + esc(qKey) + '"><i class="fa-solid fa-tag"></i> Tarif</button>';
       html += '<button class="link-btn" style="color:var(--danger);" data-action="admin-remove-quartier" data-commune="' + esc(commune) + '" data-value="' + esc(qs[qi]) + '"><i class="fa-solid fa-xmark"></i></button>';
       html += '</div>';
+      if (qExpanded) {
+        html += '<div style="background:var(--bg-body);border-radius:10px;padding:10px;margin:-2px 0 10px;">';
+        html += '<label class="field-label" style="margin-top:0;font-size:10.5px;">Prix de base vérifié (FCFA)</label>';
+        html += '<input class="input" type="number" id="qp-price-' + esc(qKey) + '" style="padding:6px 10px;font-size:12px;" value="' + (qPricing && qPricing.basePrice != null ? qPricing.basePrice : '') + '" placeholder="Ex : 1500" />';
+        html += '<label class="field-label" style="font-size:10.5px;">Distance de référence jusqu\'à notre point (km)</label>';
+        html += '<input class="input" type="number" id="qp-dist-' + esc(qKey) + '" style="padding:6px 10px;font-size:12px;" value="' + (qPricing && qPricing.referenceDistanceKm != null ? qPricing.referenceDistanceKm : '') + '" placeholder="Ex : 4.5" />';
+        html += '<label class="field-label" style="font-size:10.5px;">Point central du quartier (GPS)</label>';
+        html += '<div style="display:flex;gap:6px;">';
+        html += '<input class="input" id="qp-lat-' + esc(qKey) + '" style="flex:1;padding:6px 10px;font-size:12px;" value="' + (qPricing && qPricing.centerLat != null ? qPricing.centerLat : '') + '" placeholder="Latitude" />';
+        html += '<input class="input" id="qp-lng-' + esc(qKey) + '" style="flex:1;padding:6px 10px;font-size:12px;" value="' + (qPricing && qPricing.centerLng != null ? qPricing.centerLng : '') + '" placeholder="Longitude" />';
+        html += '<button class="btn-secondary" style="flex:0;padding:6px 10px;" data-action="capture-quartier-center-gps" data-value="' + esc(qKey) + '"><i class="fa-solid fa-location-crosshairs"></i></button>';
+        html += '</div>';
+        html += '<button class="btn-primary" style="margin-top:8px;padding:8px;font-size:12px;" data-action="save-quartier-pricing" data-value="' + esc(qKey) + '">Enregistrer ce quartier</button>';
+        html += '</div>';
+      }
     }
     html += '<div style="display:flex;gap:6px;margin-top:8px;">';
     html += '<input class="input" id="new-quartier-' + esc(commune) + '" placeholder="Ajouter un quartier…" style="flex:1;padding:6px 10px;font-size:12px;" />';
@@ -13252,10 +13478,10 @@ function handleFileInput(el) {
     if (action === "shop-cover-photo" || action === "shop-profile-photo") {
       var shopPhotoFile = files[0];
       if (!shopPhotoFile.type.startsWith('image/')) { showToast("Veuillez sélectionner une image."); return; }
-      var shopPhotoReader = new FileReader();
-      shopPhotoReader.onload = function(ev) {
-        if (action === "shop-cover-photo") state.profile.shopCoverPhoto = ev.target.result;
-        else state.profile.shopProfilePhoto = ev.target.result;
+      uploadToStorage(shopPhotoFile, "shop/photos", function(err, url) {
+        if (err) { showToast("Erreur d'envoi de la photo."); return; }
+        if (action === "shop-cover-photo") state.profile.shopCoverPhoto = url;
+        else state.profile.shopProfilePhoto = url;
         for (var spi = 0; spi < state.accounts.length; spi++) {
           if (state.accounts[spi].id === state.profile.id) { state.accounts[spi] = { ...state.profile }; break; }
         }
@@ -13263,9 +13489,7 @@ function handleFileInput(el) {
         saveDoc("accounts", state.profile);
         showToast("✅ Photo mise à jour.");
         render();
-      };
-      shopPhotoReader.onerror = function() { showToast("Impossible de lire ce fichier."); };
-      shopPhotoReader.readAsDataURL(shopPhotoFile);
+      });
       return;
     }
 
@@ -13273,16 +13497,18 @@ function handleFileInput(el) {
       var brandConfigId = action.slice("brand-image-".length);
       var brandFile = files[0];
       if (!brandFile.type.startsWith('image/')) { showToast("Veuillez sélectionner une image."); return; }
-      var brandReader = new FileReader();
-      brandReader.onload = function(ev) {
+      // Pas de compression ici volontairement : peu d'images (1-3), choisies
+      // avec soin par l'admin pour la qualité visuelle de l'app — la
+      // compression reste utile pour les nombreuses photos envoyées par les
+      // vendeurs/acheteurs, pas pour ces quelques visuels de marque.
+      uploadToStorageRaw(brandFile, "brand/images", function(err, url) {
+        if (err) { showToast("Erreur d'envoi de l'image."); return; }
         var brandCfg = getBrandImageConfig(brandConfigId);
-        brandCfg.imageUrl = ev.target.result;
+        brandCfg.imageUrl = url;
         saveBrandImageConfig(brandCfg);
         showToast("✅ Image mise à jour.");
         render();
-      };
-      brandReader.onerror = function() { showToast("Impossible de lire ce fichier."); };
-      brandReader.readAsDataURL(brandFile);
+      });
       return;
     }
 
@@ -13380,62 +13606,54 @@ function handleFileInput(el) {
         return;
       }
       var slotIdx = parseInt(el.dataset.slot, 10);
-      var reader = new FileReader();
-      reader.onload = function(ev) {
+      // Même logique que brand-image : réglage Admin, peu d'images, la
+      // qualité visuelle prime sur la légèreté du fichier.
+      uploadToStorageRaw(bgFile, "bgpattern/icons", function(err, url) {
+        if (err) { showToast("Erreur d'envoi de l'image."); return; }
         if (!state.bgPatternWorkingCfg) state.bgPatternWorkingCfg = JSON.parse(JSON.stringify(getBgPatternConfig()));
-        state.bgPatternWorkingCfg.icons[slotIdx] = ev.target.result;
+        state.bgPatternWorkingCfg.icons[slotIdx] = url;
         render();
-      };
-      reader.onerror = function() { showToast("Impossible de lire cette image."); };
-      reader.readAsDataURL(bgFile);
+      });
     } else if (action === "selfie-photo") {
       var selfieFile = files[0];
       if (!selfieFile.type.startsWith('image/')) {
         showToast("Veuillez sélectionner une image.");
         return;
       }
-      var selfieReader = new FileReader();
-      selfieReader.onload = function(ev) {
-        state.onboardDraft.selfiePhotoUri = ev.target.result;
+      uploadToStorage(selfieFile, "verification/selfies", function(err, url) {
+        if (err) { showToast("Erreur d'envoi de la photo."); return; }
+        state.onboardDraft.selfiePhotoUri = url;
         render();
-      };
-      selfieReader.onerror = function() { showToast("Impossible de lire ce fichier."); };
-      selfieReader.readAsDataURL(selfieFile);
+      });
     } else if (action === "verification-doc-add") {
       var docFile = files[0];
       if (!docFile.type.startsWith('image/')) {
         showToast("Veuillez sélectionner une image (photo du document).");
         return;
       }
-      var docReader = new FileReader();
-      docReader.onload = function(ev) {
+      uploadToStorage(docFile, "verification/docs", function(err, url) {
+        if (err) { showToast("Erreur d'envoi du document."); return; }
         if (!Array.isArray(state.onboardDraft.verificationDocs)) state.onboardDraft.verificationDocs = [];
-        state.onboardDraft.verificationDocs.push(ev.target.result);
+        state.onboardDraft.verificationDocs.push(url);
         render();
-      };
-      docReader.onerror = function() { showToast("Impossible de lire ce fichier."); };
-      docReader.readAsDataURL(docFile);
+      });
     } else if (action === "relais-apply-selfie") {
       var raSelfieFile = files[0];
       if (!raSelfieFile.type.startsWith('image/')) { showToast("Veuillez sélectionner une image."); return; }
-      var raSelfieReader = new FileReader();
-      raSelfieReader.onload = function(ev) {
-        state.relaisApplyDraft.selfiePhotoUri = ev.target.result;
+      uploadToStorage(raSelfieFile, "verification/selfies", function(err, url) {
+        if (err) { showToast("Erreur d'envoi de la photo."); return; }
+        state.relaisApplyDraft.selfiePhotoUri = url;
         render();
-      };
-      raSelfieReader.onerror = function() { showToast("Impossible de lire ce fichier."); };
-      raSelfieReader.readAsDataURL(raSelfieFile);
+      });
     } else if (action === "relais-apply-doc-add") {
       var raDocFile = files[0];
       if (!raDocFile.type.startsWith('image/')) { showToast("Veuillez sélectionner une image (photo du document)."); return; }
-      var raDocReader = new FileReader();
-      raDocReader.onload = function(ev) {
+      uploadToStorage(raDocFile, "verification/docs", function(err, url) {
+        if (err) { showToast("Erreur d'envoi du document."); return; }
         if (!Array.isArray(state.relaisApplyDraft.verificationDocs)) state.relaisApplyDraft.verificationDocs = [];
-        state.relaisApplyDraft.verificationDocs.push(ev.target.result);
+        state.relaisApplyDraft.verificationDocs.push(url);
         render();
-      };
-      raDocReader.onerror = function() { showToast("Impossible de lire ce fichier."); };
-      raDocReader.readAsDataURL(raDocFile);
+      });
     }
   } catch (err) {
     console.error("Erreur handleFileInput :", err);
@@ -13470,6 +13688,11 @@ function submitProductDraft() {
     if (!d.name || !d.name.trim()) { showToast("Le nom du produit est obligatoire."); return; }
     var price = parseFloat(d.price);
     if (isNaN(price) || price <= 0) { showToast("Le prix doit être un nombre valide (supérieur à 0)."); return; }
+    // Décoration / Événementiel : pas de champ stock (non quantifiable) —
+    // on lui donne une valeur toujours disponible plutôt que de bloquer.
+    // Non quantifiable (choix du vendeur, pas figé par secteur) : valeur
+    // "toujours disponible" plutôt que de bloquer sur un champ masqué.
+    if (d.isQuantifiable === false) d.stock = "999999";
     var stock = parseInt(d.stock, 10);
     if (isNaN(stock) || stock < 0) { showToast("Le stock doit être un nombre valide (0 ou plus)."); return; }
     if (!d.category || d.category === "Tout") { showToast("Choisissez une catégorie."); return; }
@@ -13502,6 +13725,7 @@ function submitProductDraft() {
       sellerAuthUid: authUid, // seul cet appareil pourra modifier/supprimer ce produit
       createdAt: existingCreatedAt || Date.now(),
       itemType: isService ? "service" : "produit",
+      isQuantifiable: d.isQuantifiable !== false,
       sellerType: state.profile.sellerType || "particulier",
       sellerSector: state.profile.sellerSector || null,
       name: d.name.trim(),
@@ -13557,7 +13781,7 @@ function submitProductDraft() {
     }
 
     // Réinitialiser le brouillon
-    state.productDraft = emptyProductDraft();
+    state.productDraft = emptyProductDraft(state.profile);
     state.editingProductId = null;
     state.productCategoryConfirmed = false;
     save();
@@ -13584,6 +13808,7 @@ function startEditProduct(productId) {
     price: String(product.price),
     oldPrice: product.oldPrice ? String(product.oldPrice) : "",
     stock: String(product.stock),
+    isQuantifiable: product.isQuantifiable !== false,
     category: product.category,
     description: product.description || "",
     emoji: product.emoji || "🛍️",
@@ -13600,7 +13825,7 @@ function startEditProduct(productId) {
 
 function cancelEditProduct() {
   state.editingProductId = null;
-  state.productDraft = emptyProductDraft();
+  state.productDraft = emptyProductDraft(state.profile);
   render();
 }
 
@@ -13829,7 +14054,7 @@ root.addEventListener("click", function(e) {
       break;
     case "complete-seller-profile": {
       var sp = state.profile;
-      if (!sp.shopPhone || !sp.shopPhone.trim()) { showToast("❌ Le téléphone professionnel est obligatoire."); break; }
+      sp.shopPhone = sp.phone; // même numéro que l'inscription — plus besoin de le redemander
       if (!sp.shopAddress || !sp.shopAddress.trim()) { showToast("❌ L'adresse est obligatoire."); break; }
       if (sp.shopLat == null || sp.shopLng == null) { showToast("❌ Position GPS obligatoire — utilisez le bouton de localisation."); break; }
       for (var spi = 0; spi < state.accounts.length; spi++) {
@@ -13916,7 +14141,7 @@ root.addEventListener("click", function(e) {
     }
     case "add-product-from-shop": {
       state.editingProductId = null;
-      state.productDraft = emptyProductDraft();
+      state.productDraft = emptyProductDraft(state.profile);
       state.productCategoryConfirmed = false;
       state.sellerScreenOrigin = "shop";
       state.view = "seller";
@@ -13938,7 +14163,23 @@ root.addEventListener("click", function(e) {
       break;
     }
     case "show-second-account-info": {
-      alert("Vous pouvez ouvrir jusqu'à 3 boutiques (types différents) avec le même numéro de téléphone.\n\nPour créer une 2ᵉ ou 3ᵉ boutique : déconnectez-vous (menu de rôle → Se déconnecter), puis choisissez \"Nouveau compte\" et utilisez exactement le même nom complet, numéro et email que votre compte actuel.\n\nVous pourrez ensuite basculer entre vos boutiques à tout moment, sans rien perdre.");
+      var curP = state.profile;
+      // Retrouve l'indicatif exact utilisé (le num\u00e9ro complet est un
+      // simple collage indicatif+chiffres, sans s\u00e9parateur).
+      var matchedCountry = COUNTRY_CODES.find(function(c) { return curP.phone.indexOf(c.code) === 0; }) || COUNTRY_CODES[0];
+      var localDigits = curP.phone.slice(matchedCountry.code.length);
+      state.onboardDraft = emptyOnboardDraft();
+      state.onboardDraft.name = curP.name;
+      state.onboardDraft.phone = localDigits;
+      state.onboardDraft.countryCode = matchedCountry.code;
+      state.onboardDraft.email = curP.email || "";
+      state.onboardDraft.role = "vendeur";
+      state.onboardDraft.isSecondAccountFlow = true;
+      state.showVendorHub = false;
+      state.view = "onboarding";
+      state.onboardMode = "form";
+      state.onboardStep = "vendorType";
+      render();
       break;
     }
     case "open-shop-customize": {
@@ -14249,6 +14490,11 @@ root.addEventListener("click", function(e) {
       break;
     }
     case "toggle-favorite": toggleFavorite(value); break;
+    case "set-product-quantifiable": {
+      state.productDraft.isQuantifiable = value === "1";
+      render();
+      break;
+    }
     case "toggle-draft-color": {
       var idx = state.productDraft.colors.indexOf(value);
       if (idx === -1) state.productDraft.colors.push(value);
@@ -14344,7 +14590,12 @@ root.addEventListener("click", function(e) {
         if (loc) {
           state.deliveryBaseDraft.lat = loc.lat;
           state.deliveryBaseDraft.lng = loc.lng;
-          showToast("✅ Position capturée — n'oubliez pas d'Enregistrer.");
+          state.deliveryBaseDraft.gpsAccuracy = loc.accuracy || null;
+          if (loc.accuracy && loc.accuracy > 100) {
+            showToast("⚠️ Position capturée, mais peu précise (±" + Math.round(loc.accuracy) + "m) — ce point sert de référence pour TOUTES les livraisons, sortez à l'extérieur et réessayez avant d'enregistrer.");
+          } else {
+            showToast("✅ Position capturée — n'oubliez pas d'Enregistrer.");
+          }
           render();
         } else {
           showToast("Localisation automatique indisponible — utilisez le champ de coordonnées ci-dessous.");
@@ -14374,7 +14625,12 @@ root.addEventListener("click", function(e) {
         if (loc) {
           state.checkoutForm.buyerLat = loc.lat;
           state.checkoutForm.buyerLng = loc.lng;
-          showToast("✅ Position capturée !");
+          state.checkoutForm.buyerGpsAccuracy = loc.accuracy || null;
+          if (loc.accuracy && loc.accuracy > 100) {
+            showToast("⚠️ Position capturée, mais peu précise (±" + Math.round(loc.accuracy) + "m) — sortez à l'extérieur et réessayez si possible.");
+          } else {
+            showToast("✅ Position capturée !");
+          }
           render();
         } else {
           showToast("La localisation automatique n'a pas répondu — placez votre position sur la carte.");
@@ -14552,6 +14808,62 @@ root.addEventListener("click", function(e) {
       saveDoc("relaisEditRequests", editReqR);
       addNotification("whatsapp", "❌ Votre demande de modification d'informations n'a pas été approuvée. Contactez l'administration pour plus de détails.", editReqR.accountId);
       showToast("Demande refusée.");
+      render();
+      break;
+    }
+    case "toggle-quartier-surcharge": {
+      var tqsCfg = getQuartierSurchargeConfig();
+      tqsCfg.enabled = !tqsCfg.enabled;
+      saveQuartierSurchargeConfig(tqsCfg);
+      render();
+      break;
+    }
+    case "save-quartier-surcharge-config": {
+      var thresholdInput = document.getElementById('surcharge-threshold-input');
+      var perKmInput = document.getElementById('surcharge-perkm-input');
+      var sqCfg = getQuartierSurchargeConfig();
+      sqCfg.thresholdKm = thresholdInput ? (parseFloat(thresholdInput.value) || 0) : sqCfg.thresholdKm;
+      sqCfg.perKmSurcharge = perKmInput ? (parseInt(perKmInput.value, 10) || 0) : sqCfg.perKmSurcharge;
+      saveQuartierSurchargeConfig(sqCfg);
+      showToast("✅ Réglage de majoration enregistré.");
+      render();
+      break;
+    }
+    case "toggle-quartier-pricing": {
+      if (!state.expandedQuartierPricing) state.expandedQuartierPricing = {};
+      state.expandedQuartierPricing[value] = !state.expandedQuartierPricing[value];
+      render();
+      break;
+    }
+    case "capture-quartier-center-gps": {
+      showToast("📍 Localisation en cours…");
+      getUserLocation().then(function(loc) {
+        if (loc) {
+          var latEl = document.getElementById('qp-lat-' + value);
+          var lngEl = document.getElementById('qp-lng-' + value);
+          if (latEl) latEl.value = loc.lat;
+          if (lngEl) lngEl.value = loc.lng;
+          showToast("✅ Position capturée — n'oubliez pas d'Enregistrer ce quartier.");
+        } else {
+          showToast("Localisation automatique indisponible.");
+        }
+      });
+      break;
+    }
+    case "save-quartier-pricing": {
+      var qpPriceEl = document.getElementById('qp-price-' + value);
+      var qpDistEl = document.getElementById('qp-dist-' + value);
+      var qpLatEl = document.getElementById('qp-lat-' + value);
+      var qpLngEl = document.getElementById('qp-lng-' + value);
+      var allPricing = getQuartierPricingData();
+      allPricing[value] = {
+        basePrice: qpPriceEl && qpPriceEl.value !== "" ? parseInt(qpPriceEl.value, 10) : null,
+        referenceDistanceKm: qpDistEl && qpDistEl.value !== "" ? parseFloat(qpDistEl.value) : null,
+        centerLat: qpLatEl && qpLatEl.value !== "" ? parseFloat(qpLatEl.value) : null,
+        centerLng: qpLngEl && qpLngEl.value !== "" ? parseFloat(qpLngEl.value) : null
+      };
+      saveQuartierPricingData(allPricing);
+      showToast("✅ Tarif du quartier enregistré.");
       render();
       break;
     }
@@ -14942,7 +15254,7 @@ root.addEventListener("click", function(e) {
     case "remove-draft-image": removeDraftImage(Number(value)); break;
     case "remove-draft-video": removeDraftVideo(); break;
     case "choose-product-category": {
-      state.productDraft = emptyProductDraft();
+      state.productDraft = emptyProductDraft(state.profile);
       state.productDraft.category = value;
       state.productCategoryConfirmed = true;
       render();
@@ -15809,6 +16121,9 @@ root.addEventListener("change", function(e) {
     state.checkoutForm.relaisQuartier = "";
     state.checkoutForm.relaisShopId = "";
   }
+  if (el.dataset.actionChange === "express-commune-changed") {
+    state.checkoutForm.expressQuartier = "";
+  }
   save();
   render();
 });
@@ -15992,6 +16307,20 @@ if (!FIREBASE_ENABLED) {
   trySplashFinish();
 } else {
   var bootDone = false;
+  var LAST_SYNC_KEY = "gems_last_sync_v2";
+  var lastSyncAt = localStorage.getItem(LAST_SYNC_KEY);
+  var hasCachedData = state.products.length > 0 || state.accounts.length > 0;
+
+  // Avec des données déjà en cache local (visite précédente), l'app
+  // démarre IMMÉDIATEMENT dessus — pas besoin d'attendre le réseau pour
+  // afficher quelque chose. La synchronisation se fait ensuite en fond,
+  // et ne retélécharge que ce qui a changé depuis la dernière visite,
+  // au lieu de tout retélécharger à chaque lancement.
+  if (hasCachedData && lastSyncAt) {
+    _splashAppDataReady = true;
+    trySplashFinish();
+    bootDone = true;
+  }
 
   // Filet de sécurité : si Supabase ne répond jamais (règles de sécurité
   // mal configurées qui bloquent silencieusement, table pas encore créée),
@@ -16007,21 +16336,42 @@ if (!FIREBASE_ENABLED) {
     }
   }, 8000);
 
-  // Un seul chargement initial de toute la table `app_data`, puis on
-  // répartit chaque ligne dans son tableau state[collection] correspondant
-  // — équivalent, pour une seule table, à ce que faisait onSnapshot par
-  // collection séparée sur Firestore.
-  sb.from("app_data").select("*").then(function(res) {
+  // Synchronisation en fond : incrémentale (seulement les lignes modifiées
+  // depuis la dernière visite) si on a déjà un cache datant de moins de
+  // 24h, sinon un chargement complet — pour se remettre à niveau si
+  // l'appareil est resté longtemps sans se connecter (ex: suppressions
+  // manquées pendant l'absence).
+  var ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  var needsFullSync = !lastSyncAt || (Date.now() - new Date(lastSyncAt).getTime()) > ONE_DAY_MS;
+  var query = sb.from("app_data").select("*");
+  if (!needsFullSync) query = query.gt("updated_at", lastSyncAt);
+
+  query.then(function(res) {
     if (res.error) {
       console.error("Erreur de connexion Supabase :", res.error);
-      showToast("Impossible de joindre Supabase. Vérifiez supabaseConfig et vos règles de sécurité.");
+      if (!hasCachedData) showToast("Impossible de joindre Supabase. Vérifiez supabaseConfig et vos règles de sécurité.");
     } else {
-      var byCollection = {};
-      SHARED_KEYS.forEach(function(name) { byCollection[name] = []; });
-      res.data.forEach(function(row) {
-        if (byCollection[row.collection]) byCollection[row.collection].push(row.data);
-      });
-      SHARED_KEYS.forEach(function(name) { state[name] = byCollection[name]; });
+      if (needsFullSync) {
+        // Chargement complet : on repart d'une table vide par collection,
+        // comme avant — remet aussi à niveau les suppressions manquées.
+        var byCollection = {};
+        SHARED_KEYS.forEach(function(name) { byCollection[name] = []; });
+        res.data.forEach(function(row) {
+          if (byCollection[row.collection]) byCollection[row.collection].push(row.data);
+        });
+        SHARED_KEYS.forEach(function(name) { state[name] = byCollection[name]; });
+      } else {
+        // Incrémental : on met seulement à jour/ajoute les lignes reçues,
+        // le reste du cache local reste tel quel.
+        res.data.forEach(function(row) {
+          if (SHARED_KEYS.indexOf(row.collection) === -1) return;
+          var list = state[row.collection];
+          var idx = list.findIndex(function(item) { return item.id === row.data.id; });
+          if (idx === -1) list.push(row.data); else list[idx] = row.data;
+        });
+      }
+      localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
+      save();
 
       // Premier lancement de ce projet Supabase (table vide) : on y dépose
       // le catalogue de démo, une seule fois.
@@ -16034,6 +16384,8 @@ if (!FIREBASE_ENABLED) {
       bootDone = true;
       _splashAppDataReady = true;
       trySplashFinish();
+    } else if (_splashFinished) {
+      render(); // les nouveautés reçues en fond doivent apparaître à l'écran
     }
   });
 
