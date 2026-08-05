@@ -371,7 +371,6 @@ input, select, textarea {
 /* ---------- MAIN ---------- */
 main {
   padding: 16px 18px 20px;
-  animation: fadeIn 0.35s ease;
   background: var(--bg-body);
   min-height: calc(100vh - 80px);
   border-radius: 0;
@@ -1169,7 +1168,12 @@ select.input option {
   align-items: flex-end;
   justify-content: center;
   z-index: 100;
-  animation: fadeIn 0.25s ease;
+  animation: overlayFadeIn 0.2s ease;
+}
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .modal-overlay.no-anim,
@@ -1191,7 +1195,7 @@ select.input option {
 }
 
 @keyframes slideUp {
-  from { transform: translateY(40px); opacity: 0; }
+  from { transform: translateY(10px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
 
@@ -1254,7 +1258,7 @@ select.input option {
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: fadeIn 0.25s ease;
+  animation: overlayFadeIn 0.2s ease;
 }
 
 .lightbox-content {
@@ -1753,7 +1757,7 @@ select.input option {
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
   z-index: 90;
-  animation: fadeIn 0.2s ease;
+  animation: overlayFadeIn 0.2s ease;
 }
 
 .notif-panel {
@@ -4365,7 +4369,7 @@ function approveLivreurApplication(appId) {
   save();
   saveDoc("accounts", account);
   saveDoc("livreurApplications", app);
-  addNotification("whatsapp", "🎉 Votre demande pour devenir livreur a été approuvée ! Ouvrez le menu de rôle pour commencer.", account.id);
+  addNotification("whatsapp", "🎉 Votre demande pour devenir livreur a été approuvée ! Ouvrez le menu de rôle pour commencer.", account.id, "livreur");
   showToast("✅ Livreur approuvé et activé.");
   render();
 }
@@ -4426,7 +4430,7 @@ function approveRelaisApplication(appId) {
   save();
   saveDoc("accounts", account);
   saveDoc("relaisApplications", app);
-  addNotification("whatsapp", "🎉 Votre Point Relais \"" + app.shopName + "\" a été approuvé ! Ouvrez le menu de rôle pour y accéder.", account.id);
+  addNotification("whatsapp", "🎉 Votre Point Relais \"" + app.shopName + "\" a été approuvé ! Ouvrez le menu de rôle pour y accéder.", account.id, "pointvente");
   showToast("✅ Point Relais approuvé et activé.");
   render();
 }
@@ -5072,8 +5076,8 @@ function showToast(msg) {
   }, 2600);
 }
 
-function addNotification(channel, message, userId) {
-  var notif = { id: uid(), channel: channel, message: message, userId: userId || null, time: Date.now(), read: false };
+function addNotification(channel, message, userId, target) {
+  var notif = { id: uid(), channel: channel, message: message, userId: userId || null, time: Date.now(), read: false, target: target || null };
   state.notifications.unshift(notif);
   if ('Notification' in window && Notification.permission === 'granted') {
     new Notification('GEMarketS', { body: message, icon: '🛍️' });
@@ -5516,6 +5520,8 @@ function loginAccount(accountId) {
   if (account.loginHistory.length > 200) account.loginHistory = account.loginHistory.slice(-200);
   state.profile = { ...account };
   state.view = ROLE_HOME_VIEW[account.role] || "market";
+  state.showVendorHub = false;
+  state.showRoleMenu = false;
   save();
   saveDoc("accounts", account);
   render();
@@ -6042,12 +6048,12 @@ function finalizeOrder(order, opts) {
   state.view = "orders";
   
   var paymentLabel = (opts && opts.simulated) ? (order.payment === "orange_money" ? "Orange Money" : "Moov Money") + " (simulation)" : "à la livraison";
-  addNotification("whatsapp", "Confirmation : commande #" + order.id.slice(-5).toUpperCase() + " (" + money(order.total) + ") enregistrée. Paiement : " + paymentLabel, order.buyerId);
+  addNotification("whatsapp", "Confirmation : commande #" + order.id.slice(-5).toUpperCase() + " (" + money(order.total) + ") enregistrée. Paiement : " + paymentLabel, order.buyerId, "orders");
   if (order.deliveryMode === "relais") {
-    addNotification("sms", "📦 Votre commande sera déposée chez " + order.relaisShopName + ".", order.buyerId);
-    addNotification("sms", "🔑 Code de retrait (à donner en boutique quand vous récupérez votre colis) : " + order.codeRetrait + " — Ne le partagez pas avant d'être sur place !", order.buyerId);
+    addNotification("sms", "📦 Votre commande sera déposée chez " + order.relaisShopName + ".", order.buyerId, "orders");
+    addNotification("sms", "🔑 Code de retrait (à donner en boutique quand vous récupérez votre colis) : " + order.codeRetrait + " — Ne le partagez pas avant d'être sur place !", order.buyerId, "orders");
   } else {
-    addNotification("sms", "🔑 Code OTP : " + order.otp + " — Ne le partagez pas !", order.buyerId);
+    addNotification("sms", "🔑 Code OTP : " + order.otp + " — Ne le partagez pas !", order.buyerId, "orders");
   }
   
   var commissionResult = attributeCommission(order.id, order.buyerId, order.subtotal);
@@ -6070,7 +6076,7 @@ function finalizeOrder(order, opts) {
       if (m > 0) msg += ", ";
       msg += itemsList[m].qty + "x " + itemsList[m].name;
     }
-    addNotification("sms", "Nouvelle commande reçue par " + sellers[sellerKey2].name + " : " + msg, sellerKey2);
+    addNotification("sms", "Nouvelle commande reçue par " + sellers[sellerKey2].name + " : " + msg, sellerKey2, "seller-orders");
     for (var sai = 0; sai < state.accounts.length; sai++) {
       if (state.accounts[sai].id === sellerKey2) {
         state.accounts[sai].hasNewSellerOrderAlert = true;
@@ -6108,7 +6114,7 @@ function setOrderStatus(orderId, status) {
   logOrderStatusChange(order, status);
   if (status === "Livrée") {
     order.deliveredAt = Date.now();
-    addNotification("whatsapp", "✅ Commande #" + orderId.slice(-5).toUpperCase() + " livrée !", order.buyerId);
+    addNotification("whatsapp", "✅ Commande #" + orderId.slice(-5).toUpperCase() + " livrée !", order.buyerId, "orders");
   }
   if (state.profile.role === "livreur" && !order.livreurId) {
     order.livreurId = state.profile.id;
@@ -6119,12 +6125,21 @@ function setOrderStatus(orderId, status) {
     var readyMsg = "📦 Commande #" + orderId.slice(-5).toUpperCase() + " prête à être récupérée chez " + (order.items[0] ? order.items[0].sellerName : "le vendeur") + ".";
     for (var lvi = 0; lvi < state.accounts.length; lvi++) {
       if (state.accounts[lvi].livreurApplicationStatus === "approved") {
-        addNotification("whatsapp", readyMsg, state.accounts[lvi].id);
+        addNotification("whatsapp", readyMsg, state.accounts[lvi].id, "livreur");
+      }
+    }
+    // Le rond rouge "nouvelle commande" doit disparaître dès que le vendeur
+    // agit sur sa commande (la marque prête), pas seulement s'il rouvre
+    // l'onglet — sinon il peut rester coincé indéfiniment.
+    if (state.profile && state.profile.hasNewSellerOrderAlert) {
+      state.profile.hasNewSellerOrderAlert = false;
+      for (var ssoi = 0; ssoi < state.accounts.length; ssoi++) {
+        if (state.accounts[ssoi].id === state.profile.id) { state.accounts[ssoi].hasNewSellerOrderAlert = false; saveDoc("accounts", state.accounts[ssoi]); break; }
       }
     }
   }
   var labels = { Prête: "est prête", Récupérée: "a été récupérée", "En route": "est en route", Livrée: "a été livrée" };
-  addNotification("whatsapp", "Commande #" + orderId.slice(-5).toUpperCase() + " " + (labels[status] || "a changé de statut : " + status), order.buyerId);
+  addNotification("whatsapp", "Commande #" + orderId.slice(-5).toUpperCase() + " " + (labels[status] || "a changé de statut : " + status), order.buyerId, "orders");
   for (var bai = 0; bai < state.accounts.length; bai++) {
     if (state.accounts[bai].id === order.buyerId) {
       state.accounts[bai].hasNewBuyerStatusAlert = true;
@@ -6176,7 +6191,7 @@ function confirmRelaisDepot(orderId, inputCode) {
   if (order.codeDepot === inputCode) {
     logOrderStatusChange(order, "En boutique");
     order.depotConfirmedAt = Date.now();
-    addNotification("whatsapp", "📦 Votre commande #" + orderId.slice(-5).toUpperCase() + " est arrivée chez " + order.relaisShopName + " — vous pouvez venir la récupérer.", order.buyerId);
+    addNotification("whatsapp", "📦 Votre commande #" + orderId.slice(-5).toUpperCase() + " est arrivée chez " + order.relaisShopName + " — vous pouvez venir la récupérer.", order.buyerId, "orders");
     save();
     saveDoc("orders", order);
     render();
@@ -6438,7 +6453,7 @@ function refuseByLivreur(orderId, reason) {
     }
   }
 
-  addNotification("whatsapp", "❌ Commande #" + orderId.slice(-5).toUpperCase() + " annulée par notre livreur. Motif : " + reason, order.buyerId);
+  addNotification("whatsapp", "❌ Commande #" + orderId.slice(-5).toUpperCase() + " annulée par notre livreur. Motif : " + reason, order.buyerId, "orders");
   for (var rbai = 0; rbai < state.accounts.length; rbai++) {
     if (state.accounts[rbai].id === order.buyerId) {
       state.accounts[rbai].hasNewBuyerStatusAlert = true;
@@ -6453,7 +6468,7 @@ function refuseByLivreur(orderId, reason) {
     var sid = order.items[si].sellerId;
     if (sid && !notifiedSellers2[sid]) {
       notifiedSellers2[sid] = true;
-      addNotification("whatsapp", "⚠️ Commande #" + orderId.slice(-5).toUpperCase() + " annulée par notre livreur. Motif : " + reason, sid);
+      addNotification("whatsapp", "⚠️ Commande #" + orderId.slice(-5).toUpperCase() + " annulée par notre livreur. Motif : " + reason, sid, "seller-orders");
       trackSellerRefusal(sid);
     }
   }
@@ -6510,7 +6525,7 @@ function refuseRelaisProduct(orderId) {
     var sid = order.items[si].sellerId;
     if (sid && !notifiedSellers[sid]) {
       notifiedSellers[sid] = true;
-      addNotification("whatsapp", "⚠️ Commande #" + orderId.slice(-5).toUpperCase() + " refusée par le client au point relais — retour prévu chez vous.", sid);
+      addNotification("whatsapp", "⚠️ Commande #" + orderId.slice(-5).toUpperCase() + " refusée par le client au point relais — retour prévu chez vous.", sid, "seller-orders");
     }
   }
   render();
@@ -6589,7 +6604,7 @@ function setDisputeStatus(disputeId, status) {
   d.resolvedAt = status !== "En litige" ? Date.now() : null;
   save();
   saveDoc("disputes", d);
-  addNotification("whatsapp", "Votre litige sur la commande #" + d.orderId.slice(-5).toUpperCase() + " est maintenant : " + status, d.buyerId);
+  addNotification("whatsapp", "Votre litige sur la commande #" + d.orderId.slice(-5).toUpperCase() + " est maintenant : " + status, d.buyerId, "orders");
   render();
   showToast("✅ Statut du litige mis à jour.");
 }
@@ -6667,7 +6682,7 @@ function markOrderNonLivrable(orderId, reason) {
   saveDoc("orders", order);
 
   createDispute(orderId, "produit_endommage", "Le vendeur a signalé que la commande ne peut pas être livrée : " + reason.trim(), true);
-  addNotification("whatsapp", "⚠️ Votre commande #" + orderId.slice(-5).toUpperCase() + " ne pourra pas être livrée. Raison : " + reason.trim(), order.buyerId);
+  addNotification("whatsapp", "⚠️ Votre commande #" + orderId.slice(-5).toUpperCase() + " ne pourra pas être livrée. Raison : " + reason.trim(), order.buyerId, "orders");
 
   state.showNonLivrableModal = false;
   state.nonLivrableOrderId = null;
@@ -7273,7 +7288,7 @@ function sendAdminBroadcast(message) {
     conv.lastMessageTime = Date.now();
     conv.unreadForUser = (conv.unreadForUser || 0) + 1;
     saveDoc("adminConversations", conv);
-    addNotification("whatsapp", "📢 Message de l'administration — voir dans vos messages.", acc.id);
+    addNotification("whatsapp", "📢 Message de l'administration — voir dans vos messages.", acc.id, "admin-chat");
   }
   save();
   state.adminBroadcastDraft = "";
@@ -7295,7 +7310,7 @@ function sendAdminConvMessage(convId, message, asAdmin) {
   conv.lastMessageTime = Date.now();
   if (asAdmin) {
     conv.unreadForUser = (conv.unreadForUser || 0) + 1;
-    addNotification("whatsapp", "📢 Nouveau message de l'administration.", conv.accountId);
+    addNotification("whatsapp", "📢 Nouveau message de l'administration.", conv.accountId, "admin-chat");
   } else {
     conv.unreadForAdmin = (conv.unreadForAdmin || 0) + 1;
   }
@@ -8379,7 +8394,9 @@ function renderOnboardStepIdentity(d) {
 
 // ---------- \u00c9TAPE 2 (Vendeur) : TYPE DE VENDEUR ----------
 function renderOnboardStepVendorType(d) {
-  var html = '<button class="link-btn" style="margin-bottom:14px" data-action="onboard-back-step" data-value="identity"><i class="fa-solid fa-arrow-left"></i> Retour</button>';
+  var backAction = d.isSecondAccountFlow ? 'cancel-second-account-flow' : 'onboard-back-step';
+  var backValue = d.isSecondAccountFlow ? '' : 'identity';
+  var html = '<button class="link-btn" style="margin-bottom:14px" data-action="' + backAction + '" data-value="' + backValue + '"><i class="fa-solid fa-arrow-left"></i> Retour</button>';
   html += '<div class="section-title" style="margin-bottom:4px;">Quel type de vendeur \u00eates-vous ?</div>';
   html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:16px;">Chaque type a sa propre fiche, adapt\u00e9e \u00e0 votre activit\u00e9.</div>';
   html += '<div style="display:flex;flex-direction:column;gap:10px;">';
@@ -8699,7 +8716,7 @@ function renderVendorHubModal() {
       html += '<button class="vendor-hub-card" data-action="switch-to-linked-account" data-value="' + vhAcc.id + '"><i class="fa-solid fa-right-left"></i><div><div class="vh-title">Basculer vers ' + esc(vhAcc.shopName || vhAcc.name) + '</div><div class="vh-sub">' + (ROLE_LABELS[vhAcc.role] || vhAcc.role) + ' — même identité</div></div><i class="fa-solid fa-chevron-right"></i></button>';
     }
   } else {
-    html += '<button class="vendor-hub-card" data-action="show-second-account-info" data-value="1" style="background:var(--bg-body);"><i class="fa-solid fa-circle-plus"></i><div><div class="vh-title">Ouvrir une 2ᵉ ou 3ᵉ boutique</div><div class="vh-sub">Nom et téléphone déjà remplis — juste le reste à compléter</div></div><i class="fa-solid fa-chevron-right"></i></button>';
+    html += '<button class="vendor-hub-card" data-action="show-second-account-info" data-value="1" style="background:var(--bg-body);"><i class="fa-solid fa-circle-plus"></i><div><div class="vh-title">Ajouter un autre type de vente</div><div class="vh-sub">Garder mon compte actuel et en ouvrir un nouveau</div></div><i class="fa-solid fa-chevron-right"></i></button>';
   }
   html += '</div></div></div>';
   return html;
@@ -13422,7 +13439,7 @@ function renderNotifPanel() {
     for (var i = 0; i < myNotifs.length; i++) {
       var n = myNotifs[i];
       var icon = n.channel === "whatsapp" ? "brands fa-whatsapp" : "solid fa-comment-sms";
-      html += '<div class="notif-item">';
+      html += '<div class="notif-item" style="' + (n.target ? 'cursor:pointer;' : '') + '" ' + (n.target ? 'data-action="open-notif-target" data-value="' + esc(n.id) + '"' : '') + '>';
       html += '<div class="notif-channel ' + n.channel + '"><i class="fa-' + icon + '"></i></div>';
       html += '<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-dim);">' + n.channel + '</div>';
       html += '<div style="font-size:13px;margin-top:2px;">' + esc(n.message) + '</div>';
@@ -13447,13 +13464,11 @@ function renderBottomNav() {
       if (state.products[fp].id === favIdsRaw[fc]) { favCount++; break; }
     }
   }
-  var navSweepOffset = -((Date.now() % 10000) / 1000);
-  var bolts = '<span class="nav-bolts">⚡⚡</span>';
-  var html = '<div class="bottom-nav"><div class="nav-sweep" style="animation-delay:' + navSweepOffset + 's"></div>';
-  html += '<button class="nav-item ' + (v === "market" ? 'active' : '') + '" data-action="go" data-value="market">' + (v === "market" ? bolts : '') + '<i class="fa-solid fa-grip"></i>Marché</button>';
-  html += '<button class="nav-item ' + (v === "favorites" ? 'active' : '') + '" data-action="go" data-value="favorites">' + (v === "favorites" ? bolts : '') + '<i class="fa-solid fa-heart"></i>Favoris' + (favCount > 0 ? ' (' + favCount + ')' : '') + '</button>';
-  html += '<button class="nav-item ' + (v === "cart" ? 'active' : '') + '" data-action="go" data-value="cart">' + (v === "cart" ? bolts : '') + '<i class="fa-solid fa-bag-shopping"></i>Panier' + (cartCount() > 0 ? ' (' + cartCount() + ')' : '') + '</button>';
-  html += '<button class="nav-item ' + (v === "orders" ? 'active' : '') + '" data-action="go" data-value="orders">' + (v === "orders" ? bolts : '') + '<i class="fa-solid fa-receipt"></i>Achats' + (state.profile.hasNewBuyerStatusAlert ? '<span class="nav-alert-dot"></span>' : '') + '</button>';
+  var html = '<div class="bottom-nav">';
+  html += '<button class="nav-item ' + (v === "market" ? 'active' : '') + '" data-action="go" data-value="market"><i class="fa-solid fa-grip"></i>Marché</button>';
+  html += '<button class="nav-item ' + (v === "favorites" ? 'active' : '') + '" data-action="go" data-value="favorites"><i class="fa-solid fa-heart"></i>Favoris' + (favCount > 0 ? ' (' + favCount + ')' : '') + '</button>';
+  html += '<button class="nav-item ' + (v === "cart" ? 'active' : '') + '" data-action="go" data-value="cart"><i class="fa-solid fa-bag-shopping"></i>Panier' + (cartCount() > 0 ? ' (' + cartCount() + ')' : '') + '</button>';
+  html += '<button class="nav-item ' + (v === "orders" ? 'active' : '') + '" data-action="go" data-value="orders"><i class="fa-solid fa-receipt"></i>Achats' + (state.profile.hasNewBuyerStatusAlert ? '<span class="nav-alert-dot"></span>' : '') + '</button>';
   html += '</div>';
   return html;
 }
@@ -13958,6 +13973,15 @@ root.addEventListener("click", function(e) {
       break;
     }
     case "onboard-back-step": state.onboardStep = value; render(); break;
+    case "cancel-second-account-flow": {
+      state.view = ROLE_HOME_VIEW[state.profile.role] || "market";
+      state.onboardDraft = emptyOnboardDraft();
+      state.onboardMode = null;
+      state.onboardStep = "identity";
+      state.showRoleMenu = true;
+      render();
+      break;
+    }
     case "set-onboard-vendor-type": {
       state.onboardDraft.sellerType = value;
       if (value === "particulier") {
@@ -14248,13 +14272,49 @@ root.addEventListener("click", function(e) {
     case "toggle-notif": {
       state.showNotifPanel = true;
       for (var ni = 0; ni < state.notifications.length; ni++) {
-        if (state.profile && state.notifications[ni].userId === state.profile.id) state.notifications[ni].read = true;
+        if (state.profile && state.notifications[ni].userId === state.profile.id && !state.notifications[ni].read) {
+          state.notifications[ni].read = true;
+          saveDoc("notifications", state.notifications[ni]);
+        }
       }
       save();
       render();
       break;
     }
     case "close-notif": state.showNotifPanel = false; render(); break;
+    case "open-notif-target": {
+      var clickedNotif = null;
+      for (var oni = 0; oni < state.notifications.length; oni++) {
+        if (state.notifications[oni].id === value) { clickedNotif = state.notifications[oni]; break; }
+      }
+      if (!clickedNotif || !clickedNotif.target) break;
+      state.showNotifPanel = false;
+      var target = clickedNotif.target;
+      if (target === "orders") {
+        state.view = "orders";
+      } else if (target === "seller-orders") {
+        state.showVendorHub = false;
+        state.view = "seller";
+        state.sellerTab = "orders";
+      } else if (target === "livreur") {
+        state.view = "livreur";
+      } else if (target === "pointvente") {
+        state.view = "pointvente";
+      } else if (target === "admin-chat") {
+        var myAdminConv = getOrCreateAdminConversation(state.profile.id, state.profile.name);
+        myAdminConv.unreadForUser = 0;
+        save();
+        saveDoc("adminConversations", myAdminConv);
+        state.currentAdminConvId = myAdminConv.id;
+        state.chatOpen = true;
+      } else if (target.indexOf("chat:") === 0) {
+        state.currentConversationId = target.slice("chat:".length);
+        state.currentAdminConvId = null;
+        state.chatOpen = true;
+      }
+      render();
+      break;
+    }
     case "reset-demo": if (confirm("Effacer toutes les données ?")) { localStorage.removeItem(STORAGE_KEY); location.reload(); } break;
     case "set-category": {
       state.category = value;
@@ -16396,14 +16456,29 @@ if (!FIREBASE_ENABLED) {
       var row = payload.new && Object.keys(payload.new).length ? payload.new : payload.old;
       if (!row || !byCollectionExists(row.collection)) return;
       var list = state[row.collection] || [];
+      var changed = true;
       if (payload.eventType === "DELETE") {
+        var beforeLen = list.length;
         list = list.filter(function(item) { return item.id !== row.id; });
+        changed = list.length !== beforeLen;
       } else {
         var idx = list.findIndex(function(item) { return item.id === row.data.id; });
-        if (idx === -1) list.push(row.data); else list[idx] = row.data;
+        if (idx === -1) {
+          list.push(row.data);
+        } else {
+          // Écho de notre propre écriture (l'appareil reçoit en retour ce
+          // qu'il vient d'envoyer) : si rien n'a réellement changé, on
+          // évite un second redessin complet de l'écran, source du
+          // "clic fantôme" — l'écran qui disparaît puis réapparaît.
+          if (JSON.stringify(list[idx]) === JSON.stringify(row.data)) {
+            changed = false;
+          } else {
+            list[idx] = row.data;
+          }
+        }
       }
       state[row.collection] = list;
-      if (_splashFinished) render(); // mise à jour en temps réel après le démarrage
+      if (changed && _splashFinished) render(); // mise à jour en temps réel après le démarrage
     })
     .subscribe();
 
