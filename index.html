@@ -4057,7 +4057,7 @@ const SHARED_KEYS = [
   "relaisApplications", "livreurApplications", "autreQuartierApplications",
   "relaisEditRequests", "externalParcels", "webhookPartners", "dashboardPartners",
   "apiPartners", "platformCommissions", "externalParcelChangeRequests",
-  "verificationRequests", "wallets", "cagnottes"
+  "verificationRequests", "wallets", "cagnottes", "filatureLogs"
 ];
 
 // Enregistre UN SEUL document (ex: saveDoc("products", p)). C'est la
@@ -4065,14 +4065,62 @@ const SHARED_KEYS = [
 // n'envoie que CE document, jamais tout le reste.
 function saveDoc(collectionName, docData) {
   if (!FIREBASE_ENABLED) return; // mode local : localStorage s'en charge déjà via save()
+  // Hors connexion (ou en cas d'échec), la modification n'est jamais
+  // perdue : elle rejoint une file d'attente et sera réenvoyée dès que la
+  // connexion revient — indispensable pour un paiement fait dans une zone
+  // sans réseau, mais utile pour absolument tout le reste aussi.
+  if (navigator.onLine === false) {
+    queuePendingSync(collectionName, docData);
+    return;
+  }
   sb.from("app_data").upsert({ collection: collectionName, id: docData.id, data: docData, updated_at: new Date().toISOString() }, { onConflict: "collection,id" })
     .then(function(res) {
       if (res.error) {
         console.error("Erreur de sauvegarde Supabase (" + collectionName + ") :", res.error);
-        showToast("Erreur de synchronisation avec le serveur (vérifiez la connexion).");
+        queuePendingSync(collectionName, docData);
       }
+    })
+    .catch(function(err) {
+      console.error("Erreur réseau lors de la sauvegarde (" + collectionName + ") :", err);
+      queuePendingSync(collectionName, docData);
     });
 }
+
+// Ajoute (ou remplace, si le même document était déjà en attente) une
+// modification à réenvoyer plus tard — jamais deux fois la même donnée
+// périmée, toujours la plus récente.
+function queuePendingSync(collectionName, docData) {
+  if (!state.pendingSyncQueue) state.pendingSyncQueue = [];
+  var idx = -1;
+  for (var i = 0; i < state.pendingSyncQueue.length; i++) {
+    if (state.pendingSyncQueue[i].collection === collectionName && state.pendingSyncQueue[i].id === docData.id) { idx = i; break; }
+  }
+  var entry = { collection: collectionName, id: docData.id, data: docData, queuedAt: Date.now() };
+  if (idx === -1) state.pendingSyncQueue.push(entry); else state.pendingSyncQueue[idx] = entry;
+  save();
+}
+
+// Réessaie d'envoyer tout ce qui est resté en attente — appelée dès que le
+// navigateur signale un retour de connexion, et par sécurité toutes les
+// 20 secondes (le signal "en ligne" n'est pas toujours fiable sur mobile).
+function flushPendingSyncQueue() {
+  if (!FIREBASE_ENABLED || !state.pendingSyncQueue || state.pendingSyncQueue.length === 0) return;
+  if (navigator.onLine === false) return;
+  var queue = state.pendingSyncQueue.slice();
+  queue.forEach(function(entry) {
+    sb.from("app_data").upsert({ collection: entry.collection, id: entry.id, data: entry.data, updated_at: new Date().toISOString() }, { onConflict: "collection,id" })
+      .then(function(res) {
+        if (!res.error) {
+          state.pendingSyncQueue = (state.pendingSyncQueue || []).filter(function(e) { return !(e.collection === entry.collection && e.id === entry.id); });
+          save();
+          render();
+        }
+      })
+      .catch(function() {});
+  });
+}
+window.addEventListener("online", flushPendingSyncQueue);
+setInterval(flushPendingSyncQueue, 20000);
 
 function deleteRemoteDoc(collectionName, docId) {
   if (!FIREBASE_ENABLED) return; // mode local : localStorage s'en charge déjà via save()
@@ -6032,6 +6080,8 @@ function defaultState() {
     verificationRequests: [],
     wallets: [],
     cagnottes: [],
+    filatureLogs: [],
+    pendingSyncQueue: [],
     showAdminProductEdit: false,
     productCategoryConfirmed: false,
     deliveryBaseDraft: { lat: null, lng: null },
@@ -6075,6 +6125,7 @@ function defaultState() {
     adminAffiliateAccountsOpen: false,
     ordersTab: "current",
     expandedPendingLivreurOrder: null,
+    showLivreurPendingHistory: false,
     voiceRecording: false,
     productDraftSnapshot: null,
     showLeavePublishConfirm: false,
@@ -6097,6 +6148,8 @@ function defaultState() {
     showDiaspora: false,
     adminWalletSearch: "",
     adminWalletOpenId: null,
+    adminFilatureOpenPhone: null,
+    filatureProductOpenedAt: null,
     showVendorConsentGate: false,
     showEmailRequiredModal: false,
     adminAccountDetailId: null,
@@ -6550,11 +6603,11 @@ function registerAccount() {
     shopName: d.role === "vendeur" ? ((d.shopName && d.shopName.trim()) ? d.shopName.trim() : "Boutique de " + d.name.trim()) : (d.role === "point_vente" ? d.shopName.trim() : null),
     shopPhone: d.role === "vendeur" ? fullPhone : "",
     shopAddress: d.role === "vendeur" ? (d.shopAddress || "") : "",
-    shopLat: d.role === "point_vente" ? d.shopLat : null,
+    shopLat: (d.role === "point_vente" || (d.role === "vendeur" && d.sellerType !== "particulier")) ? d.shopLat : null,
     commune: d.role === "point_vente" ? d.commune : null,
     quartier: d.role === "point_vente" ? d.quartier : null,
     addressDetail: d.role === "point_vente" ? (d.addressDetail || "") : "",
-    shopLng: d.role === "point_vente" ? d.shopLng : null,
+    shopLng: (d.role === "point_vente" || (d.role === "vendeur" && d.sellerType !== "particulier")) ? d.shopLng : null,
     cuisineType: d.role === "vendeur" ? (d.cuisineType || "") : "",
     openingHours: d.role === "vendeur" ? (d.openingHours || "") : "",
     deliveryZone: d.role === "vendeur" ? (d.deliveryZone || "") : "",
@@ -7428,9 +7481,12 @@ function finalizeOrder(order, opts) {
 // point de retrait), pour ne jamais en oublier un.
 function creditSellersForOrder(order) {
   var sellerPortions = {};
+  var sellerItemNames = {};
   for (var oi = 0; oi < order.items.length; oi++) {
     var oit = order.items[oi];
     sellerPortions[oit.sellerId] = (sellerPortions[oit.sellerId] || 0) + oit.price * oit.qty;
+    sellerItemNames[oit.sellerId] = sellerItemNames[oit.sellerId] || [];
+    sellerItemNames[oit.sellerId].push(oit.name);
   }
   var orderRate = order.commissionRate != null ? order.commissionRate : getCommissionConfig().totalCommissionRate;
   for (var sellerIdKey in sellerPortions) {
@@ -7440,7 +7496,12 @@ function creditSellersForOrder(order) {
     }
     if (!sellerAcc || !sellerAcc.phone) continue;
     var netAmount = sellerPortions[sellerIdKey] * (1 - orderRate);
-    creditWallet(sellerAcc.phone, netAmount, "vente", { accountId: sellerIdKey, accountName: sellerAcc.shopName || sellerAcc.name, orderId: order.id });
+    // Avant, "accountName" affichait le nom du VENDEUR lui-même (donc "reçu
+    // de vous-même") — corrigé pour montrer ce qui compte vraiment : quel
+    // acheteur, pour quel(s) article(s), sur quelle commande.
+    var itemNames = sellerItemNames[sellerIdKey];
+    var itemSummary = itemNames.slice(0, 2).join(", ") + (itemNames.length > 2 ? "…" : "");
+    creditWallet(sellerAcc.phone, netAmount, "vente", { accountId: order.buyerId, accountName: (order.buyerName || "Un acheteur") + " — " + itemSummary, orderId: order.id });
   }
 }
 
@@ -8061,6 +8122,108 @@ function generateReferralCode(userId) {
 // réglages d'affichage du marché), pas seulement enregistrés sur celui-ci.
 // Réglages de l'algorithme du marché — partagés entre tous les appareils,
 // réglables uniquement en Admin (comme la commission).
+// ---------- FILATURE (suivi détaillé, réservé aux comptes surveillés) ----------
+// Liste des numéros surveillés — réglage partagé, modifiable uniquement en
+// Admin, synchronisé entre tous les appareils comme la commission. Aucun
+// suivi détaillé n'est jamais activé pour qui que ce soit d'autre.
+function getFilatureWatchlist() {
+  if (state.settings) {
+    for (var i = 0; i < state.settings.length; i++) {
+      if (state.settings[i].id === "filature_watchlist") return state.settings[i].phones || [];
+    }
+  }
+  return [];
+}
+
+function saveFilatureWatchlist(phones) {
+  var cfg = { id: "filature_watchlist", phones: phones };
+  var idx = -1;
+  for (var i = 0; i < state.settings.length; i++) {
+    if (state.settings[i].id === "filature_watchlist") { idx = i; break; }
+  }
+  if (idx === -1) state.settings.push(cfg); else state.settings[idx] = cfg;
+  save();
+  saveDoc("settings", cfg);
+}
+
+function isPhoneWatched(phone) {
+  var watchlist = getFilatureWatchlist();
+  var wid = normalizeWalletPhone(phone);
+  return watchlist.some(function(p) { return normalizeWalletPhone(p) === wid; });
+}
+
+function getFilatureLog(phone) {
+  var wid = normalizeWalletPhone(phone);
+  for (var i = 0; i < state.filatureLogs.length; i++) {
+    if (state.filatureLogs[i].id === wid) return state.filatureLogs[i];
+  }
+  return { id: wid, phone: phone, events: [] };
+}
+
+// N'enregistre RIEN pour qui que ce soit, sauf si son numéro figure
+// explicitement dans la liste de surveillance de l'Admin — vérifié à
+// chaque appel, jamais mémorisé à l'avance, pour qu'une désactivation soit
+// immédiate.
+// Libellés lisibles pour les actions les plus importantes à suivre —
+// profil, changer de rôle, et tout ce qui touche à l'argent en premier
+// lieu. Une action non listée ici s'affiche quand même (son nom brut),
+// rien n'est jamais silencieusement ignoré.
+var FILATURE_ACTION_LABELS = {
+  "open-profile": "Ouvre son profil",
+  "toggle-role-menu": "Ouvre le menu Changer de rôle",
+  "switch-role": "Change de rôle",
+  "switch-to-linked-account": "Bascule vers un autre compte lié",
+  "open-shop-picker": "Ouvre le choix de boutique (Vendeur)",
+  "enter-shop": "Bascule vers une autre boutique/compte",
+  "apply-livreur": "Clique sur Devenir livreur",
+  "open-become-relais": "Clique sur Devenir Point de Retrait",
+  "logout": "Se déconnecte",
+  "open-wallet": "Ouvre Sounsouni Portefeuille",
+  "open-wallet-transfer": "Ouvre Envoyer de l'argent",
+  "confirm-wallet-transfer": "Envoie de l'argent à quelqu'un",
+  "open-carte": "Ouvre Sounsouni Carte",
+  "open-charge-payment": "Ouvre Encaisser un paiement",
+  "confirm-charge-payment": "Encaisse un paiement (Sounsouni Carte)",
+  "open-giftcard": "Ouvre Offrir un bon cadeau",
+  "confirm-giftcard": "Envoie un bon cadeau",
+  "open-cagnottes-list": "Ouvre Mes cagnottes",
+  "open-create-cagnotte": "Ouvre Créer une cagnotte",
+  "confirm-create-cagnotte": "Crée une cagnotte",
+  "open-cagnotte-detail": "Ouvre le détail d'une cagnotte",
+  "open-cagnotte-contribute": "Ouvre Cotiser à une cagnotte",
+  "confirm-cagnotte-contribute": "Cotise à une cagnotte",
+  "confirm-close-cagnotte": "Clôture une cagnotte",
+  "open-diaspora": "Ouvre Envoyer depuis l'étranger",
+  "confirm-diaspora": "Envoie un transfert depuis l'étranger",
+  "open-affiliate-program": "Ouvre Programme d'affiliation",
+  "open-user-guide": "Ouvre le Guide d'utilisation",
+  "open-profile-info": "Ouvre Mes informations & adresses"
+};
+
+function logFilatureEvent(type, detail) {
+  if (!state.profile || !state.profile.phone) return;
+  if (!isPhoneWatched(state.profile.phone)) return;
+  var log = getFilatureLog(state.profile.phone);
+  log.phone = state.profile.phone;
+  log.events = log.events || [];
+  log.events.push({
+    type: type,
+    detail: detail || "",
+    accountName: state.profile.shopName || state.profile.name,
+    at: Date.now()
+  });
+  // Garde les 500 derniers événements — assez pour une vraie relecture de
+  // session, sans faire grossir le document indéfiniment.
+  if (log.events.length > 500) log.events = log.events.slice(log.events.length - 500);
+  var idx = -1;
+  for (var i = 0; i < state.filatureLogs.length; i++) {
+    if (state.filatureLogs[i].id === log.id) { idx = i; break; }
+  }
+  if (idx === -1) state.filatureLogs.push(log); else state.filatureLogs[idx] = log;
+  save();
+  saveDoc("filatureLogs", log);
+}
+
 function getAlgorithmConfig() {
   if (state.settings) {
     for (var i = 0; i < state.settings.length; i++) {
@@ -8131,6 +8294,27 @@ function saveWallet(wallet) {
 // credit/débit — chaque mouvement garde une trace complète (montant, motif,
 // compte/commande d'origine, date) pour l'historique ET pour que l'Admin
 // principal puisse tout consulter, corriger ou supprimer si besoin.
+// Version générale (n'importe quel numéro, pas seulement la session
+// active) — nécessaire ici : un crédit/débit peut arriver sur le
+// portefeuille d'un ACHETEUR pendant qu'un VENDEUR encaisse via son
+// propre écran (Sounsouni Carte), donc "qui est connecté en ce moment"
+// n'est pas toujours "à qui appartient l'argent qui bouge".
+function logFilatureEventForPhone(phone, type, detail, accountName) {
+  if (!phone || !isPhoneWatched(phone)) return;
+  var log = getFilatureLog(phone);
+  log.phone = phone;
+  log.events = log.events || [];
+  log.events.push({ type: type, detail: detail || "", accountName: accountName || "", at: Date.now() });
+  if (log.events.length > 500) log.events = log.events.slice(log.events.length - 500);
+  var idx = -1;
+  for (var i = 0; i < state.filatureLogs.length; i++) {
+    if (state.filatureLogs[i].id === log.id) { idx = i; break; }
+  }
+  if (idx === -1) state.filatureLogs.push(log); else state.filatureLogs[idx] = log;
+  save();
+  saveDoc("filatureLogs", log);
+}
+
 function creditWallet(phone, amount, reason, meta) {
   if (!phone || !amount || amount <= 0) return;
   var wallet = getWallet(phone);
@@ -8148,6 +8332,9 @@ function creditWallet(phone, amount, reason, meta) {
     createdAt: Date.now()
   });
   saveWallet(wallet);
+  // Un gain explicite — le motif ET la provenance (qui/quoi), jamais juste
+  // "solde modifié". C'est précisément ce qui était demandé.
+  logFilatureEventForPhone(phone, "gain", "+" + money(amount) + " — " + walletReasonLabel({ reason: reason, accountName: meta && meta.accountName, type: "credit" }));
 }
 
 function debitWallet(phone, amount, reason, meta) {
@@ -8168,6 +8355,7 @@ function debitWallet(phone, amount, reason, meta) {
     createdAt: Date.now()
   });
   saveWallet(wallet);
+  logFilatureEventForPhone(phone, "depense", "−" + money(amount) + " — " + walletReasonLabel({ reason: reason, accountName: meta && meta.accountName, type: "debit" }));
   return true;
 }
 
@@ -8340,14 +8528,29 @@ function chargeWalletPayment(buyerPhone, sellerPhone, amount) {
   }
   if (isNaN(amount) || amount <= 0) { showToast("Entrez un montant valide."); return false; }
   var buyer = findAccountByPhone(buyerPhone);
-  if (!buyer) { showToast("Aucun compte Sounsouni pour ce code."); return false; }
+  if (!buyer) {
+    // Hors connexion, on ne peut vérifier QUE ce que cet appareil connaît
+    // déjà — un compte jamais croisé ici ne peut pas être confirmé tant
+    // que la connexion n'est pas revenue, pour éviter d'encaisser à
+    // l'aveugle pour un faux numéro.
+    if (navigator.onLine === false) {
+      showToast("📡 Pas de connexion et ce client est inconnu sur cet appareil — impossible de vérifier son compte hors ligne.");
+    } else {
+      showToast("Aucun compte Sounsouni pour ce code.");
+    }
+    return false;
+  }
   var sellerAcc = findAccountByPhone(sellerPhone);
   var sellerName = sellerAcc ? (sellerAcc.shopName || sellerAcc.name) : "la boutique";
   var ok = debitWallet(buyer.phone, amount, "paiement_boutique", { accountId: sellerAcc ? sellerAcc.id : null, accountName: sellerName });
   if (!ok) { showToast("Solde insuffisant sur le portefeuille du client."); return false; }
   creditWallet(sellerPhone, amount, "paiement_boutique", { accountId: buyer.id, accountName: buyer.shopName || buyer.name });
   addNotification("whatsapp", "💳 Paiement de " + money(amount) + " chez " + sellerName + " — réglé avec votre Sounsouni Portefeuille.", buyer.id, "wallet");
-  showToast("✅ " + money(amount) + " encaissés depuis le portefeuille de " + (buyer.shopName || buyer.name) + ".");
+  if (navigator.onLine === false) {
+    showToast("📡 Hors connexion — " + money(amount) + " encaissés localement, ce sera confirmé automatiquement dès que la connexion reviendra.");
+  } else {
+    showToast("✅ " + money(amount) + " encaissés depuis le portefeuille de " + (buyer.shopName || buyer.name) + ".");
+  }
   return true;
 }
 
@@ -8463,8 +8666,13 @@ function attributeCommission(orderId, buyerId, orderTotal) {
         saveDoc("accounts", state.accounts[j]);
         // Même geste que pour une vente : ça atterrit dans le portefeuille
         // unique de cette personne, pas seulement dans un compteur à part.
+        // Avant, "accountName" répétait le nom de la personne qui TOUCHE la
+        // commission — corrigé pour montrer qui a été parrainé et sur
+        // quelle commande, l'information qui compte vraiment ici.
         if (state.accounts[j].phone) {
-          creditWallet(state.accounts[j].phone, commission, "parrainage", { accountId: affiliate.id, accountName: state.accounts[j].shopName || state.accounts[j].name, orderId: orderId });
+          var referredBuyer = null;
+          for (var rbi = 0; rbi < state.accounts.length; rbi++) { if (state.accounts[rbi].id === buyerId) { referredBuyer = state.accounts[rbi]; break; } }
+          creditWallet(state.accounts[j].phone, commission, "parrainage", { accountId: buyerId, accountName: (referredBuyer ? referredBuyer.name : "Un filleul") + " — commande #" + orderId.slice(-5).toUpperCase(), orderId: orderId });
         }
         break;
       }
@@ -9170,14 +9378,32 @@ function sendMessage(conversationId, message) {
     }
   }
   if (!conv) return;
-  
+
+  // Répondre doit se faire sous la BONNE identité — celle du compte lié
+  // (même numéro) qui participe réellement à cette conversation, pas
+  // forcément celui actuellement affiché à l'écran. Sans ça, une réponse
+  // depuis le compte n°1 à un message reçu par le compte n°2 afficherait
+  // le mauvais nom à l'acheteur de l'autre côté.
+  var linkedIds = getLinkedAccountIds();
+  var sendingAsId = state.profile.id;
+  var sendingAsName = state.profile.name;
+  if (linkedIds.indexOf(conv.sellerId) !== -1 && conv.sellerId !== state.profile.id) {
+    var sellerAccForMsg = null;
+    for (var sfm = 0; sfm < state.accounts.length; sfm++) { if (state.accounts[sfm].id === conv.sellerId) { sellerAccForMsg = state.accounts[sfm]; break; } }
+    if (sellerAccForMsg) { sendingAsId = sellerAccForMsg.id; sendingAsName = sellerAccForMsg.shopName || sellerAccForMsg.name; }
+  } else if (linkedIds.indexOf(conv.buyerId) !== -1 && conv.buyerId !== state.profile.id) {
+    var buyerAccForMsg = null;
+    for (var bfm = 0; bfm < state.accounts.length; bfm++) { if (state.accounts[bfm].id === conv.buyerId) { buyerAccForMsg = state.accounts[bfm]; break; } }
+    if (buyerAccForMsg) { sendingAsId = buyerAccForMsg.id; sendingAsName = buyerAccForMsg.name; }
+  }
+
   var maskResult = maskPhoneNumbers(message);
   var cleanedMessage = maskResult.cleaned;
   
   var msg = {
     id: uid(),
-    senderId: state.profile.id,
-    senderName: state.profile.name,
+    senderId: sendingAsId,
+    senderName: sendingAsName,
     message: cleanedMessage,
     createdAt: Date.now(),
     read: false,
@@ -9191,7 +9417,7 @@ function sendMessage(conversationId, message) {
   // Le compteur "non lu" augmente pour le DESTINATAIRE, jamais pour l'expéditeur —
   // sinon la personne qui écrit voit son propre badge grimper pour un message
   // qu'elle vient d'envoyer elle-même (bug signalé et corrigé ici).
-  if (state.profile.id === conv.sellerId) {
+  if (sendingAsId === conv.sellerId) {
     conv.unreadForBuyer = (conv.unreadForBuyer || 0) + 1;
   } else {
     conv.unreadForSeller = (conv.unreadForSeller || 0) + 1;
@@ -9315,6 +9541,44 @@ function startVoiceRecording(conversationId) {
     return;
   }
   voiceRecorderTargetConvId = conversationId;
+  voiceTranscript = "";
+
+  // La reconnaissance vocale démarre D'ABORD, avant l'enregistrement —
+  // elle gère son propre accès au micro en interne. La lancer APRÈS avoir
+  // déjà ouvert le micro pour l'enregistrement (comme c'était fait avant)
+  // pouvait le laisser "occupé" sur beaucoup de téléphones, empêchant la
+  // reconnaissance de démarrer, en silence, sans aucune erreur visible.
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SR) {
+    try {
+      voiceSpeechRecognition = new SR();
+      voiceSpeechRecognition.lang = "fr-FR";
+      voiceSpeechRecognition.continuous = true;
+      voiceSpeechRecognition.interimResults = true;
+      voiceSpeechRecognition.onresult = function(e) {
+        var t = "";
+        for (var i = 0; i < e.results.length; i++) t += e.results[i][0].transcript + " ";
+        voiceTranscript = t;
+        console.log("🎙️ Transcription en cours (jamais affichée à l'utilisateur) :", voiceTranscript);
+      };
+      // Avant, les erreurs étaient avalées en silence — impossible de
+      // savoir pourquoi la détection ne trouvait jamais rien. Elles sont
+      // maintenant visibles dans la console, pour pouvoir vraiment
+      // diagnostiquer le problème signalé.
+      voiceSpeechRecognition.onerror = function(err) {
+        console.error("❌ Erreur de reconnaissance vocale (détection de numéro) :", err.error, err);
+      };
+      voiceSpeechRecognition.onstart = function() { console.log("🎙️ Reconnaissance vocale démarrée."); };
+      voiceSpeechRecognition.onend = function() { console.log("🎙️ Reconnaissance vocale terminée. Texte capté :", voiceTranscript); };
+      voiceSpeechRecognition.start();
+    } catch (err) {
+      console.error("❌ Impossible de démarrer la reconnaissance vocale :", err);
+      voiceSpeechRecognition = null;
+    }
+  } else {
+    console.warn("⚠️ La reconnaissance vocale n'est pas supportée par ce navigateur — aucune détection de numéro ne sera possible sur ce message vocal.");
+  }
+
   navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
     voiceRecorderStream = stream;
     voiceRecorderChunks = [];
@@ -9336,30 +9600,10 @@ function startVoiceRecording(conversationId) {
       var sec = Math.floor((Date.now() - voiceRecorderStartedAt) / 1000);
       el.textContent = Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
     }, 500);
-
-    // Transcription en direct (meilleur effort, français) — uniquement
-    // pour repérer un éventuel numéro de téléphone, jamais affichée ni
-    // conservée telle quelle.
-    voiceTranscript = "";
-    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SR) {
-      try {
-        voiceSpeechRecognition = new SR();
-        voiceSpeechRecognition.lang = "fr-FR";
-        voiceSpeechRecognition.continuous = true;
-        voiceSpeechRecognition.interimResults = true;
-        voiceSpeechRecognition.onresult = function(e) {
-          var t = "";
-          for (var i = 0; i < e.results.length; i++) t += e.results[i][0].transcript + " ";
-          voiceTranscript = t;
-        };
-        voiceSpeechRecognition.onerror = function() {};
-        voiceSpeechRecognition.start();
-      } catch (err) { voiceSpeechRecognition = null; }
-    }
   }).catch(function(err) {
     console.error("Erreur accès micro :", err);
     showToast("🎤 Micro indisponible : " + (err && err.name ? err.name : "accès refusé") + ". Autorisez le micro dans les réglages du navigateur pour envoyer un message vocal.");
+    if (voiceSpeechRecognition) { try { voiceSpeechRecognition.stop(); } catch (e2) {} }
   });
 }
 
@@ -9395,12 +9639,27 @@ function stopVoiceRecording(send) {
 }
 
 
+// Tous les comptes liés au même numéro de téléphone que le compte
+// actuellement connecté — pour que les messages adressés à N'IMPORTE
+// LEQUEL de ces comptes remontent ensemble, peu importe sur lequel des
+// trois on est connecté au moment où le message arrive.
+function getLinkedAccountIds() {
+  if (!state.profile) return [];
+  var phone = state.profile.phone;
+  var ids = [];
+  for (var i = 0; i < state.accounts.length; i++) {
+    if (state.accounts[i].phone === phone) ids.push(state.accounts[i].id);
+  }
+  return ids;
+}
+
 function getConversationsForUser() {
   if (!state.profile) return [];
+  var linkedIds = getLinkedAccountIds();
   var result = [];
   for (var i = 0; i < state.conversations.length; i++) {
     var c = state.conversations[i];
-    if (c.buyerId === state.profile.id || c.sellerId === state.profile.id) {
+    if (linkedIds.indexOf(c.buyerId) !== -1 || linkedIds.indexOf(c.sellerId) !== -1) {
       result.push(c);
     }
   }
@@ -9418,11 +9677,12 @@ function getConversationMessages(conversationId) {
   }
   if (!conv) return [];
   if (state.profile) {
-    if (conv.sellerId === state.profile.id && conv.unreadForSeller) {
+    var linkedIdsForRead = getLinkedAccountIds();
+    if (linkedIdsForRead.indexOf(conv.sellerId) !== -1 && conv.unreadForSeller) {
       conv.unreadForSeller = 0;
       save();
       saveDoc("conversations", conv);
-    } else if (conv.buyerId === state.profile.id && conv.unreadForBuyer) {
+    } else if (linkedIdsForRead.indexOf(conv.buyerId) !== -1 && conv.unreadForBuyer) {
       conv.unreadForBuyer = 0;
       save();
       saveDoc("conversations", conv);
@@ -9435,9 +9695,11 @@ function getConversationMessages(conversationId) {
 // compte actuellement connecté (acheteur ou vendeur selon son rôle ici).
 function unreadForMe(conv) {
   if (!state.profile) return 0;
-  if (conv.sellerId === state.profile.id) return conv.unreadForSeller || 0;
-  if (conv.buyerId === state.profile.id) return conv.unreadForBuyer || 0;
-  return 0;
+  var linkedIds = getLinkedAccountIds();
+  var total = 0;
+  if (linkedIds.indexOf(conv.sellerId) !== -1) total += conv.unreadForSeller || 0;
+  if (linkedIds.indexOf(conv.buyerId) !== -1) total += conv.unreadForBuyer || 0;
+  return total;
 }
 
 // ---------- SKELETON LOADER ----------
@@ -10340,6 +10602,9 @@ function buildHTML() {
   }
   if (state.view === "onboarding") return renderOnboarding();
   var html = renderHeader();
+  if (state.pendingSyncQueue && state.pendingSyncQueue.length > 0) {
+    html += '<div style="background:#fff3cd;color:#856404;font-size:11.5px;font-weight:700;text-align:center;padding:6px 12px;"><i class="fa-solid fa-cloud-arrow-up"></i> ' + state.pendingSyncQueue.length + ' modification(s) en attente de connexion — seront envoyées automatiquement.</div>';
+  }
   html += '<main>';
   if (state.view === "market") html += renderMarket();
   else if (state.view === "categoryPage") html += renderCategoryPage();
@@ -10594,8 +10859,23 @@ function renderOnboarding() {
 
   if (mode === "list") {
     var accountsHtml = '';
-    var deviceIds = state.deviceAccountIds || [];
+    // Filtre les doublons d'ID avant affichage — une protection existe déjà
+    // à la création pour ne plus jamais en créer, mais une vieille donnée
+    // restée en mémoire d'avant cette protection ne doit plus jamais
+    // s'afficher deux fois pour autant.
+    var deviceIds = Array.from(new Set(state.deviceAccountIds || []));
     var visibleAccounts = state.accounts.filter(function(a) { return deviceIds.indexOf(a.id) !== -1; });
+    // Filet de sécurité supplémentaire : même si ce sont deux comptes avec
+    // des identifiants réellement différents, deux entrées strictement
+    // identiques (même numéro, même rôle, même type) n'ont aucune raison
+    // de s'afficher deux fois — on ne garde alors que la première.
+    var seenAccountKeys = {};
+    visibleAccounts = visibleAccounts.filter(function(a) {
+      var accKey = a.phone + "|" + a.role + "|" + (a.sellerType || "");
+      if (seenAccountKeys[accKey]) return false;
+      seenAccountKeys[accKey] = true;
+      return true;
+    });
     for (var i = 0; i < visibleAccounts.length; i++) {
       var a = visibleAccounts[i];
       accountsHtml += '<button class="account-item" data-action="login-account" data-value="' + a.id + '">';
@@ -11001,7 +11281,7 @@ function renderRoleMenuModal() {
   if (linkedActivityAccount2) {
     html += '<button type="button" class="glass-card" style="display:flex;align-items:center;gap:10px;padding:10px 12px;width:100%;text-align:left;margin-bottom:14px;border:1.5px solid var(--danger);" data-action="switch-to-linked-account" data-value="' + linkedActivityAccount2.id + '">';
     html += '<span class="nav-alert-dot" style="position:static;"></span>';
-    html += '<span style="font-size:12px;">Il y a une notification sur ton compte <strong>' + esc(linkedActivityAccount2.name) + (linkedActivityAccount2.shopName ? ' — ' + esc(linkedActivityAccount2.shopName) : '') + '</strong></span>';
+    html += '<span style="font-size:12px;">Il y a une notification dans ta boutique <strong>' + esc(linkedActivityAccount2.name) + (linkedActivityAccount2.shopName ? ' — ' + esc(linkedActivityAccount2.shopName) : '') + '</strong></span>';
     html += '</button>';
   }
   html += '<div class="type-modal-grid">';
@@ -11388,8 +11668,8 @@ function renderVendorConsentGateModal() {
 // l'écran utilisateur et la section Admin, pour rester cohérent partout.
 function walletReasonLabel(t) {
   var labels = {
-    vente: "Vente",
-    parrainage: "Commission de parrainage",
+    vente: "Vente" + (t.accountName ? " — " + t.accountName : ""),
+    parrainage: "Commission de parrainage" + (t.accountName ? " — " + t.accountName : ""),
     transfert_envoye: "Transfert envoyé" + (t.accountName ? " à " + t.accountName : ""),
     transfert_recu: "Transfert reçu" + (t.accountName ? " de " + t.accountName : ""),
     cagnotte_contribution: "Cotisation" + (t.accountName ? " — " + t.accountName : ""),
@@ -14389,13 +14669,36 @@ function renderLivreur() {
   var toDeliver = [];
   var delivered = [];
   var terminalNonActive = ["Annulée", "Non livrable", "Refusée au retrait"];
+  var now = Date.now();
+  var HOUR_MS = 60 * 60 * 1000;
+  var pendingArchived = [];
+  var ordersToDelete = [];
   for (var i = 0; i < state.orders.length; i++) {
     var o = state.orders[i];
     if (terminalNonActive.indexOf(o.status) !== -1) continue;
     var idx = statusProgressIndex(o.status);
-    if (idx < statusProgressIndex("Prête")) pending.push(o);
+    if (idx < statusProgressIndex("Prête")) {
+      // Une commande jamais validée par son vendeur, qui traîne depuis
+      // longtemps côté livreur, ne doit plus encombrer la liste active —
+      // elle bascule dans un historique séparé après 35h, et disparaît
+      // pour de bon après une semaine complète sans avoir été relancée.
+      var refTime = o.livreurHistoryRestoredAt || o.createdAt || 0;
+      var ageMs = now - refTime;
+      if (ageMs > 7 * 24 * HOUR_MS) {
+        ordersToDelete.push(o.id);
+      } else if (ageMs > 35 * HOUR_MS) {
+        pendingArchived.push(o);
+      } else {
+        pending.push(o);
+      }
+    }
     else if (idx >= statusProgressIndex("Prête") && o.status !== "Livrée" && o.status !== "En boutique") toDeliver.push(o);
     else if (o.status === "Livrée") delivered.push(o);
+  }
+  if (ordersToDelete.length > 0) {
+    state.orders = state.orders.filter(function(o) { return ordersToDelete.indexOf(o.id) === -1; });
+    save();
+    ordersToDelete.forEach(function(oid) { deleteRemoteDoc("orders", oid); });
   }
   // Séparation claire entre ce que ce livreur a déjà pris en charge, ce
   // qui reste disponible pour n'importe qui, et ce qu'un collègue a déjà
@@ -14409,7 +14712,7 @@ function renderLivreur() {
   }
   
   var html = '<div class="section-title">Espace livreur</div>';
-  html += '<div style="font-size:11px;color:var(--text-dim);margin:-8px 0 12px;"><i class="fa-solid fa-comment"></i> Pour écrire à l\'administration, utilisez le bouton de discussion en bas à droite de l\'écran.</div>';
+  html += '<button class="btn-secondary" style="width:100%;margin-bottom:12px;" data-action="open-admin-chat"><i class="fa-solid fa-headset"></i> Écrire à l\'administration</button>';
 
   html += '<div class="stats-row"><div class="stat-card"><div class="stat-value">' + myDeliveries.length + '</div><div class="stat-label">À livrer</div></div>';
   html += '<div class="stat-card"><div class="stat-value">' + money(totalEarnings) + '</div><div class="stat-label">Gains cumulés</div></div></div>';
@@ -14456,7 +14759,26 @@ function renderLivreur() {
     }
     html += '<div class="divider-dashed"></div>';
   }
-  
+
+  // Commandes en attente depuis plus de 35h — plus dans la liste active,
+  // mais toujours consultables et réactivables ici, avant suppression
+  // définitive après une semaine complète sans action.
+  if (pendingArchived.length > 0) {
+    html += '<button class="link-btn" style="font-size:12.5px;margin-bottom:10px;" data-action="toggle-livreur-pending-history"><i class="fa-solid ' + (state.showLivreurPendingHistory ? 'fa-chevron-up' : 'fa-chevron-down') + '"></i> Historique — en attente depuis longtemps (' + pendingArchived.length + ')</button>';
+    if (state.showLivreurPendingHistory) {
+      for (var ha = 0; ha < pendingArchived.length; ha++) {
+        var hp = pendingArchived[ha];
+        var hRefTime = hp.livreurHistoryRestoredAt || hp.createdAt || 0;
+        var daysWaiting = Math.floor((now - hRefTime) / (24 * HOUR_MS));
+        html += '<div class="card-row" style="opacity:0.7;flex-direction:column;align-items:stretch;margin-bottom:6px;">';
+        html += '<div style="display:flex;align-items:center;gap:10px;"><div class="emoji-thumb"><i class="fa-solid fa-box-archive"></i></div><div style="flex:1"><div style="font-weight:700;font-size:13px">#' + hp.id.slice(-5).toUpperCase() + ' — ' + hp.city + '</div><div style="font-size:11px;color:var(--text-dim)">En attente depuis ' + daysWaiting + ' jour(s) — sera supprimée dans ' + (7 - daysWaiting) + ' jour(s) si rien ne change</div></div></div>';
+        html += '<button class="btn-secondary" style="margin-top:8px;" data-action="restore-livreur-pending-order" data-value="' + hp.id + '"><i class="fa-solid fa-rotate-left"></i> Remettre dans la liste active</button>';
+        html += '</div>';
+      }
+    }
+    html += '<div class="divider-dashed"></div>';
+  }
+
   var actionable = myDeliveries.concat(availableDeliveries);
   // Les commandes validées en dernier par leur vendeur apparaissent en
   // premier — le livreur voit d'abord ce qui vient d'être confirmé.
@@ -15046,6 +15368,7 @@ function renderAdmin() {
     html += '<button class="tab-btn ' + (state.adminTab === "pointsvente" ? 'active' : '') + '" data-action="set-admin-tab" data-value="pointsvente"><i class="fa-solid fa-shop"></i> Points de vente</button>';
     html += '<button class="tab-btn ' + (state.adminTab === "livreurs" ? 'active' : '') + '" data-action="set-admin-tab" data-value="livreurs"><i class="fa-solid fa-truck-fast"></i> Livreurs</button>';
     html += '<button class="tab-btn ' + (state.adminTab === "wallets" ? 'active' : '') + '" data-action="set-admin-tab" data-value="wallets"><i class="fa-solid fa-wallet"></i> Portefeuilles</button>';
+    html += '<button class="tab-btn ' + (state.adminTab === "filature" ? 'active' : '') + '" data-action="set-admin-tab" data-value="filature"><i class="fa-solid fa-user-secret"></i> Filature</button>';
     html += '<button class="tab-btn ' + (state.adminTab === "relaisapplications" ? 'active' : '') + '" data-action="set-admin-tab" data-value="relaisapplications"><i class="fa-solid fa-file-shield"></i> Demandes Relais' + (pendingRelaisCount > 0 ? ' (' + pendingRelaisCount + ')' : '') + '</button>';
     var pendingQuartierCount = state.autreQuartierApplications.filter(function(q) { return q.status === "pending"; }).length;
     html += '<button class="tab-btn ' + (state.adminTab === "quartiers" ? 'active' : '') + '" data-action="set-admin-tab" data-value="quartiers"><i class="fa-solid fa-map-location-dot"></i> Quartiers' + (pendingQuartierCount > 0 ? ' (' + pendingQuartierCount + ')' : '') + '</button>';
@@ -15112,6 +15435,7 @@ function renderAdmin() {
   else if (state.adminTab === "pointsvente") html += renderAdminPointsVente();
   else if (state.adminTab === "livreurs") html += renderAdminLivreurs();
   else if (state.adminTab === "wallets") html += renderAdminWallets();
+  else if (state.adminTab === "filature") html += renderAdminFilature();
   else if (state.adminTab === "relaisapplications") html += renderAdminRelaisApplications();
   else if (state.adminTab === "quartiers") html += renderAdminQuartiers();
   else if (state.adminTab === "livreurapplications") html += renderAdminLivreurApplications();
@@ -16011,6 +16335,54 @@ function renderAdminRelaisApplications() {
 // ---------- ADMIN : PORTEFEUILLES (Sounsouni Portefeuille) ----------
 // Consultable, modifiable et supprimable pour chaque compte, avec
 // recherche — comme convenu, réservé à l'Admin principal.
+// ---------- ADMIN : FILATURE ----------
+function renderAdminFilature() {
+  var watchlist = getFilatureWatchlist();
+  var html = '<div class="glass-card" style="padding:14px;margin-bottom:16px;">';
+  html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-user-secret"></i> Comptes surveillés</div>';
+  html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:12px;">Aucun suivi détaillé n\'est jamais actif par défaut — uniquement pour les numéros ajoutés ici. Retirer un numéro arrête le suivi immédiatement (l\'historique déjà enregistré reste consultable).</div>';
+  html += '<div style="display:flex;gap:8px;">';
+  html += '<input class="input" id="filature-add-phone" placeholder="Numéro à surveiller (ex : 70 00 00 00)" data-format="phone" style="flex:1;" />';
+  html += '<button class="btn-primary" style="flex:0;padding:0 16px;" data-action="add-filature-watch"><i class="fa-solid fa-plus"></i></button>';
+  html += '</div>';
+  html += '</div>';
+
+  if (watchlist.length === 0) {
+    html += '<div class="empty-state"><i class="fa-solid fa-user-secret"></i><div class="title">Aucun compte surveillé</div></div>';
+    return html;
+  }
+
+  for (var i = 0; i < watchlist.length; i++) {
+    var wPhone = watchlist[i];
+    var wAcc = findAccountByPhone(wPhone);
+    var wLog = getFilatureLog(wPhone);
+    var isOpenLog = state.adminFilatureOpenPhone === normalizeWalletPhone(wPhone);
+    html += '<div class="card-row" style="flex-direction:column;align-items:stretch;margin-bottom:8px;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" data-action="toggle-admin-filature-log" data-value="' + esc(wPhone) + '">';
+    html += '<div><div style="font-weight:700;font-size:13px;">' + esc(wAcc ? (wAcc.shopName || wAcc.name) : wPhone) + '</div><div style="font-size:11px;color:var(--text-dim);">' + esc(wPhone) + ' · ' + wLog.events.length + ' événement(s)</div></div>';
+    html += '<div style="display:flex;align-items:center;gap:10px;"><button class="link-btn" style="color:var(--danger);font-size:11px;" data-action="remove-filature-watch" data-value="' + esc(wPhone) + '"><i class="fa-solid fa-trash"></i></button><i class="fa-solid ' + (isOpenLog ? 'fa-chevron-up' : 'fa-chevron-down') + '" style="color:var(--text-dim);font-size:11px;"></i></div>';
+    html += '</div>';
+    if (isOpenLog) {
+      html += '<div style="margin-top:10px;border-top:1px solid var(--border-color);padding-top:10px;max-height:400px;overflow-y:auto;">';
+      var typeLabels = { navigation: "📍 Navigation", produit_consulte: "👁️ Produit consulté", temps_passe: "⏱️ Temps passé", recherche: "🔍 Recherche", clic: "👆 Action", gain: "💰 Gain", depense: "💸 Dépense" };
+      var sortedEvents = wLog.events.slice().reverse();
+      if (sortedEvents.length === 0) {
+        html += '<div style="font-size:11.5px;color:var(--text-dim);">Aucun événement enregistré pour l\'instant.</div>';
+      }
+      for (var e = 0; e < sortedEvents.length; e++) {
+        var ev = sortedEvents[e];
+        html += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--border-color);font-size:11.5px;">';
+        html += '<div><span style="font-weight:700;">' + (typeLabels[ev.type] || ev.type) + '</span> — ' + esc(ev.detail) + (ev.accountName ? ' <span style="color:var(--text-dim);">(' + esc(ev.accountName) + ')</span>' : '') + '</div>';
+        html += '<div style="color:var(--text-dim);white-space:nowrap;margin-left:8px;">' + fmtDateTime(ev.at) + '</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+  return html;
+}
+
 function renderAdminWallets() {
   var query = (state.adminWalletSearch || "").toLowerCase().trim();
   var html = '<div class="glass-card" style="padding:12px;margin-bottom:14px;">';
@@ -17448,7 +17820,15 @@ function renderChatWidget() {
   
   var html = '<div class="chat-widget open">';
   if (currentConv || viewingAdmin) {
-    html += '<div class="chat-header"><button class="link-btn" style="color:white;padding:0;" data-action="back-to-chat-list"><i class="fa-solid fa-arrow-left"></i> Retour</button><span>💬 ' + (currentConv ? 'Conversation' : 'Administration') + '</span><button class="chat-close" data-action="toggle-chat">✕</button></div>';
+    var headerAccLabel = '';
+    if (currentConv) {
+      var headerLinkedIds = getLinkedAccountIds();
+      var headerConvAccountId = headerLinkedIds.indexOf(currentConv.sellerId) !== -1 ? currentConv.sellerId : currentConv.buyerId;
+      var headerConvAcc = null;
+      for (var hca = 0; hca < state.accounts.length; hca++) { if (state.accounts[hca].id === headerConvAccountId) { headerConvAcc = state.accounts[hca]; break; } }
+      if (headerConvAcc) headerAccLabel = ' — ' + esc(headerConvAcc.shopName || headerConvAcc.name);
+    }
+    html += '<div class="chat-header"><button class="link-btn" style="color:white;padding:0;" data-action="back-to-chat-list"><i class="fa-solid fa-arrow-left"></i> Retour</button><span>💬 ' + (currentConv ? 'Conversation' + headerAccLabel : 'Administration') + '</span><button class="chat-close" data-action="toggle-chat">✕</button></div>';
   } else {
     html += '<div class="chat-header" data-action="toggle-chat"><span>💬 Messages</span><button class="chat-close" data-action="toggle-chat">✕</button></div>';
   }
@@ -17465,14 +17845,22 @@ function renderChatWidget() {
     if (convs.length === 0) {
       html += '<div style="text-align:center;color:var(--text-dim);padding:30px 0;font-size:12.5px;">Aucune autre conversation</div>';
     } else {
+      var myLinkedIdsForList = getLinkedAccountIds();
       for (var j = 0; j < convs.length; j++) {
         var c = convs[j];
         var product = null;
         for (var p = 0; p < state.products.length; p++) {
           if (state.products[p].id === c.productId) { product = state.products[p]; break; }
         }
+        // Indique clairement QUEL compte lié est concerné par cette
+        // conversation — indispensable dès qu'on a plusieurs comptes sous
+        // le même numéro, sinon impossible de savoir qui a reçu quoi.
+        var myConvAccountId = myLinkedIdsForList.indexOf(c.sellerId) !== -1 ? c.sellerId : c.buyerId;
+        var myConvAcc = null;
+        for (var mca = 0; mca < state.accounts.length; mca++) { if (state.accounts[mca].id === myConvAccountId) { myConvAcc = state.accounts[mca]; break; } }
+        var myConvAccLabel = myConvAcc ? (myConvAcc.shopName || myConvAcc.name) : '';
         html += '<div style="padding:10px;border-bottom:1px solid var(--border-color);cursor:pointer;" data-action="open-chat" data-value="' + c.id + '">';
-        html += '<div style="font-weight:700;font-size:13px;">' + (product ? esc(product.name) : 'Produit') + '</div>';
+        html += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;"><div style="font-weight:700;font-size:13px;">' + (product ? esc(product.name) : 'Produit') + '</div>' + (myConvAccLabel ? '<div style="font-size:10px;color:var(--accent);font-weight:700;white-space:nowrap;">' + esc(myConvAccLabel) + '</div>' : '') + '</div>';
         html += '<div style="font-size:12px;color:var(--text-dim);">' + esc(c.lastMessage || 'Nouvelle conversation') + '</div>';
         if (unreadForMe(c) > 0) {
           html += '<span style="background:var(--danger);color:white;font-size:10px;padding:1px 8px;border-radius:999px;">' + unreadForMe(c) + '</span>';
@@ -17485,7 +17873,7 @@ function renderChatWidget() {
     html += '<div class="messages-container" id="chatMessages">';
     for (var m = 0; m < messages.length; m++) {
       var msg = messages[m];
-      var isSent = viewingAdmin ? (msg.senderRole !== "admin") : (msg.senderId === state.profile.id);
+      var isSent = viewingAdmin ? (msg.senderRole !== "admin") : (getLinkedAccountIds().indexOf(msg.senderId) !== -1);
       html += '<div class="message ' + (isSent ? 'sent' : 'received') + '">';
       if (!isSent) {
         html += '<div style="font-weight:600;font-size:11px;">' + (viewingAdmin ? 'Administration' : esc(msg.senderName)) + '</div>';
@@ -18604,6 +18992,16 @@ root.addEventListener("click", function(e) {
   var value = btn.dataset.value;
   var _viewBeforeAction = state.view;
 
+  // Filature — capture TOUT clic sur TOUT élément de l'app (profil,
+  // changer de rôle, portefeuille, absolument tout), pas seulement la
+  // navigation principale et les produits. Un libellé lisible existe pour
+  // les actions les plus importantes ; sinon, le nom brut de l'action
+  // suffit à comprendre ce qui a été touché.
+  if (state.profile && isPhoneWatched(state.profile.phone)) {
+    var actionLabel = FILATURE_ACTION_LABELS[action] || action;
+    logFilatureEvent("clic", actionLabel + (value ? " — " + value : ""));
+  }
+
   // Verrou central Groupe 2 (employés) — vérifié avant toute exécution,
   // pour qu'aucun écran ne puisse laisser passer une action interdite.
   if (state.adminUnlocked && !state.adminIsOwner) {
@@ -18683,6 +19081,7 @@ root.addEventListener("click", function(e) {
     saveDoc("adminConversations", myConv);
     state.currentAdminConvId = myConv.id;
     state.currentConversationId = null;
+    state.chatOpen = true;
     render();
     return;
   }
@@ -18691,6 +19090,7 @@ root.addEventListener("click", function(e) {
   switch (action) {
     case "go": {
       state.view = value;
+      logFilatureEvent("navigation", "Onglet : " + value);
       if (value === "orders" && state.profile.hasNewBuyerStatusAlert) {
         state.profile.hasNewBuyerStatusAlert = false;
         for (var gai = 0; gai < state.accounts.length; gai++) {
@@ -19489,6 +19889,38 @@ root.addEventListener("click", function(e) {
     }
     case "submit-admin-wallet-search": render(); break;
     case "submit-admin-account-search": render(); break;
+    case "add-filature-watch": {
+      var addPhoneEl = document.getElementById('filature-add-phone');
+      var addPhoneVal = addPhoneEl ? addPhoneEl.value.trim() : "";
+      var addPhoneDigits = addPhoneVal.replace(/\D/g, "");
+      if (addPhoneDigits.length < 8) { showToast("Entrez un numéro valide."); break; }
+      var resolvedWatchPhone = resolveWalletPhone(addPhoneVal);
+      var matchedWatchAcc = findAccountByPhone(addPhoneVal);
+      if (matchedWatchAcc) resolvedWatchPhone = matchedWatchAcc.phone;
+      var currentWatchlist = getFilatureWatchlist();
+      if (currentWatchlist.some(function(p) { return normalizeWalletPhone(p) === normalizeWalletPhone(resolvedWatchPhone); })) {
+        showToast("Ce numéro est déjà surveillé.");
+        break;
+      }
+      currentWatchlist.push(resolvedWatchPhone);
+      saveFilatureWatchlist(currentWatchlist);
+      showToast("✅ Numéro ajouté à la surveillance.");
+      render();
+      break;
+    }
+    case "remove-filature-watch": {
+      var updatedWatchlist = getFilatureWatchlist().filter(function(p) { return normalizeWalletPhone(p) !== normalizeWalletPhone(value); });
+      saveFilatureWatchlist(updatedWatchlist);
+      showToast("Surveillance arrêtée pour ce numéro.");
+      render();
+      break;
+    }
+    case "toggle-admin-filature-log": {
+      var normValue = normalizeWalletPhone(value);
+      state.adminFilatureOpenPhone = state.adminFilatureOpenPhone === normValue ? null : normValue;
+      render();
+      break;
+    }
     case "toggle-admin-wallet": {
       state.adminWalletOpenId = state.adminWalletOpenId === value ? null : value;
       render();
@@ -19802,6 +20234,10 @@ root.addEventListener("click", function(e) {
     case "open-product": {
       state.detailProductId = value; state.activeImageIndex = 0; state.selectedQty = 1; state.selectedColor = null; state.selectedSize = null;
       window.scrollTo(0, 0);
+      state.filatureProductOpenedAt = Date.now();
+      var filatureProd = null;
+      for (var fpi = 0; fpi < state.products.length; fpi++) { if (state.products[fpi].id === value) { filatureProd = state.products[fpi]; break; } }
+      logFilatureEvent("produit_consulte", filatureProd ? filatureProd.name : value);
       if (state.profile) {
         if (!state.profile.behavior) state.profile.behavior = { views: [], purchases: [], searches: [] };
         if (!Array.isArray(state.profile.behavior.views)) state.profile.behavior.views = [];
@@ -19816,7 +20252,19 @@ root.addEventListener("click", function(e) {
       render();
       break;
     }
-    case "close-product": state.detailProductId = null; modalWasOpenFor = null; render(); break;
+    case "close-product": {
+      if (state.filatureProductOpenedAt && state.detailProductId) {
+        var dwellSec = Math.round((Date.now() - state.filatureProductOpenedAt) / 1000);
+        var closedProd = null;
+        for (var cpi = 0; cpi < state.products.length; cpi++) { if (state.products[cpi].id === state.detailProductId) { closedProd = state.products[cpi]; break; } }
+        // Le temps passé sur une fiche produit — c'est précisément ce qui
+        // permet de savoir sur quel article quelqu'un s'est vraiment
+        // arrêté, pas juste ce qu'il a ouvert en passant.
+        if (dwellSec >= 2) logFilatureEvent("temps_passe", (closedProd ? closedProd.name : state.detailProductId) + " — " + dwellSec + "s");
+      }
+      state.filatureProductOpenedAt = null;
+      state.detailProductId = null; modalWasOpenFor = null; render(); break;
+    }
     case "view-cart-from-product": state.lastViewedProductId = state.detailProductId; state.detailProductId = null; modalWasOpenFor = null; state.view = "cart"; render(); break;
     case "continue-shopping": {
       if (state.lastViewedProductId) {
@@ -20781,6 +21229,21 @@ root.addEventListener("click", function(e) {
     case "toggle-admin-affiliate-accounts": state.adminAffiliateAccountsOpen = !state.adminAffiliateAccountsOpen; render(); break;
     case "set-orders-tab": state.ordersTab = value; render(); break;
     case "toggle-pending-livreur-order": state.expandedPendingLivreurOrder = (state.expandedPendingLivreurOrder === value ? null : value); render(); break;
+    case "toggle-livreur-pending-history": state.showLivreurPendingHistory = !state.showLivreurPendingHistory; render(); break;
+    case "restore-livreur-pending-order": {
+      var restoreOrder = null;
+      for (var roi = 0; roi < state.orders.length; roi++) {
+        if (state.orders[roi].id === value) { restoreOrder = state.orders[roi]; break; }
+      }
+      if (restoreOrder) {
+        restoreOrder.livreurHistoryRestoredAt = Date.now();
+        save();
+        saveDoc("orders", restoreOrder);
+        showToast("✅ Commande remise dans la liste active.");
+      }
+      render();
+      break;
+    }
     case "trigger-file-input": {
       var fileInput = document.getElementById(value);
       if (fileInput) fileInput.click();
@@ -21705,6 +22168,13 @@ root.addEventListener("input", function(e) {
     var hasTerm = value.trim().length > 0;
     if (hasTerm && state.view !== "searchPage") state.view = "searchPage";
     else if (!hasTerm && state.view === "searchPage") state.view = "market";
+    // Recherche avec une pause avant d'enregistrer (comme le reste) — pour
+    // ne jamais noter un événement par lettre tapée, seulement ce qui a
+    // vraiment été cherché.
+    if (state.profile && isPhoneWatched(state.profile.phone) && hasTerm) {
+      clearTimeout(window._filatureSearchTimer);
+      window._filatureSearchTimer = setTimeout(function() { logFilatureEvent("recherche", value); }, 1200);
+    }
   }
   if (el.dataset.live === "filter") render();
   if (el.dataset.live === "debounce-filter") {
