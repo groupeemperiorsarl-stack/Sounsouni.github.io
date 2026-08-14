@@ -4033,9 +4033,17 @@ const supabaseConfig = {
 };
 const FIREBASE_ENABLED = supabaseConfig.url !== "REMPLACEZ_MOI";
 
+// Mot de passe secret envoyé automatiquement à chaque requête Supabase.
+// Les 4 règles Supabase (Lecture/Ecriture/Modification/Suppression) vérifient
+// ce même secret côté serveur — sans lui, aucune requête directe (en dehors
+// de l'app) ne peut lire ni modifier les données.
+const APP_SECRET = "4NIfGKEEf82SJi17BZRaedVfJqnJrkOweRYzRyxiHOo";
+
 var sb = null;
 if (FIREBASE_ENABLED) {
-  sb = supabase.createClient(supabaseConfig.url, supabaseConfig.anonKey);
+  sb = supabase.createClient(supabaseConfig.url, supabaseConfig.anonKey, {
+    global: { headers: { "x-app-secret": APP_SECRET } }
+  });
   console.log("🔥 Supabase configuré — mode partagé/cloud actif.");
 } else {
   console.log("📱 Mode local (test) — Supabase non configuré, les données restent sur cet appareil.");
