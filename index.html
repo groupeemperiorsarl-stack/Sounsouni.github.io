@@ -6808,6 +6808,109 @@ function markDeviceAccount(accountId) {
   save();
 }
 
+function getAccountDataCounts(accountId) {
+  var products = state.products.filter(function(p) { return p.sellerId === accountId; }).length;
+  var orders = state.orders.filter(function(o) { return o.buyerId === accountId; }).length;
+  var conversations = state.conversations.filter(function(c) { return c.buyerId === accountId || c.sellerId === accountId; }).length;
+  return { products: products, orders: orders, conversations: conversations };
+}
+
+function mergeAccountsByPhone(primaryId) {
+  var primary = null;
+  for (var pi = 0; pi < state.accounts.length; pi++) { if (state.accounts[pi].id === primaryId) { primary = state.accounts[pi]; break; } }
+  if (!primary) return { merged: 0 };
+
+  var duplicates = state.accounts.filter(function(a) { return a.phone === primary.phone && a.id !== primaryId; });
+  if (duplicates.length === 0) return { merged: 0 };
+  var dupIds = duplicates.map(function(d) { return d.id; });
+
+  function isDup(id) { return dupIds.indexOf(id) !== -1; }
+
+  state.products.forEach(function(p) {
+    if (isDup(p.sellerId)) {
+      p.sellerId = primaryId;
+      p.sellerName = primary.name;
+      p.sellerPhone = primary.phone;
+      if (primary.shopName) p.shopName = primary.shopName;
+      saveDoc("products", p);
+    }
+  });
+
+  state.orders.forEach(function(o) {
+    var changed = false;
+    if (isDup(o.buyerId)) { o.buyerId = primaryId; o.buyerName = primary.name; o.buyerPhone = primary.phone; changed = true; }
+    if (Array.isArray(o.items)) {
+      o.items.forEach(function(it) {
+        if (isDup(it.sellerId)) { it.sellerId = primaryId; it.sellerName = primary.name; it.sellerPhone = primary.phone; changed = true; }
+      });
+    }
+    if (changed) saveDoc("orders", o);
+  });
+
+  state.bookings.forEach(function(b) {
+    var changed = false;
+    if (isDup(b.buyerId)) { b.buyerId = primaryId; b.buyerName = primary.name; b.buyerPhone = primary.phone; changed = true; }
+    if (isDup(b.sellerId)) { b.sellerId = primaryId; b.sellerName = primary.name; b.sellerPhone = primary.phone; changed = true; }
+    if (changed) saveDoc("bookings", b);
+  });
+
+  state.conversations.forEach(function(c) {
+    var changed = false;
+    if (isDup(c.buyerId)) { c.buyerId = primaryId; changed = true; }
+    if (isDup(c.sellerId)) { c.sellerId = primaryId; changed = true; }
+    if (changed) saveDoc("conversations", c);
+  });
+
+  state.reviews.forEach(function(r) {
+    if (isDup(r.userId)) {
+      r.userId = primaryId;
+      r.userName = primary.name;
+      saveDoc("reviews", r);
+    }
+  });
+
+  state.notifications.forEach(function(n) {
+    if (isDup(n.userId)) { n.userId = primaryId; saveDoc("notifications", n); }
+  });
+
+  state.boosts.forEach(function(bo) {
+    if (isDup(bo.sellerId)) {
+      bo.sellerId = primaryId;
+      bo.sellerName = primary.shopName || primary.name;
+      saveDoc("boosts", bo);
+    }
+  });
+
+  state.verificationRequests.forEach(function(vr) {
+    if (isDup(vr.accountId)) {
+      vr.accountId = primaryId;
+      vr.accountName = primary.name;
+      vr.accountPhone = primary.phone;
+      saveDoc("verificationRequests", vr);
+    }
+  });
+
+  duplicates.forEach(function(dup) {
+    if (Array.isArray(dup.favorites) && dup.favorites.length) {
+      if (!Array.isArray(primary.favorites)) primary.favorites = [];
+      dup.favorites.forEach(function(fid) {
+        if (primary.favorites.indexOf(fid) === -1) primary.favorites.push(fid);
+      });
+    }
+    if (Array.isArray(dup.loginHistory) && dup.loginHistory.length) {
+      if (!Array.isArray(primary.loginHistory)) primary.loginHistory = [];
+      primary.loginHistory = primary.loginHistory.concat(dup.loginHistory).sort(function(a, b) { return a - b; });
+    }
+  });
+
+  state.accounts = state.accounts.filter(function(a) { return !isDup(a.id); });
+  dupIds.forEach(function(did) { deleteRemoteDoc("accounts", did); });
+  saveDoc("accounts", primary);
+  save();
+
+  return { merged: dupIds.length };
+}
+
 // ---------- RETROUVER UN COMPTE DÉJÀ CRÉÉ SUR UN AUTRE APPAREIL ----------
 // Version rapide pour la phase de test : nom complet + téléphone uniquement
 // (l'email étant optionnel à l'inscription, on ne peut pas s'appuyer dessus).
@@ -16999,6 +17102,26 @@ function renderAdminAccountDetail(accountId) {
   if (a.role === "vendeur") {
     html += '<button class="btn-secondary" style="margin-top:12px;' + (a.verified ? 'border-color:#2e9e4f;color:#2e9e4f;' : '') + '" data-action="toggle-account-verified" data-value="' + a.id + '"><i class="fa-solid fa-shield-check"></i> ' + (a.verified ? 'Boutique vérifiée ✓ (retirer)' : 'Marquer comme boutique vérifiée') + '</button>';
   }
+  // ---- Comptes en double sur ce numéro (avant la protection anti-doublon
+  // qui bloque désormais toute nouvelle création) — permet de fusionner
+  // les vieux comptes fantômes dans le compte principal choisi par l'Admin,
+  // sans perdre leurs produits/commandes/messages/avis au passage.
+  var samePhoneAll = state.accounts.filter(function(sp) { return sp.phone === a.phone; });
+  if (samePhoneAll.length > 1) {
+    html += '<div class="glass-card" style="padding:12px;margin-top:10px;background:rgba(255,166,0,0.08);">';
+    html += '<div style="font-size:12.5px;font-weight:700;color:#c77700;margin-bottom:6px;"><i class="fa-solid fa-triangle-exclamation"></i> ' + samePhoneAll.length + ' comptes trouvés pour ce même numéro (' + esc(a.phone) + ')</div>';
+    html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;">Probablement des doublons créés avant la protection actuelle. Choisissez le compte à garder comme principal — tout le reste (produits, commandes, messages, avis, favoris) sera transféré dedans, puis les autres comptes seront supprimés.</div>';
+    for (var spi = 0; spi < samePhoneAll.length; spi++) {
+      var spAcc = samePhoneAll[spi];
+      var spCounts = getAccountDataCounts(spAcc.id);
+      html += '<div class="card-row" style="margin-bottom:6px;">';
+      html += '<div style="flex:1;"><div style="font-weight:700;font-size:12.5px;">' + esc(spAcc.shopName || spAcc.name) + (spAcc.id === a.id ? ' <span style="color:var(--accent);">(cette fiche)</span>' : '') + '</div>';
+      html += '<div style="font-size:10.5px;color:var(--text-dim);">' + (ROLE_ACCOUNT_LABELS[spAcc.role] || spAcc.role) + ' · Créé le ' + fmtDateTime(spAcc.createdAt) + ' · ' + spCounts.products + ' produit(s), ' + spCounts.orders + ' commande(s), ' + spCounts.conversations + ' conversation(s)</div></div>';
+      html += '<button class="btn-secondary" style="flex:0;font-size:11px;padding:6px 10px;" data-action="admin-merge-into-account" data-value="' + spAcc.id + '"><i class="fa-solid fa-code-merge"></i> Garder celui-ci</button>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
   if (a.hasRefusalAlert) {
     html += '<div class="glass-card" style="padding:12px;margin-top:10px;background:rgba(255,166,0,0.08);">';
     html += '<div style="font-size:12.5px;font-weight:700;color:#c77700;margin-bottom:4px;"><i class="fa-solid fa-triangle-exclamation"></i> Signalement : ' + (a.livreurRefusalCount || 0) + ' refus du livreur à la récupération</div>';
@@ -21150,6 +21273,20 @@ root.addEventListener("click", function(e) {
         saveDoc("accounts", accToVerify);
         showToast(accToVerify.verified ? "✅ Boutique marquée comme vérifiée." : "Vérification retirée.");
         render();
+      }
+      break;
+    }
+    case "admin-merge-into-account": {
+      var mergePrimary = null;
+      for (var mpi = 0; mpi < state.accounts.length; mpi++) { if (state.accounts[mpi].id === value) { mergePrimary = state.accounts[mpi]; break; } }
+      if (mergePrimary) {
+        var dupCountPreview = state.accounts.filter(function(a2) { return a2.phone === mergePrimary.phone && a2.id !== value; }).length;
+        if (confirm("Fusionner " + dupCountPreview + " compte(s) en double dans \"" + (mergePrimary.shopName || mergePrimary.name) + "\" ? Les autres comptes de ce numéro seront supprimés après transfert de leurs produits, commandes, conversations et avis. Cette action est irréversible.")) {
+          var mergeResult = mergeAccountsByPhone(value);
+          state.adminAccountDetailId = value;
+          showToast("✅ " + mergeResult.merged + " compte(s) fusionné(s) dans \"" + (mergePrimary.shopName || mergePrimary.name) + "\".");
+          render();
+        }
       }
       break;
     }
