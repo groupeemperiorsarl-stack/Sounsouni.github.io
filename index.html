@@ -12,14 +12,17 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     
-    <!-- Chart.js pour les graphiques admin -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js pour les graphiques admin — chargé en arrière-plan,
+         jamais utilisé avant l'ouverture du tableau de bord admin. -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
     
-    <!-- Leaflet.js pour la cartographie -->
+    <!-- Leaflet.js pour la cartographie — idem, jamais utilisé avant
+         l'ouverture d'un écran avec carte (déjà protégé par un test
+         "typeof L === 'undefined'" au cas où). -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js" onerror="
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js" defer onerror="
       // Le premier lien a échoué (chemin CDN capricieux constaté) — on
       // retente avec deux autres sources avant d'abandonner, pour ne
       // jamais dépendre d'un seul point de défaillance.
@@ -39,6 +42,7 @@
    ============================================================ */
 
 :root {
+  --scale-motif: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2260%22%20height%3D%2252%22%20viewBox%3D%220%200%2060%2052%22%3E%0A%3Cpath%20d%3D%22M0%2020%20Q15%200%2030%2020%20Q15%2040%200%2020%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M30%2020%20Q45%200%2060%2020%20Q45%2040%2030%2020%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M15%2046%20Q30%2026%2045%2046%20Q30%2066%2015%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M-15%2046%20Q0%2026%2015%2046%20Q0%2066%20-15%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M45%2046%20Q60%2026%2075%2046%20Q60%2066%2045%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3C/svg%3E");
   --primary: #2e7d32;
   --primary-light: #7bcb3a;
   --primary-dark: #1b4d1f;
@@ -609,7 +613,7 @@ input, select, textarea {
 main {
   padding: 16px 18px 20px;
   background-color: var(--bg-body);
-  background-image: var(--scale-motif, url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2260%22%20height%3D%2252%22%20viewBox%3D%220%200%2060%2052%22%3E%0A%3Cpath%20d%3D%22M0%2020%20Q15%200%2030%2020%20Q15%2040%200%2020%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M30%2020%20Q45%200%2060%2020%20Q45%2040%2030%2020%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M15%2046%20Q30%2026%2045%2046%20Q30%2066%2015%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M-15%2046%20Q0%2026%2015%2046%20Q0%2066%20-15%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M45%2046%20Q60%2026%2075%2046%20Q60%2066%2045%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3C/svg%3E"));
+  background-image: var(--scale-motif);
   background-repeat: repeat;
   background-size: 60px 52px;
   min-height: calc(100vh - 80px);
@@ -623,7 +627,7 @@ main {
    comporter différemment selon l'appareil). Le premier de la liste est
    celui du dessus : l'ancien motif (icônes) devant, écailles derrière. */
 html.has-bg-pattern main {
-  background-image: var(--bg-pattern-image), var(--scale-motif, url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2260%22%20height%3D%2252%22%20viewBox%3D%220%200%2060%2052%22%3E%0A%3Cpath%20d%3D%22M0%2020%20Q15%200%2030%2020%20Q15%2040%200%2020%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M30%2020%20Q45%200%2060%2020%20Q45%2040%2030%2020%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M15%2046%20Q30%2026%2045%2046%20Q30%2066%2015%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M-15%2046%20Q0%2026%2015%2046%20Q0%2066%20-15%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M45%2046%20Q60%2026%2075%2046%20Q60%2066%2045%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3C/svg%3E"));
+  background-image: var(--bg-pattern-image), var(--scale-motif);
   background-repeat: repeat, repeat;
   background-size: var(--bg-pattern-size, 420px) var(--bg-pattern-size, 420px), 60px 52px;
   background-attachment: fixed, scroll;
@@ -653,7 +657,7 @@ html.has-bg-pattern main {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background-image: var(--scale-motif, url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2260%22%20height%3D%2252%22%20viewBox%3D%220%200%2060%2052%22%3E%0A%3Cpath%20d%3D%22M0%2020%20Q15%200%2030%2020%20Q15%2040%200%2020%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M30%2020%20Q45%200%2060%2020%20Q45%2040%2030%2020%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M15%2046%20Q30%2026%2045%2046%20Q30%2066%2015%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M-15%2046%20Q0%2026%2015%2046%20Q0%2066%20-15%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M45%2046%20Q60%2026%2075%2046%20Q60%2066%2045%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3C/svg%3E"));
+  background-image: var(--scale-motif);
   background-repeat: repeat;
   background-size: 60px 52px;
   opacity: 0.16;
@@ -1226,6 +1230,19 @@ select.input option {
   transform: scale(0.98);
 }
 
+/* Retour visuel instantané au toucher, pour TOUS les boutons — les 13
+   règles :active déjà spécifiques (plus précises, donc prioritaires en
+   CSS) continuent de s'appliquer normalement là où elles existent ; celle-
+   ci comble juste le vide partout ailleurs (boutons secondaires, onglets,
+   cartes de rôle, lignes de liste...), pour que chaque appui semble pris
+   en compte tout de suite, même si le traitement réel prend un peu plus
+   de temps derrière. */
+button:active {
+  transform: scale(0.96);
+  opacity: 0.85;
+  transition: transform 0.05s ease, opacity 0.05s ease;
+}
+
 .btn-primary:disabled {
   opacity: 0.5;
   box-shadow: none;
@@ -1668,7 +1685,7 @@ select.input option {
   padding: 22px 20px 30px;
   position: relative;
   background-color: var(--bg-card);
-  background-image: var(--scale-motif, url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2260%22%20height%3D%2252%22%20viewBox%3D%220%200%2060%2052%22%3E%0A%3Cpath%20d%3D%22M0%2020%20Q15%200%2030%2020%20Q15%2040%200%2020%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M30%2020%20Q45%200%2060%2020%20Q45%2040%2030%2020%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M15%2046%20Q30%2026%2045%2046%20Q30%2066%2015%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M-15%2046%20Q0%2026%2015%2046%20Q0%2066%20-15%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M45%2046%20Q60%2026%2075%2046%20Q60%2066%2045%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3C/svg%3E"));
+  background-image: var(--scale-motif);
   background-repeat: repeat;
   background-size: 60px 52px;
   border: 1px solid var(--border-color);
@@ -1688,7 +1705,7 @@ select.input option {
 .notif-panel, .chat-widget { position: relative; }
 
 html.has-bg-pattern .modal-sheet {
-  background-image: var(--bg-pattern-image), var(--scale-motif, url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2260%22%20height%3D%2252%22%20viewBox%3D%220%200%2060%2052%22%3E%0A%3Cpath%20d%3D%22M0%2020%20Q15%200%2030%2020%20Q15%2040%200%2020%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M30%2020%20Q45%200%2060%2020%20Q45%2040%2030%2020%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M15%2046%20Q30%2026%2045%2046%20Q30%2066%2015%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M-15%2046%20Q0%2026%2015%2046%20Q0%2066%20-15%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M45%2046%20Q60%2026%2075%2046%20Q60%2066%2045%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3C/svg%3E"));
+  background-image: var(--bg-pattern-image), var(--scale-motif);
   background-repeat: repeat, repeat;
   background-size: var(--bg-pattern-size, 420px) var(--bg-pattern-size, 420px), 60px 52px;
 }
@@ -2274,14 +2291,14 @@ html.has-bg-pattern .modal-sheet {
   z-index: 95;
   border-radius: 20px 0 0 20px;
   background-color: var(--bg-card);
-  background-image: var(--scale-motif, url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2260%22%20height%3D%2252%22%20viewBox%3D%220%200%2060%2052%22%3E%0A%3Cpath%20d%3D%22M0%2020%20Q15%200%2030%2020%20Q15%2040%200%2020%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M30%2020%20Q45%200%2060%2020%20Q45%2040%2030%2020%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M15%2046%20Q30%2026%2045%2046%20Q30%2066%2015%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M-15%2046%20Q0%2026%2015%2046%20Q0%2066%20-15%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M45%2046%20Q60%2026%2075%2046%20Q60%2066%2045%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3C/svg%3E"));
+  background-image: var(--scale-motif);
   background-repeat: repeat;
   background-size: 60px 52px;
   border: 1px solid var(--border-color);
 }
 
 html.has-bg-pattern .notif-panel {
-  background-image: var(--bg-pattern-image), var(--scale-motif, url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2260%22%20height%3D%2252%22%20viewBox%3D%220%200%2060%2052%22%3E%0A%3Cpath%20d%3D%22M0%2020%20Q15%200%2030%2020%20Q15%2040%200%2020%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M30%2020%20Q45%200%2060%2020%20Q45%2040%2030%2020%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M15%2046%20Q30%2026%2045%2046%20Q30%2066%2015%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M-15%2046%20Q0%2026%2015%2046%20Q0%2066%20-15%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M45%2046%20Q60%2026%2075%2046%20Q60%2066%2045%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3C/svg%3E"));
+  background-image: var(--bg-pattern-image), var(--scale-motif);
   background-repeat: repeat, repeat;
   background-size: var(--bg-pattern-size, 420px) var(--bg-pattern-size, 420px), 60px 52px;
 }
@@ -3125,7 +3142,7 @@ html.has-bg-pattern .notif-panel {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background-image: var(--scale-motif, url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2260%22%20height%3D%2252%22%20viewBox%3D%220%200%2060%2052%22%3E%0A%3Cpath%20d%3D%22M0%2020%20Q15%200%2030%2020%20Q15%2040%200%2020%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M30%2020%20Q45%200%2060%2020%20Q45%2040%2030%2020%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M15%2046%20Q30%2026%2045%2046%20Q30%2066%2015%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M-15%2046%20Q0%2026%2015%2046%20Q0%2066%20-15%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M45%2046%20Q60%2026%2075%2046%20Q60%2066%2045%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3C/svg%3E"));
+  background-image: var(--scale-motif);
   background-repeat: repeat;
   background-size: 60px 52px;
   opacity: 0.22;
@@ -3221,7 +3238,7 @@ html.has-bg-pattern .notif-panel {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image: var(--scale-motif, url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2260%22%20height%3D%2252%22%20viewBox%3D%220%200%2060%2052%22%3E%0A%3Cpath%20d%3D%22M0%2020%20Q15%200%2030%2020%20Q15%2040%200%2020%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M30%2020%20Q45%200%2060%2020%20Q45%2040%2030%2020%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M15%2046%20Q30%2026%2045%2046%20Q30%2066%2015%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M-15%2046%20Q0%2026%2015%2046%20Q0%2066%20-15%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3Cpath%20d%3D%22M45%2046%20Q60%2026%2075%2046%20Q60%2066%2045%2046%20Z%22%20fill%3D%22none%22%20stroke%3D%22%232e7d32%22%20stroke-width%3D%221.2%22%20stroke-opacity%3D%220.08%22/%3E%0A%3C/svg%3E"));
+  background-image: var(--scale-motif);
   background-repeat: repeat;
   background-size: 60px 52px;
   opacity: 0.22;
@@ -4105,20 +4122,18 @@ html.has-bg-pattern .notif-panel {
 <body>
     <div id="root"></div>
 
-    <!-- PWA manifest.json / Service Worker (sw.js) : non fournis pour l'instant.
-         Si vous les ajoutez plus tard, décommentez les lignes ci-dessous. -->
-    <!--
+    <!-- PWA : manifeste + service worker, activés pour la publication
+         sur le Play Store via TWA. -->
     <link rel="manifest" href="manifest.json">
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
+                navigator.serviceWorker.register('./sw.js')
                     .then(reg => console.log('SW enregistré'))
                     .catch(err => console.log('Erreur SW:', err));
             });
         }
     </script>
-    -->
 
     <!-- Firebase (App, Firestore, Storage) — SDK "compat" pour rester en JS classique -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -9673,7 +9688,7 @@ function renderGpsPasteField(latPath, lngPath) {
 function renderVerificationDocsFields(docs) {
   var html = '<div>';
   for (var i = 0; i < docs.length; i++) {
-    html += '<div style="position:relative;width:100%;height:110px;border-radius:10px;overflow:hidden;margin-top:8px;"><img src="' + docs[i] + '" style="width:100%;height:100%;object-fit:cover;" /><button type="button" data-action="remove-verification-doc" data-value="' + i + '" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:10px;"><i class="fa-solid fa-xmark"></i></button></div>';
+    html += '<div style="position:relative;width:100%;height:110px;border-radius:10px;overflow:hidden;margin-top:8px;"><img loading="lazy" src="' + docs[i] + '" style="width:100%;height:100%;object-fit:cover;" /><button type="button" data-action="remove-verification-doc" data-value="' + i + '" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:10px;"><i class="fa-solid fa-xmark"></i></button></div>';
   }
   html += '<div style="position:relative;margin-top:8px;"><div class="file-upload-btn" style="display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px dashed var(--border-color);background:var(--bg-body);color:var(--text-secondary);font-size:13px;font-weight:700;padding:12px;border-radius:12px;"><i class="fa-solid fa-plus"></i> ' + (docs.length === 0 ? 'Ajouter un document' : 'Ajouter un autre document') + '</div><input type="file" accept="image/*" data-action-file="verification-doc-add" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;" /></div>';
   html += '</div>';
@@ -11519,7 +11534,7 @@ function renderPublicCagnottePage(cagnotteId) {
   }
   var pct = c.targetAmount ? Math.min(100, Math.round((c.balance / c.targetAmount) * 100)) : null;
   var html = '<div style="padding:24px 20px;max-width:480px;margin:0 auto;">';
-  html += '<div style="text-align:center;margin-bottom:20px;"><img src="' + SOUNSOUNI_BASKET_LOGO + '" style="width:56px;height:56px;border-radius:50%;" /></div>';
+  html += '<div style="text-align:center;margin-bottom:20px;"><img loading="lazy" src="' + SOUNSOUNI_BASKET_LOGO + '" style="width:56px;height:56px;border-radius:50%;" /></div>';
   html += '<div style="font-weight:800;font-size:20px;text-align:center;margin-bottom:4px;">' + esc(c.title) + '</div>';
   html += '<div style="font-size:12px;color:var(--text-dim);text-align:center;margin-bottom:16px;">Par ' + esc(c.creatorName) + '</div>';
   if (c.description) html += '<div style="font-size:13.5px;color:var(--text-secondary);margin-bottom:16px;line-height:1.5;text-align:center;">' + esc(c.description) + '</div>';
@@ -11554,10 +11569,10 @@ function renderPublicRelaisPage(relaisId) {
 
   html += '<div class="glass-card" style="padding:18px;max-width:420px;margin:0 auto;">';
   if (account.shopCoverPhoto) {
-    html += '<div style="width:100%;height:100px;border-radius:12px;overflow:hidden;margin-bottom:-32px;"><img src="' + account.shopCoverPhoto + '" style="width:100%;height:100%;object-fit:cover;" /></div>';
+    html += '<div style="width:100%;height:100px;border-radius:12px;overflow:hidden;margin-bottom:-32px;"><img loading="lazy" src="' + account.shopCoverPhoto + '" style="width:100%;height:100%;object-fit:cover;" /></div>';
   }
   if (account.shopProfilePhoto) {
-    html += '<img src="' + account.shopProfilePhoto + '" style="width:60px;height:60px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 10px;border:3px solid var(--bg-card);position:relative;" />';
+    html += '<img loading="lazy" src="' + account.shopProfilePhoto + '" style="width:60px;height:60px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 10px;border:3px solid var(--bg-card);position:relative;" />';
   } else {
     html += '<div class="emoji-thumb" style="width:60px;height:60px;font-size:24px;margin:0 auto 10px;position:relative;border:3px solid var(--bg-card);"><i class="fa-solid fa-shop"></i></div>';
   }
@@ -11594,7 +11609,7 @@ function renderOnboardingIntro() {
   var isLast = step === ONBOARD_INTRO_PAGES.length - 1;
   var html = '<div class="intro-wrap">';
   html += '<button class="intro-skip" data-action="intro-finish">Passer</button>';
-  html += '<div class="intro-photo-wrap"><img src="' + ONBOARD_INTRO_IMG_MAP[page.img] + '" class="intro-photo" alt="" /></div>';
+  html += '<div class="intro-photo-wrap"><img loading="lazy" src="' + ONBOARD_INTRO_IMG_MAP[page.img] + '" class="intro-photo" alt="" /></div>';
   html += '<div class="intro-title">' + esc(page.title) + '</div>';
   html += '<div class="intro-text">' + esc(page.text) + '</div>';
   html += '<div class="intro-dots">';
@@ -11685,7 +11700,7 @@ function renderOnboarding() {
     heroHtml += '<div class="trust-badge"><span class="trust-icon"><i class="fa-solid fa-shield-halved"></i></span>Paiement<br>sécurisé</div>';
     heroHtml += '<div class="trust-badge"><span class="trust-icon"><i class="fa-solid fa-truck-fast"></i></span>Livraison<br>partout</div>';
     heroHtml += '</div>';
-    heroHtml += '<img class="onboarding-hero-collage" src="' + SOUNSOUNI_ONBOARD_COLLAGE + '" alt="Sounsouni" />';
+    heroHtml += '<img loading="lazy" class="onboarding-hero-collage" src="' + SOUNSOUNI_ONBOARD_COLLAGE + '" alt="Sounsouni" />';
   }
 
   return '<div class="onboarding-wrap"><div class="onboarding-fixed-banner" style="' + topBannerFrameStyle + '"></div>' + heroHtml + '<div class="onboarding-card' + (showHero ? ' onboarding-card-overlap' : '') + cardBgClass + '" style="' + cardBgStyle + '">' + header +
@@ -11941,7 +11956,7 @@ function renderBecomeRelais() {
     renderGpsPasteField("relaisApplyDraft.shopLat", "relaisApplyDraft.shopLng") +
     '<label class="field-label">Photo de vous *</label>' +
     (d.selfiePhotoUri
-      ? '<div style="position:relative;width:100%;height:110px;border-radius:10px;overflow:hidden;margin-top:4px;"><img src="' + d.selfiePhotoUri + '" style="width:100%;height:100%;object-fit:cover;" /><button type="button" data-action="remove-relais-apply-selfie" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:10px;"><i class="fa-solid fa-xmark"></i></button></div>'
+      ? '<div style="position:relative;width:100%;height:110px;border-radius:10px;overflow:hidden;margin-top:4px;"><img loading="lazy" src="' + d.selfiePhotoUri + '" style="width:100%;height:100%;object-fit:cover;" /><button type="button" data-action="remove-relais-apply-selfie" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:10px;"><i class="fa-solid fa-xmark"></i></button></div>'
       : '<div style="position:relative;margin-top:4px;"><div class="file-upload-btn" style="display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px dashed var(--border-color);background:var(--bg-body);color:var(--text-secondary);font-size:13px;font-weight:700;padding:12px;border-radius:12px;"><i class="fa-solid fa-user"></i> Téléverser votre photo</div><input type="file" accept="image/*" data-action-file="relais-apply-selfie" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;" /></div>') +
     '<label class="field-label">Pièces justificatives *</label>' +
     renderRelaisApplyDocsFields(d.verificationDocs || []) +
@@ -11953,7 +11968,7 @@ function renderBecomeRelais() {
 function renderRelaisApplyDocsFields(docs) {
   var html = '<div>';
   for (var i = 0; i < docs.length; i++) {
-    html += '<div style="position:relative;width:100%;height:110px;border-radius:10px;overflow:hidden;margin-top:8px;"><img src="' + docs[i] + '" style="width:100%;height:100%;object-fit:cover;" /><button type="button" data-action="remove-relais-apply-doc" data-value="' + i + '" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:10px;"><i class="fa-solid fa-xmark"></i></button></div>';
+    html += '<div style="position:relative;width:100%;height:110px;border-radius:10px;overflow:hidden;margin-top:8px;"><img loading="lazy" src="' + docs[i] + '" style="width:100%;height:100%;object-fit:cover;" /><button type="button" data-action="remove-relais-apply-doc" data-value="' + i + '" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:10px;"><i class="fa-solid fa-xmark"></i></button></div>';
   }
   html += '<div style="position:relative;margin-top:8px;"><div class="file-upload-btn" style="display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px dashed var(--border-color);background:var(--bg-body);color:var(--text-secondary);font-size:13px;font-weight:700;padding:12px;border-radius:12px;"><i class="fa-solid fa-plus"></i> ' + (docs.length === 0 ? 'Ajouter un document' : 'Ajouter un autre document') + '</div><input type="file" accept="image/*" data-action-file="relais-apply-doc-add" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;" /></div>';
   html += '</div>';
@@ -12023,7 +12038,7 @@ function renderOnboardStepRelais(d) {
     renderGpsPasteField("onboardDraft.shopLat", "onboardDraft.shopLng") +
     '<label class="field-label">Photo de vous *</label>' +
     (d.selfiePhotoUri
-      ? '<div style="position:relative;width:100%;height:110px;border-radius:10px;overflow:hidden;margin-top:4px;"><img src="' + d.selfiePhotoUri + '" style="width:100%;height:100%;object-fit:cover;" /><button type="button" data-action="remove-selfie-photo" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:10px;"><i class="fa-solid fa-xmark"></i></button></div>'
+      ? '<div style="position:relative;width:100%;height:110px;border-radius:10px;overflow:hidden;margin-top:4px;"><img loading="lazy" src="' + d.selfiePhotoUri + '" style="width:100%;height:100%;object-fit:cover;" /><button type="button" data-action="remove-selfie-photo" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:10px;"><i class="fa-solid fa-xmark"></i></button></div>'
       : '<div style="position:relative;margin-top:4px;"><div class="file-upload-btn" style="display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px dashed var(--border-color);background:var(--bg-body);color:var(--text-secondary);font-size:13px;font-weight:700;padding:12px;border-radius:12px;"><i class="fa-solid fa-user"></i> T\u00e9l\u00e9verser votre photo</div><input type="file" accept="image/*" data-action-file="selfie-photo" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;" /></div>') +
     '<label class="field-label">Pi\u00e8ces justificatives *</label>' +
     renderVerificationDocsFields(d.verificationDocs || []) +
@@ -12274,7 +12289,7 @@ function renderProfileModal() {
   html += '<div style="display:flex;flex-direction:column;align-items:center;margin-bottom:18px;">';
   html += '<div style="position:relative;width:88px;height:88px;">';
   if (p.avatarPhoto) {
-    html += '<img src="' + p.avatarPhoto + '" style="width:88px;height:88px;border-radius:50%;object-fit:cover;border:3px solid var(--bg-card);box-shadow:0 2px 8px rgba(0,0,0,0.15);" />';
+    html += '<img loading="lazy" src="' + p.avatarPhoto + '" style="width:88px;height:88px;border-radius:50%;object-fit:cover;border:3px solid var(--bg-card);box-shadow:0 2px 8px rgba(0,0,0,0.15);" />';
   } else {
     html += '<div style="width:88px;height:88px;border-radius:50%;background:var(--accent-glow);color:var(--primary);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:32px;">' + esc((p.name || "?").slice(0, 1).toUpperCase()) + '</div>';
   }
@@ -12296,7 +12311,7 @@ function renderProfileModal() {
   html += '<div style="display:flex;gap:12px;margin-bottom:6px;">';
   html += '<button data-action="open-wallet" data-value="Portefeuille" style="flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;background:var(--bg-body);border:1px solid var(--border-color);border-radius:16px;padding:14px 8px;cursor:pointer;">';
   html += '<div style="position:relative;width:56px;height:56px;margin-bottom:8px;">';
-  html += '<img src="' + SOUNSOUNI_BASKET_LOGO + '" style="width:56px;height:56px;border-radius:50%;object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,0.15);" />';
+  html += '<img loading="lazy" src="' + SOUNSOUNI_BASKET_LOGO + '" style="width:56px;height:56px;border-radius:50%;object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,0.15);" />';
   html += '<div style="position:absolute;bottom:-2px;right:-2px;width:22px;height:22px;border-radius:50%;background:var(--accent);color:white;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.2);"><i class="fa-solid fa-wallet" style="font-size:10px;"></i></div>';
   html += '</div>';
   html += '<div style="font-weight:800;font-size:12.5px;line-height:1.3;">Sounsouni<br/>Portefeuille</div>';
@@ -12304,7 +12319,7 @@ function renderProfileModal() {
   html += '</button>';
   html += '<button data-action="open-carte" data-value="Carte" style="flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;background:var(--bg-body);border:1px solid var(--border-color);border-radius:16px;padding:14px 8px;cursor:pointer;">';
   html += '<div style="position:relative;width:56px;height:56px;margin-bottom:8px;">';
-  html += '<img src="' + SOUNSOUNI_BASKET_LOGO + '" style="width:56px;height:56px;border-radius:50%;object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,0.15);" />';
+  html += '<img loading="lazy" src="' + SOUNSOUNI_BASKET_LOGO + '" style="width:56px;height:56px;border-radius:50%;object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,0.15);" />';
   html += '<div style="position:absolute;bottom:-2px;right:-2px;width:22px;height:22px;border-radius:50%;background:var(--accent);color:white;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.2);"><i class="fa-solid fa-credit-card" style="font-size:10px;"></i></div>';
   html += '</div>';
   html += '<div style="font-weight:800;font-size:12.5px;line-height:1.3;">Sounsouni<br/>Carte</div>';
@@ -12634,7 +12649,7 @@ function renderSounsouniCarteModal() {
   // propre espace dédié, plutôt que de se battre pour rentrer dans une
   // petite case fixe du visuel.
   html += '<div style="width:100%;aspect-ratio:1350/885;border-radius:16px;overflow:hidden;box-shadow:var(--shadow);margin-bottom:16px;">';
-  html += '<img src="' + SOUNSOUNI_CARD_IMAGE + '" style="width:100%;height:100%;object-fit:cover;display:block;" />';
+  html += '<img loading="lazy" src="' + SOUNSOUNI_CARD_IMAGE + '" style="width:100%;height:100%;object-fit:cover;display:block;" />';
   html += '</div>';
   html += '<div style="display:flex;justify-content:center;margin-bottom:16px;">';
   html += '<div class="qr-code-slot" data-qr-value="' + esc(normalizeWalletPhone(state.profile.phone)) + '" style="width:190px;height:190px;background:#fff;border-radius:14px;padding:12px;box-shadow:var(--shadow);"></div>';
@@ -12961,7 +12976,7 @@ function renderTourOverlay() {
     html += '</div>';
   }
   html += '<div class="tour-mockup">';
-  html += '<img src="' + slide.img + '" style="width:100%;max-height:52vh;object-fit:cover;object-position:top;display:block;border-radius:14px;" alt="" />';
+  html += '<img loading="lazy" src="' + slide.img + '" style="width:100%;max-height:52vh;object-fit:cover;object-position:top;display:block;border-radius:14px;" alt="" />';
   if (slide.tapPos) {
     html += '<div class="tour-tap-point" style="top:' + slide.tapPos.top + ';left:' + slide.tapPos.left + ';"><div class="tour-ripple"></div><div class="tour-finger"><i class="fa-solid fa-hand-pointer"></i></div></div>';
   }
@@ -13400,7 +13415,7 @@ function renderAdminProductsListModal() {
     var p = products[i];
     html += '<div class="card-row">';
     if (p.images && p.images.length > 0) {
-      html += '<img src="' + p.images[0] + '" style="width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0;" />';
+      html += '<img loading="lazy" src="' + p.images[0] + '" style="width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0;" />';
     } else {
       html += '<div class="emoji-thumb" style="width:38px;height:38px;font-size:16px;flex-shrink:0;">' + (p.emoji || '📦') + '</div>';
     }
@@ -13594,7 +13609,7 @@ function renderRecommendationsCircles(items) {
     html += '<div class="reco-circle-item" data-action="open-product" data-value="' + p.id + '">';
     html += '<div class="reco-circle-img" style="animation-delay:' + (i * 0.3) + 's;border-color:' + recoCfg.shapeColor + ';">';
     html += '<div class="reco-circle-glow" style="animation-delay:' + (i * 0.7) + 's;background:' + recoCfg.shapeColor + ';"></div>';
-    if (p.images && p.images.length) html += '<img src="' + p.images[0] + '" alt="" />';
+    if (p.images && p.images.length) html += '<img loading="lazy" src="' + p.images[0] + '" alt="" />';
     else html += '<span>' + (p.emoji || '🛍️') + '</span>';
     html += '</div>';
     html += '<div class="reco-circle-name">' + esc(shortName) + '</div>';
@@ -13662,7 +13677,7 @@ function renderCategoryStars() {
         var isActive = state.category === c.name;
         inner += '<button class="star-cat-item" data-action="set-category" data-value="' + esc(c.name) + '">';
         inner += '<span class="star-cat-shape ' + (isActive ? 'active' : '') + '">';
-        inner += '<img class="star-cat-frame" src="' + STAR_FRAME_IMG + '" alt="" />';
+        inner += '<img loading="lazy" class="star-cat-frame" src="' + STAR_FRAME_IMG + '" alt="" />';
         inner += '<span class="star-cat-icon">' + c.icon + '</span>';
         inner += '</span>';
         inner += '<span class="star-cat-label">' + esc(c.name) + '</span>';
@@ -13733,7 +13748,7 @@ function renderSougoubaBanner() {
   var sbImg = sbCfg.imageUrl || SOUGOUBA_BANNER_IMG;
   var textStyle = 'color:' + sbCfg.textColor + ';text-shadow:0 0 5px rgba(' + sbCfg.glowColor + ',0.9),0 0 12px rgba(' + sbCfg.glowColor + ',0.55);';
   var html = '<div class="sougouba-banner">';
-  html += '<img class="brand-fx-' + sbCfg.effect + '" style="opacity:' + sbCfg.opacity + ';" src="' + sbImg + '" alt="" />';
+  html += '<img loading="lazy" class="brand-fx-' + sbCfg.effect + '" style="opacity:' + sbCfg.opacity + ';" src="' + sbImg + '" alt="" />';
   html += '<span class="sougouba-banner-text" style="' + textStyle + '">Allah ka Sougoudia</span>';
   html += '</div>';
   return html;
@@ -13813,7 +13828,7 @@ function renderVipAdItem(vipAd) {
   var effectClass = vipAd.effect && vipAd.effect !== 'none' ? ' vip-fx-' + vipAd.effect : '';
   var out = '<div class="vip-ad-banner' + effectClass + '" style="' + itemStyle + '"' + (vipAd.link ? ' data-action="open-vip-ad-link" data-value="' + esc(vipAd.link) + '"' : '') + '>';
   if (vipAd.imageUrl) {
-    out += '<img class="vip-ad-image" src="' + esc(vipAd.imageUrl) + '" alt="" />';
+    out += '<img loading="lazy" class="vip-ad-image" src="' + esc(vipAd.imageUrl) + '" alt="" />';
   } else {
     out += '<span class="vip-ad-badge">VIP</span><span class="vip-ad-emoji">' + esc(vipAd.emoji || '⭐') + '</span>';
   }
@@ -13845,7 +13860,7 @@ function renderHeader() {
   var html = '<div class="gems-header' + headerBgClass + '" style="' + headerBgStyle + '" data-action="go-to-market-home">';
   html += '<div class="gems-header-icons-row">';
   html += '<button class="icon-btn" data-action="toggle-role-menu"><i class="fa-solid fa-bars"></i>' + (linkedActivityAccount ? '<span class="nav-alert-dot"></span>' : '') + '</button>';
-  html += '<div class="gems-logo-icon" data-action="go-to-market-home"><img src="' + SOUNSOUNI_HEADER_ICON + '" style="width:' + logoBrandCfg.logoSize + 'px;height:' + logoBrandCfg.logoSize + 'px;border-radius:8px;object-fit:cover;" alt="Sounsouni" /></div>';
+  html += '<div class="gems-logo-icon" data-action="go-to-market-home"><img loading="lazy" src="' + SOUNSOUNI_HEADER_ICON + '" style="width:' + logoBrandCfg.logoSize + 'px;height:' + logoBrandCfg.logoSize + 'px;border-radius:8px;object-fit:cover;" alt="Sounsouni" /></div>';
   html += '<div style="flex:1"></div>';
 
   var headerUnreadChat = 0;
@@ -13866,7 +13881,7 @@ function renderHeader() {
   var isShopContext = state.profile.role === "vendeur" || state.profile.role === "point_vente";
   var headerAvatarPhoto = isShopContext && state.profile.shopProfilePhoto ? state.profile.shopProfilePhoto : state.profile.avatarPhoto;
   if (headerAvatarPhoto) {
-    html += '<button class="icon-btn" data-action="open-profile" style="padding:2px;"><img src="' + headerAvatarPhoto + '" style="width:26px;height:26px;border-radius:50%;object-fit:cover;border:1.5px solid rgba(255,255,255,0.7);" /></button>';
+    html += '<button class="icon-btn" data-action="open-profile" style="padding:2px;"><img loading="lazy" src="' + headerAvatarPhoto + '" style="width:26px;height:26px;border-radius:50%;object-fit:cover;border:1.5px solid rgba(255,255,255,0.7);" /></button>';
   } else {
     html += '<button class="icon-btn" data-action="open-profile"><i class="fa-solid fa-circle-user"></i></button>';
   }
@@ -13907,7 +13922,7 @@ function renderMarketTopSection(compact) {
   if (!compact) {
     html += '<div class="gems-greeting-row">';
     if (state.profile.avatarPhoto) {
-      html += '<img class="gems-greeting-avatar" src="' + state.profile.avatarPhoto + '" alt="" />';
+      html += '<img loading="lazy" class="gems-greeting-avatar" src="' + state.profile.avatarPhoto + '" alt="" />';
     } else {
       html += '<div class="gems-greeting-avatar gems-greeting-avatar-fallback">' + esc((state.profile.name || "?").slice(0, 1).toUpperCase()) + '</div>';
     }
@@ -14040,7 +14055,7 @@ function renderShopCustomize() {
   html += '<label class="field-label">Photo de couverture</label>';
   html += '<div style="position:relative;width:100%;height:120px;border-radius:12px;overflow:hidden;background:var(--bg-body);margin-bottom:4px;">';
   if (a.shopCoverPhoto) {
-    html += '<img src="' + a.shopCoverPhoto + '" style="width:100%;height:100%;object-fit:cover;" />';
+    html += '<img loading="lazy" src="' + a.shopCoverPhoto + '" style="width:100%;height:100%;object-fit:cover;" />';
     html += '<button type="button" data-action="remove-shop-photo" data-value="cover" style="position:absolute;top:6px;right:6px;width:26px;height:26px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;"><i class="fa-solid fa-xmark"></i></button>';
   } else {
     html += '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-dim);"><i class="fa-solid fa-image" style="font-size:22px;"></i></div>';
@@ -14052,7 +14067,7 @@ function renderShopCustomize() {
   html += '<label class="field-label">Photo de profil</label>';
   html += '<div style="position:relative;width:84px;height:84px;border-radius:50%;overflow:hidden;background:var(--bg-body);margin-bottom:4px;">';
   if (a.shopProfilePhoto) {
-    html += '<img src="' + a.shopProfilePhoto + '" style="width:100%;height:100%;object-fit:cover;" />';
+    html += '<img loading="lazy" src="' + a.shopProfilePhoto + '" style="width:100%;height:100%;object-fit:cover;" />';
     html += '<button type="button" data-action="remove-shop-photo" data-value="profile" style="position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:9px;"><i class="fa-solid fa-xmark"></i></button>';
   } else {
     html += '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-dim);"><i class="fa-solid fa-store"></i></div>';
@@ -14136,11 +14151,11 @@ function renderShopPage() {
   // boutique" (Mes commandes et produits), pour ne plus jamais avoir deux
   // endroits différents qui font la même chose.
   if (account && account.shopCoverPhoto) {
-    html += '<div style="width:100%;height:110px;border-radius:14px;overflow:hidden;margin-bottom:-38px;"><img src="' + account.shopCoverPhoto + '" style="width:100%;height:100%;object-fit:cover;" /></div>';
+    html += '<div style="width:100%;height:110px;border-radius:14px;overflow:hidden;margin-bottom:-38px;"><img loading="lazy" src="' + account.shopCoverPhoto + '" style="width:100%;height:100%;object-fit:cover;" /></div>';
   }
 
   if (account && account.shopProfilePhoto) {
-    html += '<img src="' + account.shopProfilePhoto + '" style="width:64px;height:64px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 10px;border:3px solid var(--bg-card);position:relative;" />';
+    html += '<img loading="lazy" src="' + account.shopProfilePhoto + '" style="width:64px;height:64px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 10px;border:3px solid var(--bg-card);position:relative;" />';
   } else {
     html += '<div class="emoji-thumb" style="width:64px;height:64px;font-size:26px;margin:0 auto 10px;position:relative;border:3px solid var(--bg-card);"><i class="fa-solid fa-store"></i></div>';
   }
@@ -14351,7 +14366,7 @@ function productCard(p, disableImageSwipe, compactBadgeLine, marketBadges) {
       for (var pci = 0; pci < p.images.length; pci++) {
         html += '<div style="position:relative;width:100%;height:100%;flex-shrink:0;overflow:hidden;">';
         html += '<div class="product-image-backdrop" style="background-image:url(\'' + p.images[pci] + '\');"></div>';
-        html += '<img src="' + p.images[pci] + '" alt="' + esc(p.name) + '" />';
+        html += '<img loading="lazy" src="' + p.images[pci] + '" alt="' + esc(p.name) + '" />';
         html += '</div>';
       }
       html += '</div>';
@@ -14362,7 +14377,7 @@ function productCard(p, disableImageSwipe, compactBadgeLine, marketBadges) {
       html += '</div>';
     } else {
       html += '<div class="product-image-backdrop" style="background-image:url(\'' + p.images[0] + '\');"></div>';
-      html += '<img src="' + p.images[0] + '" alt="' + esc(p.name) + '" />';
+      html += '<img loading="lazy" src="' + p.images[0] + '" alt="' + esc(p.name) + '" />';
     }
   } else {
     html += '<span class="emoji-placeholder">' + p.emoji + '</span>';
@@ -15023,7 +15038,7 @@ function renderOrders() {
       html += '<div style="display:flex;align-items:center;gap:8px;padding:3px 0">';
       if (boProd) {
         if (boProd.images && boProd.images.length > 0) {
-          html += '<img src="' + boProd.images[0] + '" style="width:32px;height:32px;border-radius:7px;object-fit:cover;flex-shrink:0;cursor:pointer;" data-action="open-product" data-value="' + boProd.id + '" />';
+          html += '<img loading="lazy" src="' + boProd.images[0] + '" style="width:32px;height:32px;border-radius:7px;object-fit:cover;flex-shrink:0;cursor:pointer;" data-action="open-product" data-value="' + boProd.id + '" />';
         } else {
           html += '<div class="emoji-thumb" style="width:32px;height:32px;font-size:14px;flex-shrink:0;cursor:pointer;" data-action="open-product" data-value="' + boProd.id + '">' + (boProd.emoji || '📦') + '</div>';
         }
@@ -15199,7 +15214,7 @@ function renderSeller() {
   if (hasCover) {
     html += '<div style="position:relative;width:100%;' + (hasAvatar ? 'margin-bottom:36px;' : 'margin-bottom:10px;') + '">';
     html += '<div style="position:relative;width:100%;height:130px;border-radius:16px;overflow:hidden;">';
-    html += '<img src="' + state.profile.shopCoverPhoto + '" style="width:100%;height:100%;object-fit:cover;" />';
+    html += '<img loading="lazy" src="' + state.profile.shopCoverPhoto + '" style="width:100%;height:100%;object-fit:cover;" />';
     html += '<div style="position:absolute;inset:0;top:0;background:linear-gradient(rgba(0,0,0,0.15),rgba(0,0,0,0.05));"></div>';
     html += '</div>';
     html += '<button class="link-btn" style="position:absolute;top:10px;left:10px;margin:0;background:rgba(255,255,255,0.92);padding:5px 12px;border-radius:999px;box-shadow:var(--shadow);" data-action="back-to-vendor-hub"><i class="fa-solid fa-arrow-left"></i> Retour</button>';
@@ -15208,7 +15223,7 @@ function renderSeller() {
       // La photo ronde est maintenant EN DEHORS du cadre à coins arrondis de
       // la couverture (qui coupe tout ce qui dépasse) — sinon sa moitié
       // basse disparaissait, coupée net par ce même cadre.
-      html += '<img src="' + state.profile.shopProfilePhoto + '" style="position:absolute;left:14px;bottom:-30px;width:64px;height:64px;border-radius:50%;object-fit:cover;border:3px solid var(--bg-body);box-shadow:var(--shadow);" />';
+      html += '<img loading="lazy" src="' + state.profile.shopProfilePhoto + '" style="position:absolute;left:14px;bottom:-30px;width:64px;height:64px;border-radius:50%;object-fit:cover;border:3px solid var(--bg-body);box-shadow:var(--shadow);" />';
     }
     html += '</div>';
   } else {
@@ -15219,7 +15234,7 @@ function renderSeller() {
   }
   html += '<div class="section-title" style="display:flex;align-items:center;gap:10px;">';
   if (hasAvatar && !hasCover) {
-    html += '<img src="' + state.profile.shopProfilePhoto + '" style="width:34px;height:34px;border-radius:50%;object-fit:cover;border:1.5px solid var(--border-color);flex-shrink:0;" />';
+    html += '<img loading="lazy" src="' + state.profile.shopProfilePhoto + '" style="width:34px;height:34px;border-radius:50%;object-fit:cover;border:1.5px solid var(--border-color);flex-shrink:0;" />';
   } else if (!hasAvatar) {
     html += '<i class="fa-solid ' + typeInfo.icon + '"></i>';
   }
@@ -15320,7 +15335,7 @@ function renderMyProductsGrid(myProducts) {
     html += '<div class="product-card">';
     html += '<div class="product-image" style="height:110px;">';
     if (p.images && p.images.length > 0) {
-      html += '<img src="' + p.images[0] + '" alt="' + esc(p.name) + '" style="width:100%;height:100%;object-fit:cover;" />';
+      html += '<img loading="lazy" src="' + p.images[0] + '" alt="' + esc(p.name) + '" style="width:100%;height:100%;object-fit:cover;" />';
     } else {
       html += '<span style="font-size:40px;">' + p.emoji + '</span>';
     }
@@ -15553,7 +15568,7 @@ function renderSellerProducts() {
     html += '<div class="draft-media-row" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">';
     for (var i = 0; i < d.images.length; i++) {
       html += '<div class="draft-media-thumb" style="position:relative;width:62px;height:62px;border-radius:10px;overflow:hidden;background:var(--bg-body);border:1.5px solid var(--border-color);flex-shrink:0;">';
-      html += '<img src="' + d.images[i] + '" alt="" style="width:100%;height:100%;object-fit:cover;" />';
+      html += '<img loading="lazy" src="' + d.images[i] + '" alt="" style="width:100%;height:100%;object-fit:cover;" />';
       html += '<button data-action="remove-draft-image" data-value="' + i + '" style="position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:9px;display:flex;align-items:center;justify-content:center;"><i class="fa-solid fa-xmark"></i></button>';
       html += '</div>';
     }
@@ -15702,7 +15717,7 @@ function renderSellerOrders() {
       for (var sip = 0; sip < state.products.length; sip++) { if (state.products[sip].id === it.productId) { sellerItProd = state.products[sip]; break; } }
       html += '<div style="display:flex;align-items:center;gap:8px;padding:2px 0;' + (it.refused ? 'opacity:0.5;text-decoration:line-through;' : '') + '">';
       if (sellerItProd) {
-        html += '<img src="' + ((sellerItProd.images && sellerItProd.images[0]) || '') + '" style="width:32px;height:32px;border-radius:7px;object-fit:cover;flex-shrink:0;cursor:pointer;' + (sellerItProd.images && sellerItProd.images[0] ? '' : 'display:none;') + '" data-action="open-product" data-value="' + sellerItProd.id + '" />';
+        html += '<img loading="lazy" src="' + ((sellerItProd.images && sellerItProd.images[0]) || '') + '" style="width:32px;height:32px;border-radius:7px;object-fit:cover;flex-shrink:0;cursor:pointer;' + (sellerItProd.images && sellerItProd.images[0] ? '' : 'display:none;') + '" data-action="open-product" data-value="' + sellerItProd.id + '" />';
       }
       html += '<div style="font-size:13px;flex:1;">' + it.qty + '× ' + esc(it.name) + itemVariant(it) + '</div>';
       html += '</div>';
@@ -15942,7 +15957,7 @@ function renderLivreur() {
         for (var ip = 0; ip < state.products.length; ip++) { if (state.products[ip].id === it.productId) { itProd = state.products[ip]; break; } }
         html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">';
         if (itProd && itProd.images && itProd.images.length > 0) {
-          html += '<img src="' + itProd.images[0] + '" style="width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0;" />';
+          html += '<img loading="lazy" src="' + itProd.images[0] + '" style="width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0;" />';
         } else {
           html += '<div class="emoji-thumb" style="width:38px;height:38px;font-size:16px;flex-shrink:0;">' + (itProd ? itProd.emoji || '📦' : '📦') + '</div>';
         }
@@ -16254,7 +16269,7 @@ function relaisOrderCard(order, stage) {
     for (var ip = 0; ip < state.products.length; ip++) { if (state.products[ip].id === it.productId) { itProd = state.products[ip]; break; } }
     html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">';
     if (itProd && itProd.images && itProd.images.length > 0) {
-      html += '<img src="' + itProd.images[0] + '" style="width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0;" />';
+      html += '<img loading="lazy" src="' + itProd.images[0] + '" style="width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0;" />';
     } else {
       html += '<div class="emoji-thumb" style="width:38px;height:38px;font-size:16px;flex-shrink:0;">' + (itProd ? itProd.emoji || '📦' : '📦') + '</div>';
     }
@@ -16375,7 +16390,7 @@ function renderAdminSearchResults(q) {
     for (var j = 0; j < matchedProducts.length; j++) {
       var p = matchedProducts[j];
       html += '<div class="card-row" style="cursor:pointer;" data-action="admin-edit-product" data-value="' + p.id + '">';
-      if (p.images && p.images.length > 0) html += '<img src="' + p.images[0] + '" style="width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0;" />';
+      if (p.images && p.images.length > 0) html += '<img loading="lazy" src="' + p.images[0] + '" style="width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0;" />';
       else html += '<div class="emoji-thumb" style="width:38px;height:38px;font-size:16px;">' + (p.emoji || '📦') + '</div>';
       html += '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:12.5px;">' + esc(p.name) + '</div><div style="font-size:10.5px;color:var(--text-dim);">' + esc(p.shopName || '') + ' · ' + money(p.price) + '</div></div>';
       html += '<i class="fa-solid fa-chevron-right" style="color:var(--text-dim);"></i></div>';
@@ -16603,7 +16618,7 @@ function renderAdminBgPattern() {
     var icon = cfg.icons[i];
     html += '<div class="bgicon-slot">';
     if (icon) {
-      html += '<img src="' + icon + '" />';
+      html += '<img loading="lazy" src="' + icon + '" />';
       html += '<button data-action="remove-bgpattern-icon" data-value="' + i + '"><i class="fa-solid fa-xmark"></i></button>';
     } else {
       html += '<div class="bgicon-slot-empty"><i class="fa-solid fa-plus"></i></div>';
@@ -16818,7 +16833,7 @@ function renderBrandImageAdminSection(configId, title, options) {
   html += '</div>';
 
   html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">';
-  html += '<img src="' + imgSrc + '" style="width:64px;height:64px;border-radius:10px;object-fit:cover;flex-shrink:0;" />';
+  html += '<img loading="lazy" src="' + imgSrc + '" style="width:64px;height:64px;border-radius:10px;object-fit:cover;flex-shrink:0;" />';
   html += '<div style="flex:1;position:relative;">';
   html += '<div class="file-upload-btn" style="text-align:center;border:1.5px dashed var(--border-color);background:var(--bg-body);color:var(--text-secondary);font-size:12px;font-weight:700;padding:10px;border-radius:10px;"><i class="fa-solid fa-image"></i> Changer la photo</div>';
   html += '<input type="file" accept="image/*" data-action-file="brand-image-' + configId + '" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;" />';
@@ -16908,7 +16923,7 @@ function renderAdminVipAds() {
   html += '<label class="field-label">Image (optionnel — remplace l\'emoji)</label>';
   if (d.imageUrl) {
     html += '<div style="position:relative;width:100%;height:90px;border-radius:10px;overflow:hidden;margin-top:4px;">';
-    html += '<img src="' + esc(d.imageUrl) + '" style="width:100%;height:100%;object-fit:cover;" />';
+    html += '<img loading="lazy" src="' + esc(d.imageUrl) + '" style="width:100%;height:100%;object-fit:cover;" />';
     html += '<button data-action="remove-vipad-image" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:10px;"><i class="fa-solid fa-xmark"></i></button>';
     html += '</div>';
   } else {
@@ -16954,7 +16969,7 @@ function renderAdminVipAds() {
       var ad = state.vipAds[i];
       var isActiveNow = isVipAdActive(ad);
       html += '<div class="card-row">';
-      if (ad.imageUrl) html += '<img src="' + esc(ad.imageUrl) + '" style="width:40px;height:40px;border-radius:8px;object-fit:cover;" />';
+      if (ad.imageUrl) html += '<img loading="lazy" src="' + esc(ad.imageUrl) + '" style="width:40px;height:40px;border-radius:8px;object-fit:cover;" />';
       else html += '<div class="emoji-thumb">' + esc(ad.emoji || '⭐') + '</div>';
       html += '<div style="flex:1;">';
       html += '<div style="font-weight:700;font-size:13px;">' + esc(ad.title) + '</div>';
@@ -17384,12 +17399,12 @@ function renderAdminRelaisApplications() {
     html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:8px;"><i class="fa-solid fa-location-dot"></i> ' + esc(app.quartier) + (app.isAutreQuartier ? ' (nouveau quartier proposé)' : (app.commune ? ', ' + esc(app.commune) : '')) + (app.addressDetail ? ' — ' + esc(app.addressDetail) : '') + '</div>';
     if (app.selfiePhotoUri) {
       html += '<div style="font-size:11px;font-weight:700;margin-bottom:4px;">Photo de la personne</div>';
-      html += '<img src="' + app.selfiePhotoUri + '" style="width:100%;max-height:180px;object-fit:contain;border-radius:10px;border:1px solid var(--border-color);margin-bottom:10px;cursor:pointer;" data-action="view-relais-doc" data-value="' + app.id + '" data-doc-index="selfie" />';
+      html += '<img loading="lazy" src="' + app.selfiePhotoUri + '" style="width:100%;max-height:180px;object-fit:contain;border-radius:10px;border:1px solid var(--border-color);margin-bottom:10px;cursor:pointer;" data-action="view-relais-doc" data-value="' + app.id + '" data-doc-index="selfie" />';
     }
     if (app.verificationDocs && app.verificationDocs.length > 0) {
       html += '<div style="font-size:11px;font-weight:700;margin-bottom:4px;">Pièces justificatives (' + app.verificationDocs.length + ')</div>';
       for (var di = 0; di < app.verificationDocs.length; di++) {
-        html += '<img src="' + app.verificationDocs[di] + '" style="width:100%;max-height:180px;object-fit:contain;border-radius:10px;border:1px solid var(--border-color);margin-bottom:8px;cursor:pointer;" data-action="view-relais-doc" data-value="' + app.id + '" data-doc-index="' + di + '" />';
+        html += '<img loading="lazy" src="' + app.verificationDocs[di] + '" style="width:100%;max-height:180px;object-fit:contain;border-radius:10px;border:1px solid var(--border-color);margin-bottom:8px;cursor:pointer;" data-action="view-relais-doc" data-value="' + app.id + '" data-doc-index="' + di + '" />';
       }
     }
     if (app.status === "pending") {
@@ -18669,7 +18684,7 @@ function renderProductModal() {
     for (var pmi = 0; pmi < p.images.length; pmi++) {
       html += '<div style="position:relative;width:100%;height:100%;flex-shrink:0;overflow:hidden;">';
       html += '<div class="product-image-backdrop" style="background-image:url(\'' + p.images[pmi] + '\');"></div>';
-      html += '<img src="' + p.images[pmi] + '" alt="' + esc(p.name) + '" />';
+      html += '<img loading="lazy" src="' + p.images[pmi] + '" alt="' + esc(p.name) + '" />';
       html += '</div>';
     }
     html += '</div>';
@@ -18680,7 +18695,7 @@ function renderProductModal() {
     html += '</div>';
   } else if (mainImage) {
     html += '<div class="product-image-backdrop" style="background-image:url(\'' + mainImage + '\');"></div>';
-    html += '<img src="' + mainImage + '" alt="' + esc(p.name) + '" />';
+    html += '<img loading="lazy" src="' + mainImage + '" alt="' + esc(p.name) + '" />';
   } else {
     html += p.emoji;
   }
@@ -18693,7 +18708,7 @@ function renderProductModal() {
     for (var k = 0; k < p.images.length; k++) {
       var img = p.images[k];
       html += '<div style="width:50px;height:50px;border-radius:8px;overflow:hidden;border:1.5px solid ' + (k === state.activeImageIndex ? 'var(--accent)' : 'var(--border-color)') + ';cursor:pointer;flex-shrink:0;" data-action="set-active-image" data-value="' + k + '">';
-      html += '<img src="' + img + '" alt="" style="width:100%;height:100%;object-fit:cover;" />';
+      html += '<img loading="lazy" src="' + img + '" alt="" style="width:100%;height:100%;object-fit:cover;" />';
       html += '</div>';
     }
     html += '</div>';
@@ -18883,7 +18898,7 @@ function renderLightbox() {
   var html = '<div class="lightbox-overlay" data-action="close-lightbox">';
   html += '<div class="lightbox-content">';
   html += '<button class="lightbox-close" data-action="close-lightbox"><i class="fa-solid fa-xmark"></i></button>';
-  html += '<img src="' + images[idx] + '" alt="' + esc(p.name) + '" />';
+  html += '<img loading="lazy" src="' + images[idx] + '" alt="' + esc(p.name) + '" />';
   if (images.length > 1) {
     html += '<button class="lightbox-nav prev" data-action="lightbox-prev"><i class="fa-solid fa-chevron-left"></i></button>';
     html += '<button class="lightbox-nav next" data-action="lightbox-next"><i class="fa-solid fa-chevron-right"></i></button>';
@@ -23821,7 +23836,7 @@ function renderSplashScreen() {
     var d = scaleDirs[i];
     scalesHtml += '<div class="splash-scale" style="--sx:' + d.x + 'px;--sy:' + d.y + 'px;animation-delay:' + (i * 0.2) + 's;"></div>';
   }
-  return '<div class="splash-screen"><div class="splash-scales-wrap">' + scalesHtml + '<img src="' + SOUNSOUNI_SPLASH_IMG + '" class="splash-sounsouni-logo" alt="Sounsouni" /></div></div>';
+  return '<div class="splash-screen"><div class="splash-scales-wrap">' + scalesHtml + '<img loading="lazy" src="' + SOUNSOUNI_SPLASH_IMG + '" class="splash-sounsouni-logo" alt="Sounsouni" /></div></div>';
 }
 
 // ---------- INIT ----------
