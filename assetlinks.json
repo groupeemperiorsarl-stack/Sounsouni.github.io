@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "io.github.groupeemperiorsarl_stack.twa",
+        "sha256_cert_fingerprints": ["48:A1:52:C5:6A:AE:9B:F9:2C:B0:6D:22:D2:F5:03:8B:39:C8:F6:E5:00:40:C0:94:8F:3A:F2:9B:22:74:7B:BD"]
+      }
+    }]
