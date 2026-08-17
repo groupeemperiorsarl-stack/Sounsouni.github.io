@@ -4123,15 +4123,16 @@ html.has-bg-pattern .notif-panel {
     <div id="root"></div>
 
     <!-- PWA : manifeste + service worker, activés pour la publication
-         sur le Play Store via TWA. -->
+         sur le Play Store via TWA. Enregistré tout de suite (pas
+         d'attente du chargement complet) — le fichier étant volumineux,
+         attendre l'événement "load" retardait la détection par les
+         outils d'analyse PWA. -->
     <link rel="manifest" href="manifest.json">
     <script>
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(reg => console.log('SW enregistré'))
-                    .catch(err => console.log('Erreur SW:', err));
-            });
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('SW enregistré'))
+                .catch(err => console.log('Erreur SW:', err));
         }
     </script>
 
