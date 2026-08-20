@@ -17849,6 +17849,41 @@ var ADMIN_MODULES_META = {
 // Nombre d'éléments en attente pour chaque module — utilisé pour le badge
 // rouge sur sa tuile. Centralisé ici pour ne calculer chaque compteur
 // qu'une seule fois, peu importe où il est affiché.
+// ---------- NETTOYAGE DES VIEILLES PHOTOS ENREGISTRÉES EN BASE64 ----------
+// Avant que Supabase Storage soit branché, les photos étaient enregistrées
+// directement dans les données (texte très volumineux) au lieu d'un simple
+// lien. Ces vieilles photos continuent d'être synchronisées telles quelles
+// et peuvent saturer le stockage du téléphone. Cet outil les repère et les
+// retire (le champ redevient vide — la personne concernée peut renvoyer
+// une photo si besoin, désormais stockée correctement).
+function isEmbeddedBase64(val) {
+  return typeof val === "string" && val.indexOf("data:image") === 0;
+}
+
+function scanForEmbeddedPhotos() {
+  var found = [];
+  var addIfBase64 = function(collection, id, label, field, val) {
+    if (isEmbeddedBase64(val)) {
+      found.push({ collection: collection, id: id, label: label, field: field, sizeKB: Math.round(val.length / 1024) });
+    }
+  };
+  for (var ai = 0; ai < state.accounts.length; ai++) {
+    var a = state.accounts[ai];
+    addIfBase64("accounts", a.id, a.name || a.phone || a.id, "avatarPhoto", a.avatarPhoto);
+    addIfBase64("accounts", a.id, a.name || a.phone || a.id, "selfiePhoto", a.selfiePhoto);
+    addIfBase64("accounts", a.id, a.name || a.phone || a.id, "shopPhoto", a.shopPhoto);
+  }
+  for (var pi = 0; pi < state.products.length; pi++) {
+    var p = state.products[pi];
+    if (Array.isArray(p.images)) {
+      for (var pj = 0; pj < p.images.length; pj++) {
+        addIfBase64("products", p.id, p.name || p.id, "images[" + pj + "]", p.images[pj]);
+      }
+    }
+  }
+  return found;
+}
+
 function computeAdminBadgeCounts() {
   var pendingRelais = state.relaisApplications.filter(function(r) { return r.status === "pending" && inAdminScope(r); }).length + state.relaisEditRequests.filter(function(r) { return r.status === "pending"; }).length;
   var pendingLivreur = state.livreurApplications.filter(function(l) { return l.status === "pending" && inAdminScope(l); }).length;
@@ -20038,6 +20073,24 @@ function renderAdminSecurity() {
   var ownerCreds = getAdminCredentials("owner");
   var empCreds = getAdminCredentials("employee");
   var html = '';
+
+  // ---- Nettoyage des vieilles photos enregistrées en base64 (avant
+  // Supabase Storage) — cause la plus fréquente de "stockage plein" sur
+  // le téléphone. ----
+  var embeddedPhotos = scanForEmbeddedPhotos();
+  if (embeddedPhotos.length > 0) {
+    var totalKB = embeddedPhotos.reduce(function(s, e) { return s + e.sizeKB; }, 0);
+    html += '<div class="glass-card" style="padding:14px;margin-bottom:16px;border:1.5px solid var(--danger);">';
+    html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-broom"></i> Vieilles photos à nettoyer (' + embeddedPhotos.length + ')</div>';
+    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;">Enregistrées directement dans les données avant la mise en place de Supabase Storage — environ ' + (totalKB > 1024 ? (totalKB / 1024).toFixed(1) + ' Mo' : totalKB + ' Ko') + ' à libérer. Les retirer efface la photo concernée (la personne peut en renvoyer une, stockée correctement cette fois).</div>';
+    for (var epi = 0; epi < Math.min(embeddedPhotos.length, 10); epi++) {
+      var ep = embeddedPhotos[epi];
+      html += '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;"><span>' + esc(ep.label) + ' — ' + esc(ep.field) + '</span><span style="color:var(--text-dim);">' + ep.sizeKB + ' Ko</span></div>';
+    }
+    if (embeddedPhotos.length > 10) html += '<div style="font-size:11px;color:var(--text-dim);margin-top:4px;">+ ' + (embeddedPhotos.length - 10) + ' autre(s)</div>';
+    html += '<button class="btn-primary" style="width:100%;margin-top:10px;background:var(--danger);" data-action="clean-embedded-photos"><i class="fa-solid fa-trash"></i> Tout nettoyer</button>';
+    html += '</div>';
+  }
 
   // ---- Demandes de récupération de mot de passe ("code perdu") ----
   var recoveryReqs = (state.passwordRecoveryRequests || []).filter(function(r) { return r.status === "pending"; });
@@ -24198,6 +24251,35 @@ root.addEventListener("click", function(e) {
     case "set-admin-subtab": state.adminSubTab = value; render(); break;
     case "set-admin-accounts-mode": state.adminAccountsMode = value; render(); break;
     case "reset-admin-activity-date": state.adminActivityFrom = null; state.adminActivityTo = null; render(); break;
+    case "clean-embedded-photos": {
+      if (!confirm("Retirer toutes les vieilles photos repérées ? Chaque personne concernée pourra en renvoyer une si besoin.")) break;
+      var toClean = scanForEmbeddedPhotos();
+      var cleanedAccounts = {};
+      var cleanedProducts = {};
+      for (var cpi = 0; cpi < toClean.length; cpi++) {
+        var item = toClean[cpi];
+        if (item.collection === "accounts") {
+          var acc = state.accounts.find(function(x) { return x.id === item.id; });
+          if (acc) { acc[item.field] = null; cleanedAccounts[acc.id] = acc; }
+        } else if (item.collection === "products") {
+          var prod = state.products.find(function(x) { return x.id === item.id; });
+          if (prod) {
+            var idxMatch = item.field.match(/images\[(\d+)\]/);
+            if (idxMatch && prod.images) prod.images[parseInt(idxMatch[1], 10)] = null;
+            cleanedProducts[prod.id] = prod;
+          }
+        }
+      }
+      Object.values(cleanedAccounts).forEach(function(acc) { saveDoc("accounts", acc); });
+      Object.values(cleanedProducts).forEach(function(prod) {
+        prod.images = prod.images.filter(function(img) { return img; }); // referme les trous laissés par les photos retirées
+        saveDoc("products", prod);
+      });
+      save();
+      showToast("✅ " + toClean.length + " ancienne(s) photo(s) retirée(s).");
+      render();
+      break;
+    }
     case "open-admin-international-country": state.adminInternationalCountry = value; render(); break;
     case "close-admin-international-country": state.adminInternationalCountry = null; render(); break;
     case "open-admin-add-international-city": {
