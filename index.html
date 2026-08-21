@@ -11126,14 +11126,23 @@ function sendMessage(conversationId, message) {
   // Le compteur "non lu" augmente pour le DESTINATAIRE, jamais pour l'expéditeur —
   // sinon la personne qui écrit voit son propre badge grimper pour un message
   // qu'elle vient d'envoyer elle-même (bug signalé et corrigé ici).
+  var recipientId;
   if (sendingAsId === conv.sellerId) {
     conv.unreadForBuyer = (conv.unreadForBuyer || 0) + 1;
+    recipientId = conv.buyerId;
   } else {
     conv.unreadForSeller = (conv.unreadForSeller || 0) + 1;
+    recipientId = conv.sellerId;
   }
   
   save();
   saveDoc("conversations", conv);
+  // Notifie le DESTINATAIRE (jamais l'expéditeur) — vraie notification push
+  // comprise, même app fermée. Le texte du message lui-même reste privé :
+  // juste "nouveau message de X", pas son contenu.
+  if (recipientId && recipientId !== sendingAsId) {
+    addNotification("whatsapp", "💬 Nouveau message de " + sendingAsName + ".", recipientId, "chat");
+  }
   render();
 }
 
@@ -11190,13 +11199,19 @@ function sendVoiceMessage(conversationId, audioUrl, digitGroups) {
 
   conv.lastMessage = "🎤 Message vocal";
   conv.lastMessageTime = Date.now();
+  var voiceRecipientId;
   if (state.profile.id === conv.sellerId) {
     conv.unreadForBuyer = (conv.unreadForBuyer || 0) + 1;
+    voiceRecipientId = conv.buyerId;
   } else {
     conv.unreadForSeller = (conv.unreadForSeller || 0) + 1;
+    voiceRecipientId = conv.sellerId;
   }
   save();
   saveDoc("conversations", conv);
+  if (voiceRecipientId && voiceRecipientId !== state.profile.id) {
+    addNotification("whatsapp", "🎤 Nouveau message vocal de " + state.profile.name + ".", voiceRecipientId, "chat");
+  }
   render();
 }
 
