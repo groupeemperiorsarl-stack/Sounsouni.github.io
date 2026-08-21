@@ -6541,6 +6541,54 @@ const SEED_PRODUCTS = [];
 // ---------- STATE ----------
 const STORAGE_KEY = "gems_demo_state_v7";
 
+// ---------- STOCKAGE LOCAL — IndexedDB, plus vraiment localStorage ----------
+// localStorage a une limite fixe et minuscule sur certains téléphones
+// (quelques Mo, parfois moins), sans rapport avec l'espace réel
+// disponible sur l'appareil — c'est ce qui causait les erreurs "stockage
+// plein" même avec moins d'1 Mo de données. IndexedDB suit les vraies
+// limites de l'appareil (souvent plusieurs Go), exactement comme
+// Firebase/Supabase le font déjà pour leur propre cache. Supabase reste
+// dans tous les cas la vraie source des données — ceci n'est qu'une copie
+// locale pour un rechargement plus rapide.
+const IDB_NAME = "sounsouni_local";
+const IDB_STORE = "kv";
+var _idbInstance = null;
+
+function idbOpen() {
+  if (_idbInstance) return Promise.resolve(_idbInstance);
+  return new Promise(function(resolve, reject) {
+    if (!window.indexedDB) { reject(new Error("IndexedDB indisponible")); return; }
+    var req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = function() {
+      if (!req.result.objectStoreNames.contains(IDB_STORE)) req.result.createObjectStore(IDB_STORE);
+    };
+    req.onsuccess = function() { _idbInstance = req.result; resolve(_idbInstance); };
+    req.onerror = function() { reject(req.error); };
+  });
+}
+
+function idbGet(key) {
+  return idbOpen().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction(IDB_STORE, "readonly");
+      var req = tx.objectStore(IDB_STORE).get(key);
+      req.onsuccess = function() { resolve(req.result); };
+      req.onerror = function() { reject(req.error); };
+    });
+  });
+}
+
+function idbSet(key, value) {
+  return idbOpen().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction(IDB_STORE, "readwrite");
+      tx.objectStore(IDB_STORE).put(value, key);
+      tx.oncomplete = function() { resolve(); };
+      tx.onerror = function() { reject(tx.error); };
+    });
+  });
+}
+
 function defaultState() {
   return {
     profile: null,
@@ -6795,7 +6843,7 @@ function emptyProductDraft(profileForDefault) {
   };
 }
 
-let state = loadState() || defaultState();
+let state = defaultState();
 
 // Le "profil" affiché à l'écran est une COPIE séparée du compte, prise au
 // moment de la connexion — elle ne se met pas à jour toute seule quand un
@@ -6817,12 +6865,32 @@ function refreshProfileFromAccounts() {
   }
 }
 
-function loadState() {
-  try {
-    var raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return mergeWithDefaults(JSON.parse(raw));
-  } catch (e) {}
-  return null;
+// Charge l'état local — IndexedDB en priorité ; si rien n'y est encore
+// trouvé (première fois avec cette nouvelle version), reprend l'ancienne
+// sauvegarde localStorage si elle existe, pour ne perdre aucune donnée
+// lors de la transition, puis la migre vers IndexedDB.
+function loadStateAsync() {
+  return idbGet(STORAGE_KEY).then(function(saved) {
+    if (saved) return mergeWithDefaults(saved);
+    var raw = null;
+    try { raw = localStorage.getItem(STORAGE_KEY); } catch (e) {}
+    if (raw) {
+      try {
+        var parsed = JSON.parse(raw);
+        idbSet(STORAGE_KEY, parsed).catch(function() {}); // migration best-effort, silencieuse
+        return mergeWithDefaults(parsed);
+      } catch (e) {}
+    }
+    return null;
+  }).catch(function() {
+    // IndexedDB totalement indisponible (rare) — repli sur l'ancien
+    // comportement localStorage plutôt que de bloquer le démarrage.
+    try {
+      var raw2 = localStorage.getItem(STORAGE_KEY);
+      if (raw2) return mergeWithDefaults(JSON.parse(raw2));
+    } catch (e) {}
+    return null;
+  });
 }
 
 function mergeWithDefaults(saved) {
@@ -6867,21 +6935,35 @@ function mergeWithDefaults(saved) {
   return merged;
 }
 
+var _localSaveQuotaWarned = false; // n'affiche un message qu'une seule fois par session, si jamais même IndexedDB échoue (très rare — voir plus bas)
+
 function save() {
-  try {
-    var localCopy = {};
-    for (var k in state) {
-      // toastMsg est un message éphémère (2,6s) — jamais persisté, sinon il
-      // resurgit au prochain chargement si save() tombe juste avant qu'il
-      // ne s'efface tout seul.
-      if (k === "toastMsg") continue;
-      localCopy[k] = state[k];
-    }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(localCopy));
-  } catch (e) {
-    console.error("Stockage local plein :", e);
-    showToast("Stockage local plein — essayez avec moins de photos/vidéos.");
+  var localCopy = {};
+  for (var k in state) {
+    // toastMsg est un message éclair (2,6s) — jamais persisté, sinon il
+    // resurgit au prochain chargement si save() tombe juste avant qu'il
+    // ne s'efface tout seul.
+    if (k === "toastMsg") continue;
+    localCopy[k] = state[k];
   }
+  // IndexedDB stocke l'objet directement (pas besoin de JSON.stringify) et
+  // suit les vraies limites d'espace de l'appareil, pas une limite fixe et
+  // minuscule comme l'ancien localStorage.
+  idbSet(STORAGE_KEY, localCopy).catch(function(e) {
+    console.error("Échec de sauvegarde locale :", e);
+    // IMPORTANT : ne jamais réécrire une version tronquée ici en cas
+    // d'échec — une écriture ratée laisse la DERNIÈRE sauvegarde réussie
+    // intacte. Écrire un objet partiel "de secours" écraserait cette bonne
+    // version avec une quasi-vide, ce qui a déjà causé une vraie perte de
+    // données (retour à l'inscription, photos disparues) — sans danger de
+    // continuer sans nouvelle copie locale : Supabase reste la vraie
+    // source des données, cette sauvegarde n'est qu'un raccourci pour un
+    // rechargement plus rapide.
+    if (!_localSaveQuotaWarned) {
+      _localSaveQuotaWarned = true;
+      showToast("ℹ️ Sauvegarde locale indisponible sur cet appareil — l'app continue de fonctionner normalement via Supabase.");
+    }
+  });
 }
 
 // ---------- UTILS ----------
@@ -12227,6 +12309,31 @@ function renderPendingQRCodes() {
   }
 }
 
+function renderPendingStorageReport() {
+  var slot = document.getElementById("browser-storage-report");
+  if (!slot || !slot.dataset.storageReportPending) return;
+  slot.dataset.storageReportPending = "";
+  computeBrowserStorageReport(function(report) {
+    var slot2 = document.getElementById("browser-storage-report");
+    if (!slot2) return; // l'écran a changé entre-temps
+    var html = '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-hard-drive"></i> Ce que le navigateur voit réellement</div>';
+    if (report.estimateUsage != null) {
+      var usageMo = (report.estimateUsage / 1024).toFixed(2);
+      var quotaMo = report.estimateQuota != null ? (report.estimateQuota / 1024).toFixed(0) : "?";
+      html += '<div class="mono" style="font-size:18px;font-weight:700;margin-bottom:4px;">' + usageMo + ' Mo <span style="font-size:12px;color:var(--text-dim);font-weight:400;">/ ' + quotaMo + ' Mo alloués</span></div>';
+      html += '<div style="font-size:10.5px;color:var(--text-dim);margin-bottom:10px;">Chiffre donné par le navigateur lui-même — inclut tout ce qui est stocké pour ce site (pas seulement les données de l\'app).</div>';
+    } else {
+      html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;">Ce navigateur ne fournit pas cette information directement.</div>';
+    }
+    html += '<div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Toutes les clés réellement stockées (' + report.keys.length + ')</div>';
+    for (var i = 0; i < report.keys.length; i++) {
+      var kr = report.keys[i];
+      html += '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border-color);"><span style="word-break:break-all;padding-right:8px;">' + esc(kr.key) + '</span><span style="font-weight:700;flex-shrink:0;">' + (kr.sizeKB > 1024 ? (kr.sizeKB / 1024).toFixed(2) + ' Mo' : kr.sizeKB + ' Ko') + '</span></div>';
+    }
+    slot2.innerHTML = html;
+  });
+}
+
 function applyEmployeeRestrictions() {
   if (!(state.adminUnlocked && !state.adminIsOwner)) return;
   var perms = getEmployeePermissions();
@@ -12313,6 +12420,7 @@ function render() {
     root.innerHTML = buildHTML();
     applyEmployeeRestrictions();
     renderPendingQRCodes();
+    renderPendingStorageReport();
     if (state.showScannerModal && !window._scannerActive) {
       window._scannerActive = true;
       startScanner();
@@ -17862,6 +17970,32 @@ function isEmbeddedBase64(val) {
 
 // ---------- DIAGNOSTIC DE TAILLE — pour trouver exactement ce qui prend
 // de la place, poste par poste, plutôt que de deviner. ----------
+// Ce que le NAVIGATEUR lui-même rapporte comme utilisé/disponible — la
+// vraie vérité du terrain, contrairement à computeStateSizeBreakdown qui
+// ne mesure que ce que l'app s'apprête à écrire. Révèle d'éventuels
+// restes oubliés (autres clés, anciennes données d'avant Supabase jamais
+// effacées) invisibles autrement.
+function computeBrowserStorageReport(onDone) {
+  var report = { keys: [], estimateUsage: null, estimateQuota: null };
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      var v = localStorage.getItem(k) || "";
+      report.keys.push({ key: k, sizeKB: Math.round(v.length / 1024 * 10) / 10 });
+    }
+    report.keys.sort(function(a, b) { return b.sizeKB - a.sizeKB; });
+  } catch (e) {}
+  if (navigator.storage && navigator.storage.estimate) {
+    navigator.storage.estimate().then(function(est) {
+      report.estimateUsage = est.usage != null ? Math.round(est.usage / 1024) : null;
+      report.estimateQuota = est.quota != null ? Math.round(est.quota / 1024) : null;
+      onDone(report);
+    }).catch(function() { onDone(report); });
+  } else {
+    onDone(report);
+  }
+}
+
 function computeStateSizeBreakdown() {
   var breakdown = [];
   var total = 0;
@@ -17883,17 +18017,42 @@ function scanForEmbeddedPhotos() {
       found.push({ collection: collection, id: id, label: label, field: field, sizeKB: Math.round(val.length / 1024) });
     }
   };
+  // ---- Comptes — TOUS, y compris les résidus d'anciens comptes liés
+  // (même téléphone/nom/email, créés avant qu'un compte ne soit fusionné
+  // ou remplacé) : rien n'est filtré ici, chaque entrée de state.accounts
+  // est vérifiée, active ou non. ----
   for (var ai = 0; ai < state.accounts.length; ai++) {
     var a = state.accounts[ai];
-    addIfBase64("accounts", a.id, a.name || a.phone || a.id, "avatarPhoto", a.avatarPhoto);
-    addIfBase64("accounts", a.id, a.name || a.phone || a.id, "selfiePhoto", a.selfiePhoto);
-    addIfBase64("accounts", a.id, a.name || a.phone || a.id, "shopPhoto", a.shopPhoto);
+    var accLabel = a.name || a.phone || a.id;
+    addIfBase64("accounts", a.id, accLabel, "avatarPhoto", a.avatarPhoto);
+    addIfBase64("accounts", a.id, accLabel, "selfiePhoto", a.selfiePhoto);
+    addIfBase64("accounts", a.id, accLabel, "shopPhoto", a.shopPhoto);
+    addIfBase64("accounts", a.id, accLabel, "shopProfilePhoto", a.shopProfilePhoto);
+    addIfBase64("accounts", a.id, accLabel, "shopCoverPhoto", a.shopCoverPhoto);
+    if (Array.isArray(a.verificationDocs)) {
+      for (var adi = 0; adi < a.verificationDocs.length; adi++) {
+        addIfBase64("accounts", a.id, accLabel, "verificationDocs[" + adi + "]", a.verificationDocs[adi]);
+      }
+    }
   }
   for (var pi = 0; pi < state.products.length; pi++) {
     var p = state.products[pi];
     if (Array.isArray(p.images)) {
       for (var pj = 0; pj < p.images.length; pj++) {
         addIfBase64("products", p.id, p.name || p.id, "images[" + pj + "]", p.images[pj]);
+      }
+    }
+  }
+  // ---- Candidatures Point de Retrait — photo de vérification + pièces
+  // justificatives, souvent volumineuses et jamais nettoyées après
+  // traitement de la demande. ----
+  for (var ri = 0; ri < state.relaisApplications.length; ri++) {
+    var r = state.relaisApplications[ri];
+    var rLabel = r.shopName || r.accountName || r.id;
+    addIfBase64("relaisApplications", r.id, rLabel, "selfiePhotoUri", r.selfiePhotoUri);
+    if (Array.isArray(r.verificationDocs)) {
+      for (var rdi = 0; rdi < r.verificationDocs.length; rdi++) {
+        addIfBase64("relaisApplications", r.id, rLabel, "verificationDocs[" + rdi + "]", r.verificationDocs[rdi]);
       }
     }
   }
@@ -20101,6 +20260,13 @@ function renderAdminSecurity() {
     var sd = sizeDiag.breakdown[sdi];
     html += '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border-color);"><span>' + esc(sd.key) + (sd.count != null ? ' (' + sd.count + ')' : '') + '</span><span style="font-weight:700;">' + (sd.sizeKB > 1024 ? (sd.sizeKB / 1024).toFixed(2) + ' Mo' : sd.sizeKB + ' Ko') + '</span></div>';
   }
+  html += '</div>';
+
+  // ---- Ce que le navigateur rapporte lui-même (rempli après coup, car
+  // l'information est asynchrone — voir renderPendingStorageReport). ----
+  html += '<div class="glass-card" style="padding:14px;margin-bottom:16px;" id="browser-storage-report" data-storage-report-pending="1">';
+  html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-hard-drive"></i> Ce que le navigateur voit réellement</div>';
+  html += '<div style="font-size:11.5px;color:var(--text-dim);">Chargement…</div>';
   html += '</div>';
 
   // ---- Nettoyage des vieilles photos enregistrées en base64 (avant
@@ -24285,24 +24451,40 @@ root.addEventListener("click", function(e) {
       var toClean = scanForEmbeddedPhotos();
       var cleanedAccounts = {};
       var cleanedProducts = {};
+      var cleanedRelaisApps = {};
+      var clearField = function(obj, field) {
+        var arrayMatch = field.match(/^(\w+)\[(\d+)\]$/);
+        if (arrayMatch) {
+          var arrName = arrayMatch[1], idx = parseInt(arrayMatch[2], 10);
+          if (Array.isArray(obj[arrName])) obj[arrName][idx] = null;
+        } else {
+          obj[field] = null;
+        }
+      };
       for (var cpi = 0; cpi < toClean.length; cpi++) {
         var item = toClean[cpi];
         if (item.collection === "accounts") {
           var acc = state.accounts.find(function(x) { return x.id === item.id; });
-          if (acc) { acc[item.field] = null; cleanedAccounts[acc.id] = acc; }
+          if (acc) { clearField(acc, item.field); cleanedAccounts[acc.id] = acc; }
         } else if (item.collection === "products") {
           var prod = state.products.find(function(x) { return x.id === item.id; });
-          if (prod) {
-            var idxMatch = item.field.match(/images\[(\d+)\]/);
-            if (idxMatch && prod.images) prod.images[parseInt(idxMatch[1], 10)] = null;
-            cleanedProducts[prod.id] = prod;
-          }
+          if (prod) { clearField(prod, item.field); cleanedProducts[prod.id] = prod; }
+        } else if (item.collection === "relaisApplications") {
+          var rApp = state.relaisApplications.find(function(x) { return x.id === item.id; });
+          if (rApp) { clearField(rApp, item.field); cleanedRelaisApps[rApp.id] = rApp; }
         }
       }
-      Object.values(cleanedAccounts).forEach(function(acc) { saveDoc("accounts", acc); });
+      Object.values(cleanedAccounts).forEach(function(acc) {
+        if (Array.isArray(acc.verificationDocs)) acc.verificationDocs = acc.verificationDocs.filter(function(d) { return d; });
+        saveDoc("accounts", acc);
+      });
       Object.values(cleanedProducts).forEach(function(prod) {
         prod.images = prod.images.filter(function(img) { return img; }); // referme les trous laissés par les photos retirées
         saveDoc("products", prod);
+      });
+      Object.values(cleanedRelaisApps).forEach(function(rApp) {
+        if (Array.isArray(rApp.verificationDocs)) rApp.verificationDocs = rApp.verificationDocs.filter(function(d) { return d; });
+        saveDoc("relaisApplications", rApp);
       });
       save();
       showToast("✅ " + toClean.length + " ancienne(s) photo(s) retirée(s).");
@@ -26491,158 +26673,198 @@ function trySplashFinish() {
 
 setTimeout(function() { _splashMinTimeDone = true; trySplashFinish(); }, 5500);
 
-if (!FIREBASE_ENABLED) {
-  // Mode local (test) : state est déjà prêt (chargé depuis localStorage ou
-  // valeurs par défaut avec le catalogue de démo).
-  _splashAppDataReady = true;
-  trySplashFinish();
-} else {
-  var bootDone = false;
-  var LAST_SYNC_KEY = "gems_last_sync_v2";
-  var lastSyncAt = localStorage.getItem(LAST_SYNC_KEY);
-  var hasCachedData = state.products.length > 0 || state.accounts.length > 0;
-
-  // Avec des données déjà en cache local (visite précédente), l'app
-  // démarre IMMÉDIATEMENT dessus — pas besoin d'attendre le réseau pour
-  // afficher quelque chose. La synchronisation se fait ensuite en fond,
-  // et ne retélécharge que ce qui a changé depuis la dernière visite,
-  // au lieu de tout retélécharger à chaque lancement.
-  if (hasCachedData && lastSyncAt) {
+function bootAppWithLocalData() {
+  if (!FIREBASE_ENABLED) {
+    // Mode local (test) : state est déjà prêt (chargé depuis localStorage ou
+    // valeurs par défaut avec le catalogue de démo).
     _splashAppDataReady = true;
     trySplashFinish();
-    bootDone = true;
-  }
+  } else {
+    var bootDone = false;
+    var LAST_SYNC_KEY = "gems_last_sync_v2";
+    var lastSyncAt = localStorage.getItem(LAST_SYNC_KEY);
+    // Il faut les DEUX pour vraiment sauter la synchro complète — un
+    // "ou" laissait passer un cache incomplet (ex: comptes présents mais
+    // produits vides, vu sur le diagnostic), qui se contentait alors
+    // d'une synchro incrémentale ne redemandant que les changements
+    // récents, sans jamais combler ce qui manquait depuis le début.
+    var hasCachedData = state.products.length > 0 && state.accounts.length > 0;
 
-  // Filet de sécurité : si Supabase ne répond jamais (règles de sécurité
-  // mal configurées qui bloquent silencieusement, table pas encore créée),
-  // l'app démarre quand même après quelques secondes avec ce qui est déjà
-  // en mémoire/localStorage, plutôt que de rester bloquée sur l'écran de
-  // chargement.
-  setTimeout(function() {
-    if (!bootDone) {
-      bootDone = true;
-      _splashAppDataReady = true;
-      console.warn("Chargement Supabase : délai dépassé, démarrage avec les données disponibles.");
-      trySplashFinish();
-    }
-  }, 8000);
-
-  // Synchronisation en fond : incrémentale (seulement les lignes modifiées
-  // depuis la dernière visite) si on a déjà un cache datant de moins de
-  // 24h, sinon un chargement complet — pour se remettre à niveau si
-  // l'appareil est resté longtemps sans se connecter (ex: suppressions
-  // manquées pendant l'absence).
-  var ONE_DAY_MS = 24 * 60 * 60 * 1000;
-  var needsFullSync = !lastSyncAt || (Date.now() - new Date(lastSyncAt).getTime()) > ONE_DAY_MS;
-  var query = sb.from("app_data").select("*");
-  if (!needsFullSync) query = query.gt("updated_at", lastSyncAt);
-
-  query.then(function(res) {
-    if (res.error) {
-      console.error("Erreur de connexion Supabase :", res.error);
-      if (!hasCachedData) showToast("Impossible de joindre Supabase. Vérifiez supabaseConfig et vos règles de sécurité.");
-    } else {
-      if (needsFullSync) {
-        // Chargement complet : on repart d'une table vide par collection,
-        // comme avant — remet aussi à niveau les suppressions manquées.
-        var byCollection = {};
-        SHARED_KEYS.forEach(function(name) { byCollection[name] = []; });
-        res.data.forEach(function(row) {
-          if (byCollection[row.collection]) byCollection[row.collection].push(row.data);
-        });
-        SHARED_KEYS.forEach(function(name) { state[name] = byCollection[name]; });
-      } else {
-        // Incrémental : on met seulement à jour/ajoute les lignes reçues,
-        // le reste du cache local reste tel quel.
-        res.data.forEach(function(row) {
-          if (SHARED_KEYS.indexOf(row.collection) === -1) return;
-          var list = state[row.collection];
-          var idx = list.findIndex(function(item) { return item.id === row.data.id; });
-          if (idx === -1) list.push(row.data); else list[idx] = row.data;
-        });
-      }
-      localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
-      refreshProfileFromAccounts();
-      save();
-
-      // Premier lancement de ce projet Supabase (table vide) : on y dépose
-      // le catalogue de démo, une seule fois.
-      if (state.products.length === 0 && !localStorage.getItem("gems_seeded_v1")) {
-        localStorage.setItem("gems_seeded_v1", "1");
-        SEED_PRODUCTS.forEach(function(p) { saveDoc("products", p); });
-      }
-
-      // Nettoyage — les articles de démonstration déposés au tout début
-      // (avant l'arrivée des premiers vrais vendeurs) ne servent plus à
-      // rien maintenant que le marché est actif, et les gardent aurait
-      // laissé les acheteurs les commander pour de vrai par erreur.
-      // Ponctuel, une seule fois : ils sont repérés par leur sellerId
-      // "seed", partagé par aucun vrai compte.
-      if (!localStorage.getItem("gems_seed_cleanup_v1")) {
-        localStorage.setItem("gems_seed_cleanup_v1", "1");
-        var seedProductsStillPresent = state.products.filter(function(p) { return p.sellerId === "seed"; });
-        if (seedProductsStillPresent.length > 0) {
-          seedProductsStillPresent.forEach(function(p) { deleteRemoteDoc("products", p.id); });
-          state.products = state.products.filter(function(p) { return p.sellerId !== "seed"; });
-          save();
-        }
-      }
-    }
-    if (!bootDone) {
-      bootDone = true;
+    // Avec des données déjà en cache local (visite précédente), l'app
+    // démarre IMMÉDIATEMENT dessus — pas besoin d'attendre le réseau pour
+    // afficher quelque chose. La synchronisation se fait ensuite en fond,
+    // et ne retélécharge que ce qui a changé depuis la dernière visite,
+    // au lieu de tout retélécharger à chaque lancement.
+    if (hasCachedData && lastSyncAt) {
       _splashAppDataReady = true;
       trySplashFinish();
-    } else if (_splashFinished) {
-      render(); // les nouveautés reçues en fond doivent apparaître à l'écran
+      bootDone = true;
     }
-  });
 
-  // Écoute en temps réel : chaque changement (venant de cet appareil ou
-  // d'un autre) met à jour le bon tableau et redessine l'écran.
-  sb.channel("app_data_changes")
-    .on("postgres_changes", { event: "*", schema: "public", table: "app_data" }, function(payload) {
-      var row = payload.new && Object.keys(payload.new).length ? payload.new : payload.old;
-      if (!row || !byCollectionExists(row.collection)) return;
-      var list = state[row.collection] || [];
-      var changed = true;
-      var previousItem = null;
-      var isNewInsert = false;
-      if (payload.eventType === "DELETE") {
-        var beforeLen = list.length;
-        list = list.filter(function(item) { return item.id !== row.id; });
-        changed = list.length !== beforeLen;
+    // Filet de sécurité : si Supabase ne répond jamais (règles de sécurité
+    // mal configurées qui bloquent silencieusement, table pas encore créée),
+    // l'app démarre quand même après quelques secondes avec ce qui est déjà
+    // en mémoire/localStorage, plutôt que de rester bloquée sur l'écran de
+    // chargement.
+    setTimeout(function() {
+      if (!bootDone) {
+        bootDone = true;
+        _splashAppDataReady = true;
+        console.warn("Chargement Supabase : délai dépassé, démarrage avec les données disponibles.");
+        trySplashFinish();
+      }
+    }, 8000);
+
+    // Synchronisation en fond : incrémentale (seulement les lignes modifiées
+    // depuis la dernière visite) si on a déjà un cache datant de moins de
+    // 24h, sinon un chargement complet — pour se remettre à niveau si
+    // l'appareil est resté longtemps sans se connecter (ex: suppressions
+    // manquées pendant l'absence).
+    var ONE_DAY_MS = 24 * 60 * 60 * 1000;
+    // IMPORTANT : si le cache local est vide (state.products/accounts
+    // vides — ex : premier chargement d'IndexedDB, migration pas encore
+    // terminée), on force un chargement COMPLET même si "lastSyncAt" est
+    // récent — sinon l'app ne redemande que les changements récents à
+    // Supabase alors qu'elle n'a rien en mémoire pour les compléter, et le
+    // marché reste vide.
+    var needsFullSync = !lastSyncAt || !hasCachedData || (Date.now() - new Date(lastSyncAt).getTime()) > ONE_DAY_MS;
+    var query = sb.from("app_data").select("*");
+    if (!needsFullSync) query = query.gt("updated_at", lastSyncAt);
+
+    query.then(function(res) {
+      if (res.error) {
+        console.error("Erreur de connexion Supabase :", res.error);
+        if (!hasCachedData) showToast("Impossible de joindre Supabase. Vérifiez supabaseConfig et vos règles de sécurité.");
       } else {
-        var idx = list.findIndex(function(item) { return item.id === row.data.id; });
-        if (idx === -1) {
-          isNewInsert = true;
-          list.push(row.data);
+        if (needsFullSync) {
+          // Chargement complet : on repart d'une table vide par collection,
+          // comme avant — remet aussi à niveau les suppressions manquées.
+          var byCollection = {};
+          SHARED_KEYS.forEach(function(name) { byCollection[name] = []; });
+          res.data.forEach(function(row) {
+            if (byCollection[row.collection]) byCollection[row.collection].push(row.data);
+          });
+          SHARED_KEYS.forEach(function(name) { state[name] = byCollection[name]; });
         } else {
-          previousItem = list[idx];
-          // Écho de notre propre écriture (l'appareil reçoit en retour ce
-          // qu'il vient d'envoyer) : si rien n'a réellement changé, on
-          // évite un second redessin complet de l'écran, source du
-          // "clic fantôme" — l'écran qui disparaît puis réapparaît.
-          if (JSON.stringify(list[idx]) === JSON.stringify(row.data)) {
-            changed = false;
-          } else {
-            list[idx] = row.data;
+          // Incrémental : on met seulement à jour/ajoute les lignes reçues,
+          // le reste du cache local reste tel quel.
+          res.data.forEach(function(row) {
+            if (SHARED_KEYS.indexOf(row.collection) === -1) return;
+            var list = state[row.collection];
+            var idx = list.findIndex(function(item) { return item.id === row.data.id; });
+            if (idx === -1) list.push(row.data); else list[idx] = row.data;
+          });
+        }
+        localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
+        refreshProfileFromAccounts();
+        save();
+
+        // Premier lancement de ce projet Supabase (table vide) : on y dépose
+        // le catalogue de démo, une seule fois.
+        if (state.products.length === 0 && !localStorage.getItem("gems_seeded_v1")) {
+          localStorage.setItem("gems_seeded_v1", "1");
+          SEED_PRODUCTS.forEach(function(p) { saveDoc("products", p); });
+        }
+
+        // Nettoyage — les articles de démonstration déposés au tout début
+        // (avant l'arrivée des premiers vrais vendeurs) ne servent plus à
+        // rien maintenant que le marché est actif, et les gardent aurait
+        // laissé les acheteurs les commander pour de vrai par erreur.
+        // Ponctuel, une seule fois : ils sont repérés par leur sellerId
+        // "seed", partagé par aucun vrai compte.
+        if (!localStorage.getItem("gems_seed_cleanup_v1")) {
+          localStorage.setItem("gems_seed_cleanup_v1", "1");
+          var seedProductsStillPresent = state.products.filter(function(p) { return p.sellerId === "seed"; });
+          if (seedProductsStillPresent.length > 0) {
+            seedProductsStillPresent.forEach(function(p) { deleteRemoteDoc("products", p.id); });
+            state.products = state.products.filter(function(p) { return p.sellerId !== "seed"; });
+            save();
           }
         }
       }
-      state[row.collection] = list;
-      if (row.collection === "accounts") refreshProfileFromAccounts();
-      // Son + notification système — uniquement pour du contenu qui nous
-      // concerne VRAIMENT (jamais nos propres actions), et jamais pendant
-      // le chargement initial (tout l'historique arriverait d'un coup).
-      if (changed && _splashFinished && state.profile) {
-        notifyIfRelevant(row.collection, row.data, previousItem, isNewInsert);
+      if (!bootDone) {
+        bootDone = true;
+        _splashAppDataReady = true;
+        trySplashFinish();
+      } else if (_splashFinished) {
+        render(); // les nouveautés reçues en fond doivent apparaître à l'écran
       }
-      if (changed && _splashFinished) renderOrDefer(); // mise à jour en temps réel après le démarrage — repoussée si on tape dans une fenêtre
-    })
-    .subscribe();
+    });
 
-  function byCollectionExists(name) { return SHARED_KEYS.indexOf(name) !== -1; }
+    // Écoute en temps réel : chaque changement (venant de cet appareil ou
+    // d'un autre) met à jour le bon tableau et redessine l'écran.
+    sb.channel("app_data_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "app_data" }, function(payload) {
+        var row = payload.new && Object.keys(payload.new).length ? payload.new : payload.old;
+        if (!row || !byCollectionExists(row.collection)) return;
+        var list = state[row.collection] || [];
+        var changed = true;
+        var previousItem = null;
+        var isNewInsert = false;
+        if (payload.eventType === "DELETE") {
+          var beforeLen = list.length;
+          list = list.filter(function(item) { return item.id !== row.id; });
+          changed = list.length !== beforeLen;
+        } else {
+          var idx = list.findIndex(function(item) { return item.id === row.data.id; });
+          if (idx === -1) {
+            isNewInsert = true;
+            list.push(row.data);
+          } else {
+            previousItem = list[idx];
+            // Écho de notre propre écriture (l'appareil reçoit en retour ce
+            // qu'il vient d'envoyer) : si rien n'a réellement changé, on
+            // évite un second redessin complet de l'écran, source du
+            // "clic fantôme" — l'écran qui disparaît puis réapparaît.
+            if (JSON.stringify(list[idx]) === JSON.stringify(row.data)) {
+              changed = false;
+            } else {
+              list[idx] = row.data;
+            }
+          }
+        }
+        state[row.collection] = list;
+        if (row.collection === "accounts") refreshProfileFromAccounts();
+        // Son + notification système — uniquement pour du contenu qui nous
+        // concerne VRAIMENT (jamais nos propres actions), et jamais pendant
+        // le chargement initial (tout l'historique arriverait d'un coup).
+        if (changed && _splashFinished && state.profile) {
+          notifyIfRelevant(row.collection, row.data, previousItem, isNewInsert);
+        }
+        if (changed && _splashFinished) renderOrDefer(); // mise à jour en temps réel après le démarrage — repoussée si on tape dans une fenêtre
+      })
+      .subscribe();
+
+    function byCollectionExists(name) { return SHARED_KEYS.indexOf(name) !== -1; }
+  }
 }
+
+// Charge l'état local (IndexedDB, avec repli localStorage pour la
+// transition) — ASYNCHRONE, donc tout ce qui dépend de "state" déjà
+// rempli doit attendre que cette étape se termine avant de continuer.
+// Filet de sécurité : si IndexedDB ne répond jamais (bloqué par le
+// navigateur en navigation privée, ou par ce mode d'ouverture de fichier
+// sur certains appareils), l'app démarre quand même après un court délai
+// plutôt que de rester bloquée indéfiniment sur l'écran de démarrage.
+var _localLoadSettled = false;
+setTimeout(function() {
+  if (_localLoadSettled) return;
+  _localLoadSettled = true;
+  console.warn("Chargement du stockage local : délai dépassé, démarrage avec les valeurs par défaut.");
+  bootAppWithLocalData();
+}, 2500);
+
+loadStateAsync().then(function(loaded) {
+  if (_localLoadSettled) return; // le filet de sécurité a déjà démarré l'app, ne pas redémarrer par-dessus
+  _localLoadSettled = true;
+  if (loaded) state = loaded;
+  bootAppWithLocalData();
+}).catch(function(e) {
+  if (_localLoadSettled) return;
+  _localLoadSettled = true;
+  console.error("Chargement de l'état local impossible :", e);
+  bootAppWithLocalData(); // on démarre quand même, avec les valeurs par défaut
+});
 
 // Décide si un changement reçu du serveur mérite un bip + une notification
 // système sur CET appareil — c'est-à-dire : ça concerne le compte
