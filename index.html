@@ -13571,6 +13571,9 @@ function renderProfileModal() {
   html += '<button class="vendor-hub-card" data-action="toggle-dark-mode" style="background:var(--bg-body);"><i class="fa-solid ' + (state.darkMode ? 'fa-sun' : 'fa-moon') + '"></i><div><div class="vh-title">' + (state.darkMode ? 'Mode clair' : 'Mode sombre') + '</div><div class="vh-sub">' + (state.darkMode ? 'Revenir à l\'affichage clair' : 'Passer à un affichage sombre') + '</div></div><div class="dark-mode-switch' + (state.darkMode ? ' on' : '') + '"><div class="dark-mode-knob"></div></div></button>';
   var pushIsOn = typeof Notification !== "undefined" && Notification.permission === "granted";
   html += '<button class="vendor-hub-card" data-action="request-push-permission" style="background:var(--bg-body);"><i class="fa-solid fa-bell"></i><div><div class="vh-title">' + (pushIsOn ? 'Notifications activées' : 'Activer les notifications') + '</div><div class="vh-sub">' + (pushIsOn ? 'Vous recevrez les alertes même app fermée' : 'Recevoir les alertes importantes même app fermée') + '</div></div>' + (pushIsOn ? '<i class="fa-solid fa-circle-check" style="color:var(--accent);"></i>' : '<i class="fa-solid fa-chevron-right"></i>') + '</button>';
+  if (pushIsOn) {
+    html += '<button class="vendor-hub-card" data-action="test-local-notification" style="background:var(--bg-body);"><i class="fa-solid fa-vial"></i><div><div class="vh-title">Test rapide (sans passer par le serveur)</div><div class="vh-sub">Vérifie si ce téléphone affiche des notifications de ce site, tout court</div></div></button>';
+  }
   html += '<button class="vendor-hub-card" data-action="scan-coming-soon" style="background:var(--bg-body);"><i class="fa-solid fa-shield-halved"></i><div><div class="vh-title">Politique de confidentialité</div><div class="vh-sub">Bientôt disponible</div></div><i class="fa-solid fa-chevron-right"></i></button>';
   html += '</div>';
 
@@ -23947,6 +23950,18 @@ root.addEventListener("click", function(e) {
         break;
       }
       requestPushPermissionAndSubscribe();
+      break;
+    }
+    case "test-local-notification": {
+      if (!("serviceWorker" in navigator)) { showToast("❌ Service worker indisponible sur ce navigateur."); break; }
+      navigator.serviceWorker.ready.then(function(registration) {
+        registration.showNotification("Sounsouni — Test local", {
+          body: "Si tu vois ceci, ton téléphone affiche bien les notifications de ce site.",
+          icon: "./icons/icon-192-any.png",
+          vibrate: [100, 50, 100]
+        });
+      });
+      showToast("⏳ Notification locale envoyée — regarde ton écran maintenant (pas besoin de fermer l'app).");
       break;
     }
     case "delete-profile-photo": {
