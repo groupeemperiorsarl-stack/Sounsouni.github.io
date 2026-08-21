@@ -7193,12 +7193,27 @@ function urlBase64ToUint8Array(base64String) {
 function subscribeToPush() {
   if (!state.profile) return;
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  var currentKeyBytes = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
   navigator.serviceWorker.ready.then(function(registration) {
     return registration.pushManager.getSubscription().then(function(existing) {
-      if (existing) return existing;
+      if (existing) {
+        // Vérifie que l'abonnement existant utilise bien la clé ACTUELLE —
+        // si la clé a changé (ex: régénération VAPID), un vieil abonnement
+        // ne fonctionne plus et doit être remplacé, jamais réutilisé tel
+        // quel.
+        var existingKey = existing.options && existing.options.applicationServerKey ? new Uint8Array(existing.options.applicationServerKey) : null;
+        var keysMatch = existingKey && existingKey.length === currentKeyBytes.length && existingKey.every(function(b, i) { return b === currentKeyBytes[i]; });
+        if (keysMatch) return existing;
+        return existing.unsubscribe().then(function() {
+          return registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: currentKeyBytes
+          });
+        });
+      }
       return registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+        applicationServerKey: currentKeyBytes
       });
     });
   }).then(function(subscription) {
