@@ -17860,6 +17860,22 @@ function isEmbeddedBase64(val) {
   return typeof val === "string" && val.indexOf("data:image") === 0;
 }
 
+// ---------- DIAGNOSTIC DE TAILLE — pour trouver exactement ce qui prend
+// de la place, poste par poste, plutôt que de deviner. ----------
+function computeStateSizeBreakdown() {
+  var breakdown = [];
+  var total = 0;
+  for (var key in state) {
+    if (key === "toastMsg") continue;
+    var size = 0;
+    try { size = JSON.stringify(state[key]).length; } catch (e) { size = 0; }
+    total += size;
+    if (size > 500) breakdown.push({ key: key, sizeKB: Math.round(size / 1024 * 10) / 10, count: Array.isArray(state[key]) ? state[key].length : null });
+  }
+  breakdown.sort(function(a, b) { return b.sizeKB - a.sizeKB; });
+  return { total: Math.round(total / 1024 * 10) / 10, breakdown: breakdown };
+}
+
 function scanForEmbeddedPhotos() {
   var found = [];
   var addIfBase64 = function(collection, id, label, field, val) {
@@ -20073,6 +20089,19 @@ function renderAdminSecurity() {
   var ownerCreds = getAdminCredentials("owner");
   var empCreds = getAdminCredentials("employee");
   var html = '';
+
+  // ---- Diagnostic de taille — toujours visible, pour voir exactement ce
+  // qui prend de la place, indépendamment des autres outils ci-dessous. ----
+  var sizeDiag = computeStateSizeBreakdown();
+  html += '<div class="glass-card" style="padding:14px;margin-bottom:16px;">';
+  html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-chart-simple"></i> Diagnostic de taille</div>';
+  html += '<div class="mono" style="font-size:20px;font-weight:700;color:var(--accent);margin-bottom:8px;">' + (sizeDiag.total > 1024 ? (sizeDiag.total / 1024).toFixed(2) + ' Mo' : sizeDiag.total + ' Ko') + '</div>';
+  html += '<div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Les plus gros postes</div>';
+  for (var sdi = 0; sdi < Math.min(sizeDiag.breakdown.length, 15); sdi++) {
+    var sd = sizeDiag.breakdown[sdi];
+    html += '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border-color);"><span>' + esc(sd.key) + (sd.count != null ? ' (' + sd.count + ')' : '') + '</span><span style="font-weight:700;">' + (sd.sizeKB > 1024 ? (sd.sizeKB / 1024).toFixed(2) + ' Mo' : sd.sizeKB + ' Ko') + '</span></div>';
+  }
+  html += '</div>';
 
   // ---- Nettoyage des vieilles photos enregistrées en base64 (avant
   // Supabase Storage) — cause la plus fréquente de "stockage plein" sur
