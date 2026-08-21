@@ -20018,6 +20018,23 @@ function renderAdminAccountDetail(accountId) {
     html += '<div style="grid-column:1/3;"><span style="color:var(--text-dim);">Position GPS</span><br><strong>' + (a.shopLat != null ? a.shopLat.toFixed(5) + ', ' + a.shopLng.toFixed(5) : '—') + '</strong></div>';
   }
   html += '</div>';
+
+  // ---- Diagnostic notifications push (réservé Groupe 1) ----
+  if (state.adminIsOwner && !state.adminCountryScope) {
+    var accountSubs = (state.pushSubscriptions || []).filter(function(s) { return s.accountId === a.id; });
+    html += '<div class="glass-card" style="padding:14px;margin-top:10px;">';
+    html += '<div style="font-weight:800;font-size:13.5px;margin-bottom:8px;"><i class="fa-solid fa-bell"></i> Notifications push</div>';
+    if (accountSubs.length === 0) {
+      html += '<div style="font-size:12px;color:var(--danger);">❌ Aucun abonnement enregistré — ce compte ne peut pas recevoir de vraie notification pour l\'instant (app fermée). Il doit ouvrir l\'app et activer les notifications dans Profil.</div>';
+    } else {
+      html += '<div style="font-size:12px;color:var(--accent);margin-bottom:8px;">✅ ' + accountSubs.length + ' appareil(s) abonné(s)</div>';
+      for (var asi = 0; asi < accountSubs.length; asi++) {
+        html += '<div style="font-size:10.5px;color:var(--text-dim);padding:3px 0;border-top:1px solid var(--border-color);">Abonné le ' + fmtDateTime(accountSubs[asi].createdAt) + '</div>';
+      }
+      html += '<button class="btn-secondary" style="width:100%;margin-top:10px;" data-action="send-test-push" data-value="' + a.id + '"><i class="fa-solid fa-paper-plane"></i> Envoyer une notification test</button>';
+    }
+    html += '</div>';
+  }
   // ---- Sécurité (visible uniquement par l'administration) ----
   html += '<div class="glass-card" style="padding:14px;margin-top:10px;">';
   html += '<div style="font-weight:800;font-size:13.5px;margin-bottom:8px;"><i class="fa-solid fa-shield-halved"></i> Sécurité (réservé à l\'administration)</div>';
@@ -23922,7 +23939,11 @@ root.addEventListener("click", function(e) {
     }
     case "request-push-permission": {
       if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-        showToast("✅ Déjà activées sur cet appareil.");
+        // Déjà autorisé — mais on relance quand même un vrai réabonnement
+        // (pas juste un message), au cas où l'abonnement existant serait
+        // périmé ou lié à un autre compte sur cet appareil.
+        subscribeToPush();
+        showToast("✅ Notifications déjà activées — abonnement rafraîchi.");
         break;
       }
       requestPushPermissionAndSubscribe();
@@ -24570,6 +24591,21 @@ root.addEventListener("click", function(e) {
     case "set-admin-subtab": state.adminSubTab = value; render(); break;
     case "set-admin-accounts-mode": state.adminAccountsMode = value; render(); break;
     case "reset-admin-activity-date": state.adminActivityFrom = null; state.adminActivityTo = null; render(); break;
+    case "send-test-push": {
+      showToast("⏳ Envoi de la notification test...");
+      fetch(supabaseConfig.url + "/functions/v1/send-push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+        body: JSON.stringify({ userId: value, title: "Sounsouni — Test", body: "Ceci est une notification test envoyée depuis l'administration." })
+      })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.ok) showToast("✅ Réponse reçue — " + data.sent + "/" + data.totalSubscriptions + " envoi(s) réussi(s).");
+          else showToast("❌ Échec : " + (data.error || "raison inconnue"));
+        })
+        .catch(function() { showToast("❌ Impossible de contacter la fonction — vérifiez la connexion."); });
+      break;
+    }
     case "clean-embedded-photos": {
       if (!confirm("Retirer toutes les vieilles photos repérées ? Chaque personne concernée pourra en renvoyer une si besoin.")) break;
       var toClean = scanForEmbeddedPhotos();
