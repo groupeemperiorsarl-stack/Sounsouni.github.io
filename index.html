@@ -7219,7 +7219,12 @@ function subscribeToPush() {
   }).then(function(subscription) {
     if (!subscription) return;
     var json = subscription.toJSON();
-    var existingEntry = (state.pushSubscriptions || []).find(function(s) { return s.endpoint === json.endpoint; });
+    // Identifié par appareil ET compte ensemble — pas seulement l'appareil
+    // — pour qu'un même téléphone puisse garder un abonnement actif pour
+    // CHAQUE compte qui s'y est connecté (utile pour tester plusieurs
+    // comptes sur un seul appareil), au lieu que le dernier compte connecté
+    // n'écrase l'abonnement du précédent.
+    var existingEntry = (state.pushSubscriptions || []).find(function(s) { return s.endpoint === json.endpoint && s.accountId === state.profile.id; });
     var entry = {
       id: existingEntry ? existingEntry.id : uid(),
       accountId: state.profile.id,
