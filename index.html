@@ -12,6 +12,12 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     
+    <!-- Idiomorph — pour ne mettre à jour que ce qui a réellement changé
+         à l'écran à chaque action, au lieu de tout reconstruire à chaque
+         fois. Chargé de façon synchrone (pas "defer") car nécessaire dès
+         le tout premier rendu de l'app. -->
+    <script src="https://cdn.jsdelivr.net/npm/idiomorph@0.7.4/dist/idiomorph.min.js"></script>
+    
     <!-- Chart.js pour les graphiques admin — chargé en arrière-plan,
          jamais utilisé avant l'ouverture du tableau de bord admin. -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
@@ -6657,6 +6663,7 @@ function defaultState() {
     editingShopName: false,
     adminSearchTypeFilter: "all",
     showScannerModal: false,
+    scannerSearchMode: false, // false | true (recherche marché) | "admin" (recherche admin)
     scannerTargetInputId: null,
     scannerAutoConfirmAction: null,
     scannerAutoConfirmValue: null,
@@ -6827,7 +6834,7 @@ function emptyProductDraft(profileForDefault) {
   var p = profileForDefault;
   var defaultNonQuantifiable = p && p.sellerType === "entreprise" && (p.sellerSector === "decoration" || p.sellerSector === "evenementiel");
   var defaultCategory = (p && isServiceSeller(p)) ? "Autre" : CATEGORIES[1].name;
-  return { name: "", price: "", oldPrice: "", stock: "", isQuantifiable: !defaultNonQuantifiable, category: defaultCategory, description: "", emoji: "🛍️", images: [], video: null, colors: [], sizes: [], fitNote: "", tieredPricing: [], materiau: "", poidsBijou: "", contenance: "", typePeauUsage: "", ingredientsCosmetique: "", datePeremption: "", marqueElectro: "", modeleElectro: "", etatElectro: "neuf", garantieElectro: "", specsElectro: "", puissanceElectro: "", quantitePoidsAgri: "", uniteVenteAgri: "kg", saisonRecolte: "", fraicheurAgri: "", etatFraicheur: "", marqueAuto: "", modeleAuto: "", anneeAuto: "", etatAuto: "neuf", kilometrageAuto: "",
+  return { name: "", price: "", oldPrice: "", stock: "", isQuantifiable: !defaultNonQuantifiable, category: defaultCategory, description: "", emoji: "🛍️", images: [], video: null, colors: [], sizes: [], fitNote: "", tieredPricing: [], barcode: "", materiau: "", poidsBijou: "", contenance: "", typePeauUsage: "", ingredientsCosmetique: "", datePeremption: "", marqueElectro: "", modeleElectro: "", etatElectro: "neuf", garantieElectro: "", specsElectro: "", puissanceElectro: "", quantitePoidsAgri: "", uniteVenteAgri: "kg", saisonRecolte: "", fraicheurAgri: "", etatFraicheur: "", marqueAuto: "", modeleAuto: "", anneeAuto: "", etatAuto: "neuf", kilometrageAuto: "",
     matiereMode: "", occasionMode: "", etatMode: "neuf", genreEnfant: "mixte", ageRecommande: "",
     typeChaussure: "", matiereChaussure: "", etatChaussure: "neuf",
     typeSolaire: "", puissanceSolaire: "", autonomieSolaire: "", garantieSolaire: "",
@@ -7095,7 +7102,7 @@ function showToast(msg) {
 // tout l'intérêt d'une clé "publique"). La clé PRIVÉE correspondante ne
 // vit que dans les secrets Supabase (RESEND_API_KEY suit le même
 // principe), jamais ici.
-const VAPID_PUBLIC_KEY = "BKtHkkxpLXqd6wSYY5zSyoBVq_55304s4U5scHgT48fUQPptJYiG2LRU0W09cC_5BPpkv469uOpLZqO5UM2GO6I";
+const VAPID_PUBLIC_KEY = "BLLElTCIPVjzJqpO4svlME6HxnHfvehQIBuL8-dB6gVFdzU4edrH05oMmJFQrTS8L34lIEy3lkwmimNJmURLyp8";
 
 // Jeton Mapbox — laisse vide tant que tu ne l'as pas créé. Dès qu'il est
 // rempli ici, les prochaines villes ajoutées (Bo, Kankan, ou n'importe
@@ -11444,7 +11451,7 @@ function filteredProducts(skipValueFilters) {
     var p = state.products[i];
     var matchCat = state.category === "Tout" || p.category === state.category;
     var search = state.search.trim();
-    var matchSearch = !search || p.name.toLowerCase().indexOf(search.toLowerCase()) !== -1 || p.shopName.toLowerCase().indexOf(search.toLowerCase()) !== -1;
+    var matchSearch = !search || p.name.toLowerCase().indexOf(search.toLowerCase()) !== -1 || p.shopName.toLowerCase().indexOf(search.toLowerCase()) !== -1 || (p.barcode || "") === search;
     if (!matchCat || !matchSearch) continue;
     if (state.shopFilterSellerId && p.sellerId !== state.shopFilterSellerId) continue;
     if (state.sectorFilter) {
@@ -12093,7 +12100,7 @@ var lastHistoryOverlayKey = null;
 var OVERLAY_REGISTRY = [
   { key: "lightbox", isOpen: function () { return state.lightboxOpen; }, close: function () { state.lightboxOpen = false; } },
   { key: "chat", isOpen: function () { return state.chatOpen; }, close: function () { state.chatOpen = false; } },
-  { key: "scanner", isOpen: function () { return state.showScannerModal; }, close: function () { state.showScannerModal = false; } },
+  { key: "scanner", isOpen: function () { return state.showScannerModal; }, close: function () { state.showScannerModal = false; state.scannerSearchMode = false; } },
   { key: "detailProduct", isOpen: function () { return !!state.detailProductId; }, close: function () { state.detailProductId = null; } },
   { key: "adminGate", isOpen: function () { return state.showAdminGate; }, close: function () { state.showAdminGate = false; state.pendingRole = null; } },
   { key: "adminOrderDetail", isOpen: function () { return !!state.adminOrderDetailId; }, close: function () { state.adminOrderDetailId = null; } },
@@ -12417,7 +12424,18 @@ function render() {
   }
 
   try {
-    root.innerHTML = buildHTML();
+    // Idiomorph : ne change dans le DOM que ce qui a réellement changé,
+    // au lieu de tout détruire et reconstruire à chaque action — un
+    // vrai gain de fluidité, surtout sur les écrans chargés (marché,
+    // listes admin). Repli automatique sur l'ancien comportement si la
+    // bibliothèque n'a pas pu charger (réseau capricieux), pour ne
+    // jamais bloquer l'app à cause de ça.
+    var newHtml = buildHTML();
+    if (window.Idiomorph) {
+      Idiomorph.morph(root, newHtml, { morphStyle: "innerHTML" });
+    } else {
+      root.innerHTML = newHtml;
+    }
     applyEmployeeRestrictions();
     renderPendingQRCodes();
     renderPendingStorageReport();
@@ -15355,7 +15373,7 @@ function renderMarketTopSection(compact) {
   html += '<div class="gems-search"><i class="fa-solid fa-magnifying-glass"></i>';
   html += '<input id="search-input" placeholder="Rechercher un produit, une categorie\u2026" value="' + esc(state.search) + '" data-bind="search" data-live="filter" />';
   html += '</div>';
-  html += '<button class="icon-btn search-tool-btn" data-action="scan-coming-soon"><i class="fa-solid fa-barcode"></i></button>';
+  html += '<button class="icon-btn search-tool-btn" data-action="open-search-scanner"><i class="fa-solid fa-barcode"></i></button>';
   html += '<button class="icon-btn search-tool-btn" data-action="toggle-filter-panel"><i class="fa-solid fa-sliders"></i></button>';
   html += '</div>';
 
@@ -17068,6 +17086,12 @@ function renderSellerProducts() {
   }
   html += '<label class="field-label">Nom</label>';
   html += '<input class="input" placeholder="Nom du produit" value="' + esc(d.name) + '" data-bind="productDraft.name" />';
+  html += '<label class="field-label">Code-barres (optionnel)</label>';
+  html += '<div style="display:flex;gap:8px;">';
+  html += '<input class="input" id="product-barcode-input" placeholder="Ex : 6191234567890" value="' + esc(d.barcode || '') + '" data-bind="productDraft.barcode" />';
+  html += '<button type="button" class="btn-secondary" style="flex:0;padding:10px 12px;" data-action="open-scanner" data-target="product-barcode-input"><i class="fa-solid fa-barcode"></i></button>';
+  html += '</div>';
+  html += '<div style="font-size:10.5px;color:var(--text-dim);margin:-6px 0 10px;">Si ce produit a un vrai code-barres (étiquette du fabricant), les acheteurs pourront le retrouver en le scannant depuis le marché.</div>';
   html += '<label class="field-label">Ce produit ou service est-il quantifiable ?</label>';
   html += '<div style="display:flex;gap:8px;margin-bottom:4px;flex-wrap:wrap;">';
   html += '<button type="button" class="chip ' + (!hideStock ? 'active' : '') + '" style="white-space:normal;flex:1 1 130px;text-align:center;line-height:1.3;" data-action="set-product-quantifiable" data-value="1">Oui — j\'ai un ' + (stockLabel === 'Stock' ? 'stock' : 'nombre') + ' précis</button>';
@@ -17800,7 +17824,7 @@ function renderAdminSearchResults(q) {
 
   var matchedProducts = state.products.filter(function(p) {
     if (!inAdminScope(p)) return false;
-    return (p.name || "").toLowerCase().indexOf(query) !== -1 || (p.shopName || "").toLowerCase().indexOf(query) !== -1;
+    return (p.name || "").toLowerCase().indexOf(query) !== -1 || (p.shopName || "").toLowerCase().indexOf(query) !== -1 || (p.barcode || "") === q.trim();
   }).slice(0, 20);
 
   var matchedOrders = state.orders.filter(function(o) {
@@ -18134,6 +18158,7 @@ function renderAdmin() {
   html += '<i class="fa-solid fa-magnifying-glass" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--mc-dim);font-size:13px;"></i>';
   if (state.adminGlobalSearch) html += '<button class="link-btn" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);padding:4px;" data-action="clear-admin-global-search"><i class="fa-solid fa-xmark"></i></button>';
   html += '</div>';
+  html += '<button class="btn-secondary" style="flex:0;padding:0 16px;" data-action="open-admin-search-scanner"><i class="fa-solid fa-barcode"></i></button>';
   html += '<button class="btn-primary" style="flex:0;padding:0 16px;" data-action="submit-admin-global-search"><i class="fa-solid fa-magnifying-glass"></i></button>';
   html += '</div>';
 
@@ -21374,14 +21399,17 @@ function renderAdminGateModal() {
 // (state.scannerTargetInputId) — la saisie manuelle reste toujours
 // disponible en parallèle, ce n'est jamais la seule option.
 function renderScannerModal() {
+  var isSearchMode = !!state.scannerSearchMode;
+  var title = isSearchMode ? "Scanner un produit ou un code" : "Scanner un code";
+  var hint = isSearchMode ? "Visez le code-barres d'un produit, ou un QR code…" : "Visez le code…";
   var html = '<div class="modal-overlay" id="scanner-overlay" data-action="close-scanner"><div class="modal-sheet" style="max-width:360px;text-align:center;">';
   html += '<button class="modal-close" data-action="close-scanner"><i class="fa-solid fa-xmark"></i></button>';
-  html += '<div class="section-title" style="margin-bottom:10px;">Scanner un code</div>';
+  html += '<div class="section-title" style="margin-bottom:10px;">' + title + '</div>';
   html += '<div style="position:relative;width:100%;aspect-ratio:1/1;background:#000;border-radius:14px;overflow:hidden;margin-bottom:10px;">';
   html += '<video id="scanner-video" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video>';
   html += '<div style="position:absolute;inset:20%;border:2.5px solid rgba(255,255,255,0.7);border-radius:10px;pointer-events:none;"></div>';
   html += '</div>';
-  html += '<div id="scanner-status" style="font-size:11.5px;color:var(--text-dim);min-height:16px;">Visez le code…</div>';
+  html += '<div id="scanner-status" style="font-size:11.5px;color:var(--text-dim);min-height:16px;">' + hint + '</div>';
   html += '<button class="link-btn" style="margin-top:10px;" data-action="close-scanner">Annuler et saisir à la main</button>';
   html += '</div></div>';
   return html;
@@ -21391,10 +21419,6 @@ function startScanner() {
   var video = document.getElementById('scanner-video');
   var statusEl = document.getElementById('scanner-status');
   if (!video) return;
-  if (typeof jsQR === 'undefined') {
-    if (statusEl) statusEl.textContent = "Le scanner n'a pas pu se charger — utilisez la saisie manuelle.";
-    return;
-  }
   // Même cause que pour le micro : la caméra exige un "contexte sécurisé"
   // (une vraie adresse https://) — sans ça, le navigateur refuse toujours,
   // quel que soit l'appareil. Message clair plutôt qu'une erreur technique
@@ -21403,55 +21427,55 @@ function startScanner() {
     if (statusEl) statusEl.textContent = "🔒 La caméra nécessite une vraie adresse web (https://) — utilisez la saisie manuelle en attendant que l'app soit en ligne.";
     return;
   }
+  // API native du téléphone si disponible — lit à la fois les QR codes ET
+  // les vrais codes-barres produits (EAN-13, UPC...), plus rapide et plus
+  // fiable que la bibliothèque JS. Repli automatique sur jsQR (QR codes
+  // uniquement) si le navigateur ne la propose pas.
+  var useNative = typeof BarcodeDetector !== "undefined";
+  var nativeDetector = null;
+  if (useNative) {
+    try {
+      nativeDetector = new BarcodeDetector({ formats: ["qr_code", "ean_13", "ean_8", "upc_a", "upc_e", "code_128"] });
+    } catch (e) { useNative = false; }
+  }
+  if (!useNative && typeof jsQR === 'undefined') {
+    if (statusEl) statusEl.textContent = "Le scanner n'a pas pu se charger — utilisez la saisie manuelle.";
+    return;
+  }
   navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(function(stream) {
     window._scannerStream = stream;
     video.srcObject = stream;
     var canvas = document.createElement('canvas');
     var ctx = canvas.getContext('2d');
+    var busy = false; // évite d'empiler les appels à detect() (asynchrone) plus vite qu'ils ne se terminent
+    function handleResult(value) {
+      stopScanner();
+      showToast("✅ Code lu : " + value);
+      onScanDetected(value);
+    }
     function tick() {
       if (!state.showScannerModal) return;
       if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        var code = jsQR(imageData.data, imageData.width, imageData.height);
-        if (code && code.data) {
-          stopScanner();
-          showToast("✅ Code lu : " + code.data);
-          if (state.scannerAutoConfirmAction === "confirm-depot") {
-            state.showScannerModal = false;
-            confirmRelaisDepot(state.scannerAutoConfirmValue, code.data);
-            return;
+        if (useNative) {
+          if (!busy) {
+            busy = true;
+            nativeDetector.detect(video).then(function(codes) {
+              busy = false;
+              if (codes && codes.length > 0 && codes[0].rawValue) { handleResult(codes[0].rawValue); return; }
+              if (state.showScannerModal) window._scannerRAF = requestAnimationFrame(tick);
+            }).catch(function() {
+              busy = false;
+              if (state.showScannerModal) window._scannerRAF = requestAnimationFrame(tick);
+            });
+            return; // on attend la réponse avant la prochaine image, pas de double appel
           }
-          if (state.scannerAutoConfirmAction === "confirm-retrait") {
-            state.showScannerModal = false;
-            confirmRelaisRetrait(state.scannerAutoConfirmValue, code.data);
-            return;
-          }
-          if (state.scannerAutoConfirmAction === "confirm-external-parcel-retrieval") {
-            state.showScannerModal = false;
-            confirmExternalParcelRetrieval(state.scannerAutoConfirmValue, code.data);
-            return;
-          }
-          if (state.scannerAutoConfirmAction === "verify-otp") {
-            state.showScannerModal = false;
-            verifyDeliveryOTP(state.scannerAutoConfirmValue, code.data);
-            return;
-          }
-          // Pas de confirmation automatique : on remplit le champ et on
-          // referme la fenêtre du scanner SANS redessiner toute la page
-          // (un rendu complet effacerait la valeur qu'on vient d'inscrire,
-          // ces champs n'étant pas liés à l'état).
-          var target = document.getElementById(state.scannerTargetInputId);
-          if (target) {
-            target.value = code.data;
-            target.dispatchEvent(new Event('input', { bubbles: true }));
-          }
-          state.showScannerModal = false;
-          var overlay = document.getElementById('scanner-overlay');
-          if (overlay) overlay.remove();
-          return;
+        } else {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          var code = jsQR(imageData.data, imageData.width, imageData.height);
+          if (code && code.data) { handleResult(code.data); return; }
         }
       }
       window._scannerRAF = requestAnimationFrame(tick);
@@ -21460,6 +21484,70 @@ function startScanner() {
   }).catch(function(err) {
     if (statusEl) statusEl.textContent = "Caméra inaccessible (" + (err && err.name ? err.name : "erreur") + ") — utilisez la saisie manuelle.";
   });
+}
+
+// Que faire d'un code lu — centralisé ici pour que les 8 points de scan de
+// l'app (livraison, colis, recherche produit, recherche admin…) partagent
+// exactement la même logique, au lieu de la dupliquer partout.
+function onScanDetected(value) {
+  if (state.scannerAutoConfirmAction === "confirm-depot") {
+    state.showScannerModal = false;
+    confirmRelaisDepot(state.scannerAutoConfirmValue, value);
+    return;
+  }
+  if (state.scannerAutoConfirmAction === "confirm-retrait") {
+    state.showScannerModal = false;
+    confirmRelaisRetrait(state.scannerAutoConfirmValue, value);
+    return;
+  }
+  if (state.scannerAutoConfirmAction === "confirm-external-parcel-retrieval") {
+    state.showScannerModal = false;
+    confirmExternalParcelRetrieval(state.scannerAutoConfirmValue, value);
+    return;
+  }
+  if (state.scannerAutoConfirmAction === "verify-otp") {
+    state.showScannerModal = false;
+    verifyDeliveryOTP(state.scannerAutoConfirmValue, value);
+    return;
+  }
+  if (state.scannerSearchMode) {
+    // Mode recherche (barre de recherche marché, ou recherche admin) —
+    // d'abord un produit dont le code-barres correspond exactement, sinon
+    // la valeur lue sert de simple recherche texte.
+    state.showScannerModal = false;
+    var matchedProduct = state.products.find(function(p) { return p.barcode && p.barcode === value; });
+    if (matchedProduct) {
+      state.detailProductId = matchedProduct.id;
+      state.activeImageIndex = 0;
+      state.selectedQty = 1;
+      state.selectedColor = null;
+      state.selectedSize = null;
+      state.scannerSearchMode = false;
+      render();
+      window.scrollTo(0, 0);
+      return;
+    }
+    if (state.scannerSearchMode === "admin") {
+      state.adminGlobalSearch = value;
+    } else {
+      state.search = value;
+    }
+    state.scannerSearchMode = false;
+    render();
+    return;
+  }
+  // Pas de confirmation automatique : on remplit le champ et on referme la
+  // fenêtre du scanner SANS redessiner toute la page (un rendu complet
+  // effacerait la valeur qu'on vient d'inscrire, ces champs n'étant pas
+  // liés à l'état).
+  var target = document.getElementById(state.scannerTargetInputId);
+  if (target) {
+    target.value = value;
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  state.showScannerModal = false;
+  var overlay = document.getElementById('scanner-overlay');
+  if (overlay) overlay.remove();
 }
 
 function stopScanner() {
@@ -21828,6 +21916,7 @@ function submitProductDraft() {
       sizes: d.sizes || [],
       fitNote: d.fitNote || "",
       tieredPricing: tieredPricing,
+      barcode: (d.barcode || "").trim() || null,
       sellerId: state.profile.id,
       sellerName: state.profile.name,
       shopName: state.profile.shopName || "Boutique",
@@ -25115,11 +25204,31 @@ root.addEventListener("click", function(e) {
       state.scannerTargetInputId = btn.dataset.target;
       state.scannerAutoConfirmAction = btn.dataset.confirmAction || null;
       state.scannerAutoConfirmValue = btn.dataset.confirmValue || null;
+      state.scannerSearchMode = false;
+      render();
+      break;
+    }
+    case "open-search-scanner": {
+      state.showScannerModal = true;
+      state.scannerTargetInputId = null;
+      state.scannerAutoConfirmAction = null;
+      state.scannerAutoConfirmValue = null;
+      state.scannerSearchMode = true;
+      render();
+      break;
+    }
+    case "open-admin-search-scanner": {
+      state.showScannerModal = true;
+      state.scannerTargetInputId = null;
+      state.scannerAutoConfirmAction = null;
+      state.scannerAutoConfirmValue = null;
+      state.scannerSearchMode = "admin";
       render();
       break;
     }
     case "close-scanner": {
       state.showScannerModal = false;
+      state.scannerSearchMode = false;
       render();
       break;
     }
