@@ -2767,7 +2767,33 @@ html.has-bg-pattern .notif-panel {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
   cursor: pointer;
+}
+
+.chat-header span {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-header .link-btn,
+.chat-header .chat-close {
+  flex-shrink: 0;
+}
+
+.chat-header .chat-close {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px;
 }
 
 .chat-body {
@@ -7201,60 +7227,83 @@ function urlBase64ToUint8Array(base64String) {
 // classique, qui utilise subscribeToPush() / Web Push générique juste
 // en dessous). window.Capacitor n'existe QUE dans cette app native,
 // injecté automatiquement par elle au démarrage.
-function subscribeToFcmIfCapacitor() {
+function subscribeToFcmIfCapacitor(silent) {
   if (!window.Capacitor) { console.log("[FCM] window.Capacitor absent — pas dans l'app Capacitor."); return false; }
   if (!state.profile) { console.log("[FCM] Pas de profil connecté."); return false; }
   var PushNotifications = window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications;
   if (!PushNotifications) {
-    showToast("❌ Plugin PushNotifications introuvable dans cette version de l'app.");
+    if (!silent) showToast("❌ Plugin PushNotifications introuvable dans cette version de l'app.");
+    else console.log("[FCM] Plugin PushNotifications introuvable (appel silencieux).");
     return false;
   }
-  showToast("⏳ Demande de permission Firebase en cours...");
+  // "silent" = appel automatique au démarrage de l'app (juste pour tenir
+  // l'abonnement à jour en arrière-plan) — dans ce cas on ne montre AUCUN
+  // toast, ni pour la progression ni pour le succès, afin de ne pas
+  // afficher un message à chaque ouverture de l'app une fois que tout
+  // fonctionne déjà. Quand l'utilisateur déclenche l'action lui-même
+  // (bouton "Activer les notifications" dans Profil), silent est faux et
+  // le retour visuel reste complet comme avant.
+  window._fcmSilentCall = !!silent;
+  if (!silent) showToast("⏳ Demande de permission Firebase en cours...");
+
+  // Cette fonction peut être appelée plusieurs fois dans la même session
+  // (au démarrage ET manuellement depuis Profil) — sans ce garde-fou,
+  // chaque appel ajouterait un NOUVEL écouteur en plus des précédents,
+  // et un seul jeton reçu (ou une seule notification) déclencherait
+  // alors plusieurs toasts/enregistrements en double.
+  if (!window._fcmListenersRegistered) {
+    window._fcmListenersRegistered = true;
+
+    PushNotifications.addListener("registration", function(tokenResult) {
+      var token = tokenResult.value;
+      var quiet = window._fcmSilentCall;
+      if (!quiet) showToast("✅ Jeton reçu (" + token.length + " caractères) — enregistrement dans Supabase...");
+      var existingEntry = (state.fcmTokens || []).find(function(t) { return t.token === token && t.accountId === state.profile.id; });
+      var entry = {
+        id: existingEntry ? existingEntry.id : uid(),
+        accountId: state.profile.id,
+        token: token,
+        createdAt: existingEntry ? existingEntry.createdAt : Date.now()
+      };
+      if (!state.fcmTokens) state.fcmTokens = [];
+      if (existingEntry) {
+        for (var i = 0; i < state.fcmTokens.length; i++) {
+          if (state.fcmTokens[i].id === existingEntry.id) { state.fcmTokens[i] = entry; break; }
+        }
+      } else {
+        state.fcmTokens.push(entry);
+      }
+      save();
+      saveDoc("fcmTokens", entry);
+      if (!quiet) showToast("✅ Notifications activées.");
+      render();
+    });
+
+    PushNotifications.addListener("registrationError", function(err) {
+      if (!window._fcmSilentCall) showToast("❌ Enregistrement Firebase échoué : " + JSON.stringify(err));
+      else console.log("[FCM] Enregistrement échoué (appel silencieux) :", err);
+    });
+
+    // Reçu alors que l'app est ouverte au premier plan — sinon Android
+    // l'affiche déjà tout seul nativement, pas besoin de code ici pour ça.
+    // Toujours affiché : ce n'est jamais lié au démarrage silencieux, c'est
+    // une vraie notification qui vient d'arriver.
+    PushNotifications.addListener("pushNotificationReceived", function(notification) {
+      showToast("🔔 " + (notification.title || "Sounsouni") + " — " + (notification.body || ""));
+    });
+  }
 
   PushNotifications.requestPermissions().then(function(result) {
-    showToast("ℹ️ Permission : " + JSON.stringify(result));
+    if (!silent) showToast("ℹ️ Permission : " + JSON.stringify(result));
     if (result.receive !== "granted") {
-      showToast("❌ Notifications refusées — vous pouvez les réactiver depuis les réglages du téléphone.");
+      if (!silent) showToast("❌ Notifications refusées — vous pouvez les réactiver depuis les réglages du téléphone.");
       return;
     }
-    showToast("⏳ Enregistrement auprès de Firebase...");
+    if (!silent) showToast("⏳ Enregistrement auprès de Firebase...");
     PushNotifications.register();
   }).catch(function(err) {
-    showToast("❌ requestPermissions() a échoué : " + (err && err.message ? err.message : String(err)));
-  });
-
-  PushNotifications.addListener("registration", function(tokenResult) {
-    var token = tokenResult.value;
-    showToast("✅ Jeton reçu (" + token.length + " caractères) — enregistrement dans Supabase...");
-    var existingEntry = (state.fcmTokens || []).find(function(t) { return t.token === token && t.accountId === state.profile.id; });
-    var entry = {
-      id: existingEntry ? existingEntry.id : uid(),
-      accountId: state.profile.id,
-      token: token,
-      createdAt: existingEntry ? existingEntry.createdAt : Date.now()
-    };
-    if (!state.fcmTokens) state.fcmTokens = [];
-    if (existingEntry) {
-      for (var i = 0; i < state.fcmTokens.length; i++) {
-        if (state.fcmTokens[i].id === existingEntry.id) { state.fcmTokens[i] = entry; break; }
-      }
-    } else {
-      state.fcmTokens.push(entry);
-    }
-    save();
-    saveDoc("fcmTokens", entry);
-    showToast("✅ Notifications activées (Firebase natif).");
-    render();
-  });
-
-  PushNotifications.addListener("registrationError", function(err) {
-    showToast("❌ Enregistrement Firebase échoué : " + JSON.stringify(err));
-  });
-
-  // Reçu alors que l'app est ouverte au premier plan — sinon Android
-  // l'affiche déjà tout seul nativement, pas besoin de code ici pour ça.
-  PushNotifications.addListener("pushNotificationReceived", function(notification) {
-    showToast("🔔 " + (notification.title || "Sounsouni") + " — " + (notification.body || ""));
+    if (!silent) showToast("❌ requestPermissions() a échoué : " + (err && err.message ? err.message : String(err)));
+    else console.log("[FCM] requestPermissions a échoué (appel silencieux) :", err);
   });
 
   return true;
@@ -27011,7 +27060,9 @@ function trySplashFinish() {
     // ceux-là ne verraient jamais la demande d'autorisation.
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications) {
       // App Capacitor — Firebase natif, prioritaire sur le Web Push.
-      subscribeToFcmIfCapacitor();
+      // silent=true : c'est un appel automatique de fond, pas une action
+      // demandée par l'utilisateur — aucun toast ne doit apparaître ici.
+      subscribeToFcmIfCapacitor(true);
     } else if (state.profile && "Notification" in window && Notification.permission === "default") {
       Notification.requestPermission().then(function(permission) {
         if (permission === "granted") subscribeToPush();
