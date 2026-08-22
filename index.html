@@ -20061,6 +20061,7 @@ function renderAdminAccountDetail(accountId) {
         html += '<div style="font-size:9.5px;color:var(--text-faint);word-break:break-all;">Endpoint : ' + esc((accountSubs[asi].endpoint || '').slice(0, 60)) + '… · p256dh : ' + (accountSubs[asi].keys && accountSubs[asi].keys.p256dh ? accountSubs[asi].keys.p256dh.length + ' car.' : '❌ manquant') + ' · auth : ' + (accountSubs[asi].keys && accountSubs[asi].keys.auth ? accountSubs[asi].keys.auth.length + ' car.' : '❌ manquant') + '</div>';
       }
       html += '<button class="btn-secondary" style="width:100%;margin-top:10px;" data-action="send-test-push" data-value="' + a.id + '"><i class="fa-solid fa-paper-plane"></i> Envoyer une notification test</button>';
+      html += '<button class="link-btn" style="width:100%;margin-top:8px;font-size:11px;" data-action="send-test-push-empty" data-value="' + a.id + '"><i class="fa-solid fa-vial"></i> Test diagnostic — envoi sans contenu</button>';
     }
     html += '</div>';
   }
@@ -24643,8 +24644,27 @@ root.addEventListener("click", function(e) {
         .then(function(data) {
           if (data.ok) showToast("✅ Réponse reçue — " + data.sent + "/" + data.totalSubscriptions + " envoi(s) réussi(s).");
           else showToast("❌ Échec : " + (data.error || "raison inconnue"));
+          // Détail technique complet — jamais caché, pour voir la vraie
+          // cause d'un éventuel échec silencieux côté FCM/web-push.
+          alert(JSON.stringify(data, null, 2));
         })
-        .catch(function() { showToast("❌ Impossible de contacter la fonction — vérifiez la connexion."); });
+        .catch(function(err) { showToast("❌ Impossible de contacter la fonction."); alert("Erreur réseau : " + err); });
+      break;
+    }
+    case "send-test-push-empty": {
+      showToast("⏳ Envoi du test SANS contenu — ferme l'app tout de suite et regarde le tiroir de notifications...");
+      fetch(supabaseConfig.url + "/functions/v1/send-push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+        body: JSON.stringify({ userId: value, noPayload: true })
+      })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.ok) showToast("✅ Envoyé (" + data.mode + ") — " + data.sent + "/" + data.totalSubscriptions + ".");
+          else showToast("❌ Échec : " + (data.error || "raison inconnue"));
+          alert(JSON.stringify(data, null, 2));
+        })
+        .catch(function(err) { showToast("❌ Impossible de contacter la fonction."); alert("Erreur réseau : " + err); });
       break;
     }
     case "clean-embedded-photos": {
