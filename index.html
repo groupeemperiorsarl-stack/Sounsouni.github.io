@@ -4397,7 +4397,7 @@ const SHARED_KEYS = [
   "relaisEditRequests", "externalParcels", "webhookPartners", "dashboardPartners",
   "apiPartners", "platformCommissions", "externalParcelChangeRequests",
   "verificationRequests", "wallets", "cagnottes", "filatureLogs",
-  "passwordRecoveryRequests", "nationalAdmins", "internationalCities", "pushSubscriptions", "pendingPayments"
+  "passwordRecoveryRequests", "nationalAdmins", "internationalCities", "pushSubscriptions", "pendingPayments", "fcmTokens"
 ];
 
 // Enregistre UN SEUL document (ex: saveDoc("products", p)). C'est la
@@ -6660,6 +6660,7 @@ function defaultState() {
     // Villes hors Mali ajoutées par l'admin (point 5 — expansion internationale)
     internationalCities: [],
     pushSubscriptions: [],
+    fcmTokens: [], // jetons Firebase natifs — uniquement pour les appareils utilisant l'app Capacitor
     pendingRole: null,
     adminGateUser: "",
     adminGateChosenGroup: null,
@@ -7195,6 +7196,59 @@ function urlBase64ToUint8Array(base64String) {
 // — c'est cet enregistrement que send-push utilisera pour savoir OÙ
 // envoyer. Un même compte peut être abonné depuis plusieurs appareils à
 // la fois (chacun reçoit alors sa propre notification).
+// Enregistre le jeton Firebase natif (FCM) — UNIQUEMENT quand l'app
+// tourne dans la vraie application Capacitor (pas dans un navigateur
+// classique, qui utilise subscribeToPush() / Web Push générique juste
+// en dessous). window.Capacitor n'existe QUE dans cette app native,
+// injecté automatiquement par elle au démarrage.
+function subscribeToFcmIfCapacitor() {
+  if (!window.Capacitor || !state.profile) return false;
+  var PushNotifications = window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications;
+  if (!PushNotifications) return false;
+
+  PushNotifications.requestPermissions().then(function(result) {
+    if (result.receive !== "granted") {
+      showToast("❌ Notifications refusées — vous pouvez les réactiver depuis les réglages du téléphone.");
+      return;
+    }
+    PushNotifications.register();
+  });
+
+  PushNotifications.addListener("registration", function(tokenResult) {
+    var token = tokenResult.value;
+    var existingEntry = (state.fcmTokens || []).find(function(t) { return t.token === token && t.accountId === state.profile.id; });
+    var entry = {
+      id: existingEntry ? existingEntry.id : uid(),
+      accountId: state.profile.id,
+      token: token,
+      createdAt: existingEntry ? existingEntry.createdAt : Date.now()
+    };
+    if (!state.fcmTokens) state.fcmTokens = [];
+    if (existingEntry) {
+      for (var i = 0; i < state.fcmTokens.length; i++) {
+        if (state.fcmTokens[i].id === existingEntry.id) { state.fcmTokens[i] = entry; break; }
+      }
+    } else {
+      state.fcmTokens.push(entry);
+    }
+    save();
+    saveDoc("fcmTokens", entry);
+    showToast("✅ Notifications activées (Firebase natif).");
+  });
+
+  PushNotifications.addListener("registrationError", function(err) {
+    showToast("❌ Enregistrement Firebase échoué : " + (err && err.error ? err.error : String(err)));
+  });
+
+  // Reçu alors que l'app est ouverte au premier plan — sinon Android
+  // l'affiche déjà tout seul nativement, pas besoin de code ici pour ça.
+  PushNotifications.addListener("pushNotificationReceived", function(notification) {
+    showToast("🔔 " + (notification.title || "Sounsouni") + " — " + (notification.body || ""));
+  });
+
+  return true;
+}
+
 function subscribeToPush() {
   if (!state.profile) return;
   if (window._swRegistrationError) {
@@ -7302,7 +7356,15 @@ function addNotification(channel, message, userId, target) {
 // notification simulée dans l'app reste quand même créée normalement.
 function triggerPushNotification(userId, message) {
   if (!userId || !FIREBASE_ENABLED) return;
+  // Envoie sur les deux systèmes à la fois — chaque compte peut avoir des
+  // appareils des deux types (navigateur classique + app Capacitor), best-
+  // effort sur chacun, jamais bloquant l'un pour l'autre.
   fetch(supabaseConfig.url + "/functions/v1/send-push", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+    body: JSON.stringify({ userId: userId, title: "Sounsouni", body: message })
+  }).catch(function() { /* échec silencieux, best-effort */ });
+  fetch(supabaseConfig.url + "/functions/v1/send-push-fcm", {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
     body: JSON.stringify({ userId: userId, title: "Sounsouni", body: message })
@@ -20064,6 +20126,22 @@ function renderAdminAccountDetail(accountId) {
       html += '<button class="link-btn" style="width:100%;margin-top:8px;font-size:11px;" data-action="send-test-push-empty" data-value="' + a.id + '"><i class="fa-solid fa-vial"></i> Test diagnostic — envoi sans contenu</button>';
     }
     html += '</div>';
+
+    // ---- Diagnostic Firebase natif (app Capacitor) — séparé du Web
+    // Push ci-dessus, un compte peut avoir les deux à la fois. ----
+    var accountFcm = (state.fcmTokens || []).filter(function(t) { return t.accountId === a.id; });
+    html += '<div class="glass-card" style="padding:14px;margin-top:10px;">';
+    html += '<div style="font-weight:800;font-size:13.5px;margin-bottom:8px;"><i class="fa-solid fa-fire"></i> Notifications Firebase natif (app Capacitor)</div>';
+    if (accountFcm.length === 0) {
+      html += '<div style="font-size:12px;color:var(--danger);">❌ Aucun jeton Firebase enregistré — ce compte n\'utilise pas encore l\'app Capacitor, ou ne s\'y est pas encore abonné.</div>';
+    } else {
+      html += '<div style="font-size:12px;color:var(--accent);margin-bottom:8px;">✅ ' + accountFcm.length + ' appareil(s) abonné(s)</div>';
+      for (var afi = 0; afi < accountFcm.length; afi++) {
+        html += '<div style="font-size:10.5px;color:var(--text-dim);padding:3px 0;border-top:1px solid var(--border-color);">Abonné le ' + fmtDateTime(accountFcm[afi].createdAt) + ' · jeton : ' + esc((accountFcm[afi].token || '').slice(0, 30)) + '…</div>';
+      }
+      html += '<button class="btn-secondary" style="width:100%;margin-top:10px;" data-action="send-test-push-fcm" data-value="' + a.id + '"><i class="fa-solid fa-paper-plane"></i> Envoyer une notification test (Firebase)</button>';
+    }
+    html += '</div>';
   }
   // ---- Sécurité (visible uniquement par l'administration) ----
   html += '<div class="glass-card" style="padding:14px;margin-top:10px;">';
@@ -23968,6 +24046,9 @@ root.addEventListener("click", function(e) {
       break;
     }
     case "request-push-permission": {
+      // Priorité à Firebase natif si on tourne dans l'app Capacitor —
+      // bien plus fiable que le Web Push générique utilisé en repli.
+      if (subscribeToFcmIfCapacitor()) break;
       if (typeof Notification !== "undefined" && Notification.permission === "granted") {
         // Déjà autorisé — mais on relance quand même un vrai réabonnement
         // (pas juste un message), au cas où l'abonnement existant serait
@@ -24661,6 +24742,22 @@ root.addEventListener("click", function(e) {
         .then(function(res) { return res.json(); })
         .then(function(data) {
           if (data.ok) showToast("✅ Envoyé (" + data.mode + ") — " + data.sent + "/" + data.totalSubscriptions + ".");
+          else showToast("❌ Échec : " + (data.error || "raison inconnue"));
+          alert(JSON.stringify(data, null, 2));
+        })
+        .catch(function(err) { showToast("❌ Impossible de contacter la fonction."); alert("Erreur réseau : " + err); });
+      break;
+    }
+    case "send-test-push-fcm": {
+      showToast("⏳ Envoi de la notification test (Firebase natif)...");
+      fetch(supabaseConfig.url + "/functions/v1/send-push-fcm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+        body: JSON.stringify({ userId: value, title: "Sounsouni — Test Firebase", body: "Ceci est une notification test envoyée via Firebase natif." })
+      })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.ok) showToast("✅ Réponse reçue — " + data.sent + "/" + data.totalTokens + " envoi(s) réussi(s).");
           else showToast("❌ Échec : " + (data.error || "raison inconnue"));
           alert(JSON.stringify(data, null, 2));
         })
@@ -26896,7 +26993,10 @@ function trySplashFinish() {
     // Pour les comptes déjà existants (créés avant que le son/la
     // notification n'existent) — pas seulement à l'inscription — sinon
     // ceux-là ne verraient jamais la demande d'autorisation.
-    if (state.profile && "Notification" in window && Notification.permission === "default") {
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications) {
+      // App Capacitor — Firebase natif, prioritaire sur le Web Push.
+      subscribeToFcmIfCapacitor();
+    } else if (state.profile && "Notification" in window && Notification.permission === "default") {
       Notification.requestPermission().then(function(permission) {
         if (permission === "granted") subscribeToPush();
       });
