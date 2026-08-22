@@ -20058,6 +20058,7 @@ function renderAdminAccountDetail(accountId) {
       html += '<div style="font-size:12px;color:var(--accent);margin-bottom:8px;">✅ ' + accountSubs.length + ' appareil(s) abonné(s)</div>';
       for (var asi = 0; asi < accountSubs.length; asi++) {
         html += '<div style="font-size:10.5px;color:var(--text-dim);padding:3px 0;border-top:1px solid var(--border-color);">Abonné le ' + fmtDateTime(accountSubs[asi].createdAt) + '</div>';
+        html += '<div style="font-size:9.5px;color:var(--text-faint);word-break:break-all;">Endpoint : ' + esc((accountSubs[asi].endpoint || '').slice(0, 60)) + '… · p256dh : ' + (accountSubs[asi].keys && accountSubs[asi].keys.p256dh ? accountSubs[asi].keys.p256dh.length + ' car.' : '❌ manquant') + ' · auth : ' + (accountSubs[asi].keys && accountSubs[asi].keys.auth ? accountSubs[asi].keys.auth.length + ' car.' : '❌ manquant') + '</div>';
       }
       html += '<button class="btn-secondary" style="width:100%;margin-top:10px;" data-action="send-test-push" data-value="' + a.id + '"><i class="fa-solid fa-paper-plane"></i> Envoyer une notification test</button>';
     }
