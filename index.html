@@ -7202,20 +7202,30 @@ function urlBase64ToUint8Array(base64String) {
 // en dessous). window.Capacitor n'existe QUE dans cette app native,
 // injecté automatiquement par elle au démarrage.
 function subscribeToFcmIfCapacitor() {
-  if (!window.Capacitor || !state.profile) return false;
+  if (!window.Capacitor) { console.log("[FCM] window.Capacitor absent — pas dans l'app Capacitor."); return false; }
+  if (!state.profile) { console.log("[FCM] Pas de profil connecté."); return false; }
   var PushNotifications = window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications;
-  if (!PushNotifications) return false;
+  if (!PushNotifications) {
+    showToast("❌ Plugin PushNotifications introuvable dans cette version de l'app.");
+    return false;
+  }
+  showToast("⏳ Demande de permission Firebase en cours...");
 
   PushNotifications.requestPermissions().then(function(result) {
+    showToast("ℹ️ Permission : " + JSON.stringify(result));
     if (result.receive !== "granted") {
       showToast("❌ Notifications refusées — vous pouvez les réactiver depuis les réglages du téléphone.");
       return;
     }
+    showToast("⏳ Enregistrement auprès de Firebase...");
     PushNotifications.register();
+  }).catch(function(err) {
+    showToast("❌ requestPermissions() a échoué : " + (err && err.message ? err.message : String(err)));
   });
 
   PushNotifications.addListener("registration", function(tokenResult) {
     var token = tokenResult.value;
+    showToast("✅ Jeton reçu (" + token.length + " caractères) — enregistrement dans Supabase...");
     var existingEntry = (state.fcmTokens || []).find(function(t) { return t.token === token && t.accountId === state.profile.id; });
     var entry = {
       id: existingEntry ? existingEntry.id : uid(),
@@ -7234,10 +7244,11 @@ function subscribeToFcmIfCapacitor() {
     save();
     saveDoc("fcmTokens", entry);
     showToast("✅ Notifications activées (Firebase natif).");
+    render();
   });
 
   PushNotifications.addListener("registrationError", function(err) {
-    showToast("❌ Enregistrement Firebase échoué : " + (err && err.error ? err.error : String(err)));
+    showToast("❌ Enregistrement Firebase échoué : " + JSON.stringify(err));
   });
 
   // Reçu alors que l'app est ouverte au premier plan — sinon Android
@@ -13656,9 +13667,14 @@ function renderProfileModal() {
   html += '<div style="display:flex;flex-direction:column;gap:10px;margin-top:20px;">';
   html += '<button class="vendor-hub-card" data-action="open-user-guide" style="background:var(--bg-body);"><i class="fa-solid fa-book-open"></i><div><div class="vh-title">Guide d\'utilisation de l\'application</div><div class="vh-sub">Comment naviguer et utiliser Sounsouni</div></div><i class="fa-solid fa-chevron-right"></i></button>';
   html += '<button class="vendor-hub-card" data-action="toggle-dark-mode" style="background:var(--bg-body);"><i class="fa-solid ' + (state.darkMode ? 'fa-sun' : 'fa-moon') + '"></i><div><div class="vh-title">' + (state.darkMode ? 'Mode clair' : 'Mode sombre') + '</div><div class="vh-sub">' + (state.darkMode ? 'Revenir à l\'affichage clair' : 'Passer à un affichage sombre') + '</div></div><div class="dark-mode-switch' + (state.darkMode ? ' on' : '') + '"><div class="dark-mode-knob"></div></div></button>';
-  var pushIsOn = typeof Notification !== "undefined" && Notification.permission === "granted";
+  // Dans l'app Capacitor, la permission web classique (Notification.permission)
+  // ne reflète rien de fiable — on se base plutôt sur la présence d'un
+  // vrai jeton Firebase déjà enregistré pour ce compte.
+  var isCapacitorApp = !!window.Capacitor;
+  var hasFcmToken = isCapacitorApp && state.profile && (state.fcmTokens || []).some(function(t) { return t.accountId === state.profile.id; });
+  var pushIsOn = isCapacitorApp ? hasFcmToken : (typeof Notification !== "undefined" && Notification.permission === "granted");
   html += '<button class="vendor-hub-card" data-action="request-push-permission" style="background:var(--bg-body);"><i class="fa-solid fa-bell"></i><div><div class="vh-title">' + (pushIsOn ? 'Notifications activées' : 'Activer les notifications') + '</div><div class="vh-sub">' + (pushIsOn ? 'Vous recevrez les alertes même app fermée' : 'Recevoir les alertes importantes même app fermée') + '</div></div>' + (pushIsOn ? '<i class="fa-solid fa-circle-check" style="color:var(--accent);"></i>' : '<i class="fa-solid fa-chevron-right"></i>') + '</button>';
-  if (pushIsOn) {
+  if (pushIsOn && !isCapacitorApp) {
     html += '<button class="vendor-hub-card" data-action="test-local-notification" style="background:var(--bg-body);"><i class="fa-solid fa-vial"></i><div><div class="vh-title">Test rapide (sans passer par le serveur)</div><div class="vh-sub">Vérifie si ce téléphone affiche des notifications de ce site, tout court</div></div></button>';
   }
   html += '<button class="vendor-hub-card" data-action="scan-coming-soon" style="background:var(--bg-body);"><i class="fa-solid fa-shield-halved"></i><div><div class="vh-title">Politique de confidentialité</div><div class="vh-sub">Bientôt disponible</div></div><i class="fa-solid fa-chevron-right"></i></button>';
