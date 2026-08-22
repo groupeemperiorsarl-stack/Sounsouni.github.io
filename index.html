@@ -4332,8 +4332,13 @@ html.has-bg-pattern .notif-panel {
     <script>
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('./sw.js')
-                .then(reg => console.log('SW enregistré'))
-                .catch(err => console.log('Erreur SW:', err));
+                .then(reg => console.log('SW enregistré', reg.scope))
+                .catch(err => {
+                    console.log('Erreur SW:', err);
+                    window._swRegistrationError = (err && err.message) ? err.message : String(err);
+                });
+        } else {
+            window._swRegistrationError = "serviceWorker non pris en charge par ce navigateur";
         }
     </script>
 
@@ -7192,9 +7197,26 @@ function urlBase64ToUint8Array(base64String) {
 // la fois (chacun reçoit alors sa propre notification).
 function subscribeToPush() {
   if (!state.profile) return;
-  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  if (window._swRegistrationError) {
+    showToast("❌ Le service worker n'a pas pu s'enregistrer : " + window._swRegistrationError);
+    return;
+  }
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    showToast("❌ Ce navigateur ne prend pas en charge les notifications push.");
+    return;
+  }
   var currentKeyBytes = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+  // Filet de sécurité : si "ready" ne répond jamais (bloqué en silence),
+  // on le signale clairement après 8 secondes au lieu de rester bloqué
+  // sans aucun message, indéfiniment.
+  var readyTimedOut = false;
+  var readyTimeout = setTimeout(function() {
+    readyTimedOut = true;
+    showToast("❌ Le service worker ne répond pas (délai dépassé) — essayez de recharger complètement l'app.");
+  }, 8000);
   navigator.serviceWorker.ready.then(function(registration) {
+    clearTimeout(readyTimeout);
+    if (readyTimedOut) return null; // le message de délai a déjà été montré, on n'en rajoute pas un deuxième
     return registration.pushManager.getSubscription().then(function(existing) {
       if (existing) {
         // Vérifie que l'abonnement existant utilise bien la clé ACTUELLE —
@@ -7243,7 +7265,10 @@ function subscribeToPush() {
     save();
     saveDoc("pushSubscriptions", entry);
   }).catch(function(err) {
+    clearTimeout(readyTimeout);
+    if (readyTimedOut) return; // le message de délai a déjà été montré
     console.log("Abonnement notifications push impossible :", err);
+    showToast("❌ Abonnement échoué (" + (err && err.name ? err.name : "erreur") + ") : " + (err && err.message ? err.message.slice(0, 100) : String(err)));
   });
 }
 
