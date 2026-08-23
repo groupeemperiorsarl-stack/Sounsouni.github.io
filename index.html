@@ -3177,6 +3177,22 @@ html.has-bg-pattern .notif-panel {
   height: 100%;
 }
 
+/* Filet de sécurité indépendant du CDN — sans cette règle précise, le
+   glissement pour déplacer une carte Leaflet ne fonctionne pas si le
+   fichier CSS externe de Leaflet (chargé depuis unpkg.com dans le
+   <head>) charge trop tard ou échoue dans la webview de l'app compilée :
+   le clic continue de marcher (pur JavaScript) mais le téléphone traite
+   le geste de glissement comme un défilement de page classique au lieu
+   de le laisser à Leaflet, donc la carte reste visuellement figée. On
+   fixe donc nous-mêmes cette propriété, sans dépendre du chargement
+   réussi du CSS externe — s'applique à toutes les cartes de l'app, pas
+   seulement celles dans .map-container.
+*/
+.leaflet-container {
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* ---------- AFFILIATION ---------- */
 .affiliate-dashboard {
   background: var(--bg-card);
@@ -4442,7 +4458,7 @@ const SHARED_KEYS = [
   "relaisEditRequests", "externalParcels", "webhookPartners", "dashboardPartners",
   "apiPartners", "platformCommissions", "externalParcelChangeRequests",
   "verificationRequests", "wallets", "cagnottes", "filatureLogs",
-  "passwordRecoveryRequests", "nationalAdmins", "internationalCities", "pushSubscriptions", "pendingPayments", "fcmTokens"
+  "passwordRecoveryRequests", "nationalAdmins", "internationalCities", "pushSubscriptions", "pendingPayments", "fcmTokens", "group2GlobalWhitelist"
 ];
 
 // Enregistre UN SEUL document (ex: saveDoc("products", p)). C'est la
@@ -5207,8 +5223,7 @@ function addNationalAdmin(country) {
     country: country,
     ownerUsername: "admin_" + slug,
     ownerPassword: uid().slice(0, 8),
-    employeeUsername: "employe_" + slug,
-    employeePassword: uid().slice(0, 8),
+    employeeWhitelist: [], // Groupe 2 de ce pays — plus de mot de passe, juste des numéros autorisés (voir plus bas)
     isPartner: false,
     commissionRate: null
   };
@@ -5382,6 +5397,25 @@ function inAdminScope(item) {
   if (!state.adminCountryScope) return true;
   if (!item || !item.country) return true;
   return item.country === state.adminCountryScope;
+}
+
+// --- Groupe 2 (accès limité) : liste blanche de numéros, sans mot de
+// passe. Le Groupe 1 (global ou national) ajoute directement le numéro
+// d'un compte Sounsouni existant — dès que cette personne est connectée
+// avec CE numéro, elle peut basculer vers l'Admin sans rien saisir de
+// plus. Retirer le numéro coupe l'accès à la prochaine tentative de
+// bascule (une session déjà ouverte n'est pas interrompue en cours).
+function isPhoneOnGroup2GlobalWhitelist(phone) {
+  var norm = normalizeWalletPhone(phone);
+  return (state.group2GlobalWhitelist || []).some(function(w) { return normalizeWalletPhone(w.phone) === norm; });
+}
+function findNationalAdminByEmployeePhone(phone) {
+  var norm = normalizeWalletPhone(phone);
+  for (var i = 0; i < (state.nationalAdmins || []).length; i++) {
+    var na = state.nationalAdmins[i];
+    if ((na.employeeWhitelist || []).some(function(w) { return normalizeWalletPhone(w.phone) === norm; })) return na;
+  }
+  return null;
 }
 
 function getAdminCredentials(group) {
@@ -6702,6 +6736,7 @@ function defaultState() {
     // n'est modifiable que depuis l'espace Groupe 1 global — jamais visible
     // par l'admin national concerné.
     nationalAdmins: [],
+    group2GlobalWhitelist: [],
     // Villes hors Mali ajoutées par l'admin (point 5 — expansion internationale)
     internationalCities: [],
     pushSubscriptions: [],
@@ -6772,6 +6807,7 @@ function defaultState() {
     relaisEditRequests: [],
     verificationRequests: [],
     wallets: [],
+    earningsLedgers: [],
     cagnottes: [],
     filatureLogs: [],
     pendingSyncQueue: [],
@@ -6802,6 +6838,9 @@ function defaultState() {
     disputeDraft: { reason: "produit_endommage", description: "" },
     showBoostModal: false,
     showLocationPicker: false,
+    showEarnings: false,
+    forgotPasswordResetAccountId: null,
+    forgotPasswordNewPwDraft: null,
     imagePositionEditorIndex: null,
     showAddressModal: false,
     addressDraft: null,
@@ -7668,7 +7707,7 @@ function registerAccount() {
   var linkedAccounts = state.accounts.filter(function(a) { return a.phone === fullPhone; });
   if (linkedAccounts.length > 0) {
     if (d.role === "acheteur") {
-      showToast("❌ Ce numéro a déjà un compte. Connectez-vous depuis la liste des comptes de cet appareil (bouton \"Comptes existants\").");
+      showToast("❌ Ce numéro a déjà un compte. Utilisez \"J'ai déjà un compte (créé sur un autre appareil)\" pour vous y reconnecter.");
       return;
     }
     if (d.role === "vendeur") {
@@ -8096,22 +8135,39 @@ function attemptFindAccount() {
   var d = state.findAccountDraft;
   if (!d.name || !d.name.trim()) { showToast("❌ Entrez le nom complet."); return; }
   if (!d.phone || !d.phone.trim()) { showToast("❌ Entrez le numéro de téléphone."); return; }
-  if (!d.password) { showToast("❌ Entrez votre mot de passe."); return; }
   var digits = d.phone.replace(/\D/g, "");
   var fullPhone = d.countryCode + digits;
   var nameNorm = d.name.trim().toLowerCase();
-  var match = state.accounts.find(function(a) {
+  // On cherche d'abord par nom + téléphone SEULS — le mot de passe, s'il y
+  // en a un, est vérifié ensuite séparément. Avant, "a.password &&
+  // a.password === d.password" exigeait un mot de passe même pour un
+  // compte qui n'en a jamais créé (ex : quelqu'un qui n'a fait que
+  // regarder le marché, jamais acheté ni envoyé d'argent) — ce compte
+  // devenait alors impossible à retrouver sur un nouvel appareil ou après
+  // réinstallation, aucun mot de passe ne pouvant jamais correspondre.
+  var candidate = state.accounts.find(function(a) {
     var aPhoneDigits = (a.phone || "").replace(/\D/g, "");
     var phoneMatches = aPhoneDigits === (d.countryCode + digits).replace(/\D/g, "") || aPhoneDigits.endsWith(digits);
-    return phoneMatches && (a.name || "").trim().toLowerCase() === nameNorm && a.password && a.password === d.password;
+    return phoneMatches && (a.name || "").trim().toLowerCase() === nameNorm;
   });
-  if (!match) {
-    showToast("❌ Aucun compte trouvé avec ce nom, ce numéro et ce mot de passe. Si vous n'avez pas encore de mot de passe (jamais rien acheté), utilisez plutôt \"Nouveau compte\".");
+  if (!candidate) {
+    showToast("❌ Aucun compte trouvé avec ce nom et ce numéro.");
+    return;
+  }
+  if (candidate.password) {
+    if (!d.password) { showToast("❌ Ce compte a un mot de passe — entrez-le pour continuer."); return; }
+    verifySecret(d.password, candidate.password).then(function(result) {
+      if (!result.match) { showToast("❌ Mot de passe incorrect."); return; }
+      if (result.upgraded) { candidate.password = result.upgraded; saveDoc("accounts", candidate); save(); }
+      state.showFindAccountModal = false;
+      loginAccount(candidate.id);
+      showToast("✅ Bon retour, " + candidate.name + " !");
+    });
     return;
   }
   state.showFindAccountModal = false;
-  loginAccount(match.id);
-  showToast("✅ Bon retour, " + match.name + " !");
+  loginAccount(candidate.id);
+  showToast("✅ Bon retour, " + candidate.name + " !");
 }
 
 function loginAccount(accountId) {
@@ -8165,6 +8221,29 @@ function logout() {
 function switchRole(role) {
   var staleAdminSession = state.adminUnlocked && typeof state.adminIsOwner !== "boolean";
   if (RESTRICTED_ROLES.indexOf(role) !== -1 && (!state.adminUnlocked || staleAdminSession)) {
+    // Groupe 2 (accès limité) n'a plus de mot de passe — juste une liste
+    // blanche de numéros gérée par le Groupe 1 (voir Admin > Sécurité).
+    // Si le compte actuellement connecté est sur l'une des deux listes
+    // (globale ou celle d'un pays), l'accès s'ouvre directement, sans
+    // jamais passer par la fenêtre de mot de passe ci-dessous.
+    var myPhoneForG2 = state.profile ? state.profile.phone : null;
+    if (myPhoneForG2 && isPhoneOnGroup2GlobalWhitelist(myPhoneForG2)) {
+      state.adminUnlocked = true;
+      state.adminIsOwner = false;
+      state.adminCountryScope = null;
+      applyRoleSwitch(role);
+      return;
+    }
+    if (myPhoneForG2) {
+      var naForG2 = findNationalAdminByEmployeePhone(myPhoneForG2);
+      if (naForG2) {
+        state.adminUnlocked = true;
+        state.adminIsOwner = false;
+        state.adminCountryScope = naForG2.country;
+        applyRoleSwitch(role);
+        return;
+      }
+    }
     state.adminUnlocked = false;
     state.pendingRole = role;
     state.adminPreviousRole = state.profile.role !== "admin" ? state.profile.role : (state.adminPreviousRole || "acheteur");
@@ -8227,43 +8306,57 @@ function applyRoleSwitch(role) {
   render();
 }
 
+// Groupe 2 n'a plus de mot de passe (voir switchRole, liste blanche par
+// numéro) — cette fenêtre ne sert donc plus qu'au Groupe 1 (accès complet,
+// global ou national), avec vérification hachée du mot de passe.
 function submitAdminGate() {
-  var wantsOwner = state.adminGateChosenGroup === "owner";
-  var creds = getAdminCredentials(wantsOwner ? "owner" : "employee");
-  var correctForGroup = state.adminGateUser.trim() === creds.username && state.adminGatePass === creds.password;
-  if (correctForGroup) {
-    state.adminUnlocked = true;
-    state.adminIsOwner = wantsOwner;
-    state.adminCountryScope = null; // Groupe 1 global : voit tout, tous pays
-    state.showAdminGate = false;
-    state.adminGateChosenGroup = null;
-    applyRoleSwitch(state.pendingRole);
-    return;
+  var creds = getAdminCredentials("owner");
+  var enteredUser = state.adminGateUser.trim();
+  var enteredPass = state.adminGatePass;
+
+  function tryNationalOwnerMatch() {
+    var candidates = (state.nationalAdmins || []).filter(function(na) { return na.ownerUsername === enteredUser; });
+    var checkNext = function(idx) {
+      if (idx >= candidates.length) {
+        state.adminGateError = "Identifiants incorrects pour cet espace.";
+        render();
+        return;
+      }
+      var na = candidates[idx];
+      verifySecret(enteredPass, na.ownerPassword).then(function(result) {
+        if (result.match) {
+          if (result.upgraded) { na.ownerPassword = result.upgraded; saveDoc("nationalAdmins", na); save(); }
+          state.adminUnlocked = true;
+          state.adminIsOwner = true;
+          state.adminCountryScope = na.country;
+          state.showAdminGate = false;
+          state.adminGateChosenGroup = null;
+          applyRoleSwitch(state.pendingRole);
+        } else {
+          checkNext(idx + 1);
+        }
+      });
+    };
+    checkNext(0);
   }
-  // Pas une correspondance globale : on essaie aussi les identifiants d'un
-  // admin national (même formulaire "Groupe 1"/"Groupe 2", mais comparé
-  // aux identifiants propres à chaque pays étendu).
-  var nationalMatch = null, matchedAsOwner = false;
-  for (var nai = 0; nai < (state.nationalAdmins || []).length; nai++) {
-    var na = state.nationalAdmins[nai];
-    if (wantsOwner && state.adminGateUser.trim() === na.ownerUsername && state.adminGatePass === na.ownerPassword) {
-      nationalMatch = na; matchedAsOwner = true; break;
-    }
-    if (!wantsOwner && state.adminGateUser.trim() === na.employeeUsername && state.adminGatePass === na.employeePassword) {
-      nationalMatch = na; matchedAsOwner = false; break;
-    }
+
+  if (enteredUser === creds.username) {
+    verifySecret(enteredPass, creds.password).then(function(result) {
+      if (result.match) {
+        if (result.upgraded) saveAdminCredentials("owner", { username: creds.username, password: result.upgraded });
+        state.adminUnlocked = true;
+        state.adminIsOwner = true;
+        state.adminCountryScope = null; // Groupe 1 global : voit tout, tous pays
+        state.showAdminGate = false;
+        state.adminGateChosenGroup = null;
+        applyRoleSwitch(state.pendingRole);
+        return;
+      }
+      tryNationalOwnerMatch();
+    });
+  } else {
+    tryNationalOwnerMatch();
   }
-  if (nationalMatch) {
-    state.adminUnlocked = true;
-    state.adminIsOwner = matchedAsOwner; // pouvoir complet ou limité, comme au niveau global
-    state.adminCountryScope = nationalMatch.country;
-    state.showAdminGate = false;
-    state.adminGateChosenGroup = null;
-    applyRoleSwitch(state.pendingRole);
-    return;
-  }
-  state.adminGateError = "Identifiants incorrects pour cet espace.";
-  render();
 }
 
 function toggleFavorite(productId) {
@@ -8747,6 +8840,21 @@ function placeOrder() {
     return;
   }
 
+  if (form.payment === "portefeuille") {
+    // Débit réel et immédiat — double vérification du solde ici (même si
+    // le bouton est déjà désactivé côté affichage quand le solde est
+    // insuffisant), pour ne jamais créer de commande sans que l'argent
+    // ait réellement été prélevé.
+    var walletOk = debitWallet(state.profile.phone, orderDraft.total, "achat_boutique", { orderId: orderDraft.id, accountName: "Commande #" + orderId.slice(-5).toUpperCase() });
+    if (!walletOk) {
+      showToast("❌ Solde du Portefeuille insuffisant pour cette commande.");
+      return;
+    }
+    orderDraft.paymentStatus = "paid";
+    finalizeOrder(orderDraft, { simulated: false });
+    return;
+  }
+
   // Paiement mobile money — vérifie d'abord si un vrai service est réglé
   // pour ce pays (voir Admin → Sécurité → Paiement mobile money) avant de
   // créer la commande, pour ne jamais en créer une qu'on ne pourrait pas
@@ -8944,7 +9052,18 @@ function creditSellersForOrder(order) {
     // acheteur, pour quel(s) article(s), sur quelle commande.
     var itemNames = sellerItemNames[sellerIdKey];
     var itemSummary = itemNames.slice(0, 2).join(", ") + (itemNames.length > 2 ? "…" : "");
-    creditWallet(sellerAcc.phone, netAmount, "vente", { accountId: order.buyerId, accountName: (order.buyerName || "Un acheteur") + " — " + itemSummary, orderId: order.id });
+    // L'argent est réel seulement s'il est passé par un vrai mouvement
+    // électronique DANS l'app (Portefeuille de l'acheteur, ou plus tard
+    // mobile money) — dans ce cas le vendeur reçoit directement de l'argent
+    // réel. Pour "paiement à la livraison" (espèces, hors de l'app), ce
+    // n'est encore qu'une comptabilité : ça va dans "Gains", pas dans le
+    // Portefeuille, tant que l'administration ne l'a pas réellement versé.
+    var isElectronicPayment = order.payment === "portefeuille" || order.payment === "orange_money" || order.payment === "moov_money";
+    if (isElectronicPayment) {
+      creditWallet(sellerAcc.phone, netAmount, "vente", { accountId: order.buyerId, accountName: (order.buyerName || "Un acheteur") + " — " + itemSummary, orderId: order.id });
+    } else {
+      creditEarnings(sellerAcc.phone, netAmount, "vente", { accountId: order.buyerId, accountName: (order.buyerName || "Un acheteur") + " — " + itemSummary, orderId: order.id });
+    }
   }
 }
 
@@ -9913,6 +10032,50 @@ function logFilatureEventForPhone(phone, type, detail, accountName) {
   saveDoc("filatureLogs", log);
 }
 
+// --- Gains (comptabilité) — séparé du vrai Portefeuille ---
+// Une vente ou une commission d'affiliation n'est pas forcément de
+// l'argent réellement disponible (ex : paiement à la livraison, encaissé
+// en espèces hors de l'app). "Gains" n'est donc qu'un livre de compte :
+// il indique au vendeur combien il a gagné au total, mais ne peut jamais
+// être envoyé ni dépensé directement. Seule l'administration (ou plus
+// tard un vrai dépôt mobile money) peut faire entrer de l'argent réel
+// dans le Portefeuille — voir creditWallet plus bas.
+function getEarnings(phone) {
+  var eid = normalizeWalletPhone(phone);
+  if (!eid) return { id: "", phone: "", total: 0, transactions: [] };
+  for (var i = 0; i < state.earningsLedgers.length; i++) {
+    if (state.earningsLedgers[i].id === eid) return state.earningsLedgers[i];
+  }
+  return { id: eid, phone: phone, total: 0, transactions: [] };
+}
+
+function saveEarnings(ledger) {
+  var idx = -1;
+  for (var i = 0; i < state.earningsLedgers.length; i++) {
+    if (state.earningsLedgers[i].id === ledger.id) { idx = i; break; }
+  }
+  if (idx === -1) state.earningsLedgers.push(ledger); else state.earningsLedgers[idx] = ledger;
+  save();
+  saveDoc("earningsLedgers", ledger);
+}
+
+function creditEarnings(phone, amount, reason, meta) {
+  if (!phone || !amount || amount <= 0) return;
+  var ledger = getEarnings(phone);
+  ledger.total = (ledger.total || 0) + amount;
+  ledger.transactions = ledger.transactions || [];
+  ledger.transactions.push({
+    id: uid(),
+    amount: amount,
+    reason: reason,
+    accountId: meta && meta.accountId || null,
+    accountName: meta && meta.accountName || null,
+    orderId: meta && meta.orderId || null,
+    createdAt: Date.now()
+  });
+  saveEarnings(ledger);
+}
+
 function creditWallet(phone, amount, reason, meta) {
   if (!phone || !amount || amount <= 0) return;
   var wallet = getWallet(phone);
@@ -10314,7 +10477,7 @@ function attributeCommission(orderId, buyerId, orderTotal) {
         if (state.accounts[j].phone) {
           var referredBuyer = null;
           for (var rbi = 0; rbi < state.accounts.length; rbi++) { if (state.accounts[rbi].id === buyerId) { referredBuyer = state.accounts[rbi]; break; } }
-          creditWallet(state.accounts[j].phone, commission, "parrainage", { accountId: buyerId, accountName: (referredBuyer ? referredBuyer.name : "Un filleul") + " — commande #" + orderId.slice(-5).toUpperCase(), orderId: orderId });
+          creditEarnings(state.accounts[j].phone, commission, "parrainage", { accountId: buyerId, accountName: (referredBuyer ? referredBuyer.name : "Un filleul") + " — commande #" + orderId.slice(-5).toUpperCase(), orderId: orderId });
         }
         break;
       }
@@ -12360,6 +12523,8 @@ var OVERLAY_REGISTRY = [
   { key: "emailRequired", isOpen: function () { return state.showEmailRequiredModal; }, close: function () { state.showEmailRequiredModal = false; } },
   { key: "locationPicker", isOpen: function () { return state.showLocationPicker; }, close: function () { state.showLocationPicker = false; } },
   { key: "imagePositionEditor", isOpen: function () { return state.imagePositionEditorIndex !== null; }, close: function () { state.imagePositionEditorIndex = null; } },
+  { key: "earnings", isOpen: function () { return state.showEarnings; }, close: function () { state.showEarnings = false; state.showProfileScreen = true; } },
+  { key: "forgotPasswordReset", isOpen: function () { return state.forgotPasswordResetAccountId !== null; }, close: function () { state.forgotPasswordResetAccountId = null; state.forgotPasswordNewPwDraft = null; } },
   { key: "adminProductEdit", isOpen: function () { return state.showAdminProductEdit; }, close: function () { state.showAdminProductEdit = false; state.adminProductEditDraft = null; } },
   { key: "livreurRefuse", isOpen: function () { return state.showLivreurRefuseModal; }, close: function () { state.showLivreurRefuseModal = false; state.livreurRefuseOrderId = null; } },
   { key: "adminViewingConv", isOpen: function () { return !!state.adminViewingConversationId; }, close: function () { state.adminViewingConversationId = null; } },
@@ -12371,7 +12536,7 @@ var OVERLAY_REGISTRY = [
   { key: "repereGate", isOpen: function () { return state.showRepereGate; }, close: function () { state.showRepereGate = false; } },
   { key: "commissionConfirm", isOpen: function () { return state.showCommissionConfirm; }, close: function () { state.showCommissionConfirm = false; } },
   { key: "externalParcelForm", isOpen: function () { return state.showExternalParcelForm; }, close: function () { state.showExternalParcelForm = false; state.externalParcelDraft = null; } },
-  { key: "affiliateProgram", isOpen: function () { return state.showAffiliateProgram; }, close: function () { state.showAffiliateProgram = false; } },
+  { key: "affiliateProgram", isOpen: function () { return state.showAffiliateProgram; }, close: function () { state.showAffiliateProgram = false; state.showProfileScreen = true; } },
   { key: "sensitiveConfirm", isOpen: function () { return state.showSensitiveConfirm; }, close: function () { state.showSensitiveConfirm = false; state.pendingSensitiveKind = null; state.pendingSensitiveData = null; state.sensitiveConfirmLabel = null; } },
   { key: "createPasswordGate", isOpen: function () { return state.showCreatePasswordGate; }, close: function () { state.showCreatePasswordGate = false; state.pendingPasswordSetupKind = null; state.pendingPasswordSetupData = null; state.passwordSetupDraft = null; } },
   { key: "recoveryCodeReveal", isOpen: function () { return state.showRecoveryCodeReveal; }, close: function () {
@@ -12861,9 +13026,6 @@ function buildHTML() {
   if (state.showHistoryModal) html += renderHistoryModal();
   if (state.showShopPicker) html += renderShopPickerModal();
   if (state.showAffiliateProgram) html += renderAffiliateProgramModal();
-  if (state.showSensitiveConfirm) html += renderSensitiveConfirmModal(); else sensitiveConfirmWasOpen = false;
-  if (state.showCreatePasswordGate) html += renderCreatePasswordGateModal(); else createPasswordGateWasOpen = false;
-  if (state.showRecoveryCodeReveal) html += renderRecoveryCodeRevealModal(); else recoveryCodeRevealWasOpen = false;
   if (state.showForgotPassword) html += renderForgotPasswordModal(); else forgotPasswordWasOpen = false;
   if (state.showUnlockAccount) html += renderUnlockAccountModal(); else unlockAccountWasOpen = false;
   if (state.showCommissionConfirm) html += renderCommissionConfirmModal();
@@ -12884,12 +13046,26 @@ function buildHTML() {
   if (state.showAddressModal && state.addressDraft) html += renderAddressModal();
   if (state.showLocationPicker) html += renderLocationPickerModal();
   if (state.imagePositionEditorIndex !== null) html += renderImagePositionEditorModal();
+  if (state.showEarnings) html += renderEarningsModal();
+  if (state.forgotPasswordResetAccountId !== null) html += renderForgotPasswordResetModal();
   if (state.showEmailRequiredModal) html += renderEmailRequiredModal();
   if (state.showDisputeModal) html += renderDisputeModal();
   if (state.showNonLivrableModal) html += renderNonLivrableModal();
   if (state.showFilterPanel) html += renderFilterPanel();
   if (state.showNewArrivalsModal) html += renderNewArrivalsModal();
   if (state.showOrderRelaisMap) html += renderOrderRelaisMapModal();
+  // Rendues en tout dernier, comme sensitiveConfirm plus bas : elles
+  // peuvent être déclenchées depuis n'importe quelle fenêtre finance
+  // (Portefeuille, Envoi d'argent, Bon cadeau, Cagnotte, achat...) et
+  // doivent systématiquement s'afficher AU-DESSUS de celle-ci, jamais
+  // cachées derrière (même bug que sensitiveConfirm, corrigé pareil).
+  if (state.showCreatePasswordGate) html += renderCreatePasswordGateModal(); else createPasswordGateWasOpen = false;
+  if (state.showRecoveryCodeReveal) html += renderRecoveryCodeRevealModal(); else recoveryCodeRevealWasOpen = false;
+  // Toujours rendue en tout dernier parmi les fenêtres : elle peut être
+  // déclenchée depuis plusieurs écrans finance différents (Portefeuille,
+  // Envoi d'argent, Bon cadeau, Cagnotte...) et doit systématiquement
+  // s'afficher AU-DESSUS de celui qui l'a ouverte, jamais caché derrière.
+  if (state.showSensitiveConfirm) html += renderSensitiveConfirmModal(); else sensitiveConfirmWasOpen = false;
   if (state.showMascotHint && state.view === "market" && !state.activeTour) html += renderMascotHint();
   if (state.activeTour) html += renderTourOverlay();
   if (state.toastMsg) html += '<div class="toast">' + esc(state.toastMsg) + '</div>';
@@ -13190,7 +13366,7 @@ function renderFindAccountModal() {
   html += '<div class="modal-sheet">';
   html += '<button class="modal-close" data-action="close-find-account"><i class="fa-solid fa-xmark"></i></button>';
   html += '<div class="section-title" style="margin-bottom:6px;"><i class="fa-solid fa-user-check"></i> Retrouver mon compte</div>';
-  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:14px;">Entrez exactement le nom complet, le num\u00e9ro de t\u00e9l\u00e9phone et le mot de passe de ce compte.</div>';
+  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:14px;">Entrez exactement le nom complet et le num\u00e9ro de t\u00e9l\u00e9phone de ce compte. Le mot de passe n\'est demand\u00e9 que si ce compte en a d\u00e9j\u00e0 cr\u00e9\u00e9 un (lors d\'un premier achat ou envoi d\'argent).</div>';
   html += '<label class="field-label" style="margin-top:0;">Nom complet</label>';
   html += '<input class="input" placeholder="Ex : Issa Traor\u00e9" value="' + esc(d.name) + '" data-bind="findAccountDraft.name" />';
   html += '<label class="field-label">T\u00e9l\u00e9phone</label>';
@@ -13198,7 +13374,7 @@ function renderFindAccountModal() {
   html += '<select class="input" data-bind="findAccountDraft.countryCode" style="width:100px;flex-shrink:0;">' + countryOptions + '</select>';
   html += '<input class="input" placeholder="Ex: 70000000" value="' + esc(d.phone) + '" data-bind="findAccountDraft.phone" />';
   html += '</div>';
-  html += '<label class="field-label">Mot de passe</label>';
+  html += '<label class="field-label">Mot de passe (si ce compte en a créé un)</label>';
   html += '<input class="input" id="fa-password" type="password" value="' + esc(d.password || '') + '" data-bind="findAccountDraft.password" />';
   html += '<button class="btn-primary" style="margin-top:18px;" data-action="attempt-find-account">Retrouver mon compte</button>';
   html += '<button class="link-btn" style="width:100%;text-align:center;margin-top:12px;" data-action="open-forgot-password"><i class="fa-solid fa-circle-question"></i> Mot de passe oublié</button>';
@@ -13758,6 +13934,16 @@ function renderProfileModal() {
   html += '<div style="font-weight:800;font-size:12.5px;line-height:1.3;">Sounsouni<br/>Portefeuille</div>';
   html += '<span style="margin-top:6px;font-size:12.5px;font-weight:800;color:var(--accent);">' + money(getWallet(state.profile.phone).balance) + '</span>';
   html += '</button>';
+  html += '<button data-action="open-earnings" style="flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;background:var(--bg-body);border:1px solid var(--border-color);border-radius:16px;padding:14px 8px;cursor:pointer;">';
+  html += '<div style="position:relative;width:56px;height:56px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;background:var(--accent-glow);border-radius:50%;">';
+  html += '<i class="fa-solid fa-chart-line" style="font-size:22px;color:var(--primary);"></i>';
+  html += '</div>';
+  html += '<div style="font-weight:800;font-size:12.5px;line-height:1.3;">Mes Gains</div>';
+  html += '<span style="margin-top:6px;font-size:12.5px;font-weight:800;color:var(--primary);">' + money(getEarnings(state.profile.phone).total) + '</span>';
+  html += '</button>';
+  html += '</div>';
+  html += '<div style="font-size:10.5px;color:var(--text-dim);margin:2px 2px 10px;line-height:1.4;"><i class="fa-solid fa-circle-info"></i> "Mes Gains" montre ce que vous avez gagné au total (ventes, parrainages) — c\'est une comptabilité, pas de l\'argent disponible. Seul le Portefeuille peut être envoyé ou dépensé.</div>';
+  html += '<div style="display:flex;gap:12px;margin-bottom:6px;">';
   html += '<button data-action="open-carte" data-value="Carte" style="flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;background:var(--bg-body);border:1px solid var(--border-color);border-radius:16px;padding:14px 8px;cursor:pointer;">';
   html += '<div style="position:relative;width:56px;height:56px;margin-bottom:8px;">';
   html += '<img loading="lazy" src="' + SOUNSOUNI_BASKET_LOGO + '" style="width:56px;height:56px;border-radius:50%;object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,0.15);" />';
@@ -13778,7 +13964,7 @@ function renderProfileModal() {
   var isCapacitorApp = !!window.Capacitor;
   var hasFcmToken = isCapacitorApp && state.profile && (state.fcmTokens || []).some(function(t) { return t.accountId === state.profile.id; });
   var pushIsOn = isCapacitorApp ? hasFcmToken : (typeof Notification !== "undefined" && Notification.permission === "granted");
-  html += '<button class="vendor-hub-card" data-action="request-push-permission" style="background:var(--bg-body);"><i class="fa-solid fa-bell"></i><div><div class="vh-title">' + (pushIsOn ? 'Notifications activées' : 'Activer les notifications') + '</div><div class="vh-sub">' + (pushIsOn ? 'Vous recevrez les alertes même app fermée' : 'Recevoir les alertes importantes même app fermée') + '</div></div>' + (pushIsOn ? '<i class="fa-solid fa-circle-check" style="color:var(--accent);"></i>' : '<i class="fa-solid fa-chevron-right"></i>') + '</button>';
+  html += '<button class="vendor-hub-card" data-action="' + (pushIsOn ? 'disable-push-notifications' : 'request-push-permission') + '" style="background:var(--bg-body);"><i class="fa-solid fa-bell"></i><div><div class="vh-title">' + (pushIsOn ? 'Notifications activées' : 'Activer les notifications') + '</div><div class="vh-sub">' + (pushIsOn ? 'Touchez pour les désactiver' : 'Recevoir les alertes importantes même app fermée') + '</div></div><div class="dark-mode-switch' + (pushIsOn ? ' on' : '') + '"><div class="dark-mode-knob"></div></div></button>';
   if (pushIsOn && !isCapacitorApp) {
     html += '<button class="vendor-hub-card" data-action="test-local-notification" style="background:var(--bg-body);"><i class="fa-solid fa-vial"></i><div><div class="vh-title">Test rapide (sans passer par le serveur)</div><div class="vh-sub">Vérifie si ce téléphone affiche des notifications de ce site, tout court</div></div></button>';
   }
@@ -13927,6 +14113,7 @@ function walletReasonLabel(t) {
     bon_cadeau: t.type === "credit" ? ("Bon cadeau reçu" + (t.accountName ? " de " + t.accountName : "")) : ("Bon cadeau offert" + (t.accountName ? " à " + t.accountName : "")),
     paiement_boutique: t.type === "credit" ? ("Paiement reçu" + (t.accountName ? " de " + t.accountName : "")) : ("Paiement en boutique" + (t.accountName ? " — " + t.accountName : "")),
     diaspora: "Transfert international" + (t.accountName ? " — " + t.accountName : ""),
+    achat_boutique: "Achat sur Sounsouni" + (t.accountName ? " — " + t.accountName : ""),
     "Ajustement Admin": "Ajustement Admin"
   };
   return labels[t.reason] || (t.reason + (t.accountName ? " — " + t.accountName : ""));
@@ -14203,7 +14390,7 @@ function renderWalletModal() {
   html += '<div class="glass-card" style="padding:20px;text-align:center;margin-bottom:16px;background:linear-gradient(135deg,var(--primary),var(--accent));">';
   html += '<div style="font-size:12px;color:rgba(255,255,255,0.85);">Solde disponible</div>';
   html += '<div style="font-size:30px;font-weight:800;color:white;margin-top:4px;">' + money(wallet.balance) + '</div>';
-  html += '<div style="font-size:10.5px;color:rgba(255,255,255,0.75);margin-top:6px;">Réunit vos gains — ventes, parrainage — peu importe la casquette utilisée.</div>';
+  html += '<div style="font-size:10.5px;color:rgba(255,255,255,0.75);margin-top:6px;">Argent réellement disponible — reçu par transfert ou crédité par l\'administration.</div>';
   html += '</div>';
   html += '<button class="btn-primary" style="margin-bottom:10px;" data-action="open-wallet-transfer"><i class="fa-solid fa-paper-plane"></i> Envoyer de l\'argent</button>';
   html += '<button class="btn-secondary" style="margin-bottom:16px;" data-action="open-cagnottes-list"><i class="fa-solid fa-hand-holding-heart"></i> Cagnottes</button>';
@@ -14219,6 +14406,35 @@ function renderWalletModal() {
       html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-color);">';
       html += '<div><div style="font-weight:700;font-size:13px;">' + esc(walletReasonLabel(t)) + '</div><div style="font-size:11px;color:var(--text-dim);">' + fmtDateTime(t.createdAt) + (t.message ? ' — "' + esc(t.message) + '"' : '') + '</div></div>';
       html += '<div style="font-weight:800;font-size:14px;color:' + (t.type === "credit" ? 'var(--success)' : 'var(--danger)') + ';">' + (t.type === "credit" ? '+' : '−') + money(t.amount) + '</div>';
+      html += '</div>';
+    }
+  }
+  html += '</div></div>';
+  return html;
+}
+
+function renderEarningsModal() {
+  var ledger = getEarnings(state.profile.phone);
+  var html = '<div class="modal-overlay" id="earnings-overlay" data-action="close-earnings">';
+  html += '<div class="modal-sheet">';
+  html += '<button class="modal-close" data-action="close-earnings"><i class="fa-solid fa-xmark"></i></button>';
+  html += '<button class="link-btn wallet-back-btn" style="margin-bottom:10px;" data-action="close-earnings"><i class="fa-solid fa-arrow-left"></i> Retour</button>';
+  html += '<div class="section-title" style="margin-bottom:14px;"><i class="fa-solid fa-chart-line"></i> Mes Gains</div>';
+  html += '<div class="glass-card" style="padding:20px;text-align:center;margin-bottom:12px;background:linear-gradient(135deg,#6a4fb3,#9b6ff0);">';
+  html += '<div style="font-size:12px;color:rgba(255,255,255,0.85);">Total gagné</div>';
+  html += '<div style="font-size:30px;font-weight:800;color:white;margin-top:4px;">' + money(ledger.total) + '</div>';
+  html += '</div>';
+  html += '<div style="background:var(--bg-body);border:1px solid var(--border-color);border-radius:14px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text-secondary);line-height:1.6;"><i class="fa-solid fa-circle-info" style="color:var(--primary);"></i> Ceci est une comptabilité : ça montre combien vous avez gagné (ventes, parrainages), mais ce n\'est pas de l\'argent disponible. Cet argent devient réellement disponible dans votre <b>Portefeuille</b> une fois reçu — par exemple lorsque l\'administration vous le verse.</div>';
+  html += '<div class="section-title" style="font-size:14px;margin-bottom:10px;">Historique</div>';
+  var etxns = (ledger.transactions || []).slice().reverse();
+  if (etxns.length === 0) {
+    html += '<div class="empty-state"><i class="fa-solid fa-receipt"></i><div class="title">Aucun gain pour l\'instant</div></div>';
+  } else {
+    for (var ei = 0; ei < etxns.length; ei++) {
+      var et = etxns[ei];
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-color);">';
+      html += '<div><div style="font-weight:700;font-size:13px;">' + esc(walletReasonLabel(et)) + '</div><div style="font-size:11px;color:var(--text-dim);">' + fmtDateTime(et.createdAt) + '</div></div>';
+      html += '<div style="font-weight:800;font-size:14px;color:var(--success);">+' + money(et.amount) + '</div>';
       html += '</div>';
     }
   }
@@ -14694,6 +14910,59 @@ function generateRecoveryCode() {
   return out.slice(0, 4) + "-" + out.slice(4);
 }
 
+// --- Hachage des mots de passe / codes secrets (PBKDF2, Web Crypto) ---
+// Jamais de version en clair stockée à partir d'ici. PBKDF2 est
+// volontairement lent (100 000 itérations) : même avec un accès complet à
+// la base, quelqu'un ne peut pas essayer des millions de mots de passe
+// par seconde dessus, contrairement à un simple SHA-256.
+// Format stocké : "pbkdf2$<itérations>$<sel en base64>$<empreinte en base64>"
+function bufToB64(buf) {
+  var bytes = new Uint8Array(buf);
+  var bin = "";
+  for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+function b64ToBuf(b64) {
+  var bin = atob(b64);
+  var bytes = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+function hashSecret(plainText) {
+  var iterations = 100000;
+  var salt = crypto.getRandomValues(new Uint8Array(16));
+  return crypto.subtle.importKey("raw", new TextEncoder().encode(plainText), { name: "PBKDF2" }, false, ["deriveBits"])
+    .then(function(keyMaterial) {
+      return crypto.subtle.deriveBits({ name: "PBKDF2", salt: salt, iterations: iterations, hash: "SHA-256" }, keyMaterial, 256);
+    })
+    .then(function(bits) {
+      return "pbkdf2$" + iterations + "$" + bufToB64(salt) + "$" + bufToB64(bits);
+    });
+}
+// Compare une valeur tapée à ce qui est stocké. Gère aussi la transition :
+// si "stored" est encore une ancienne valeur en clair (comptes créés avant
+// ce chiffrement), la comparaison directe fonctionne une dernière fois ET
+// renvoie la nouvelle empreinte à sauvegarder à la place — sans jamais
+// exiger une étape de conversion à part, ni un nouveau mot de passe.
+function verifySecret(plainText, stored) {
+  if (!stored) return Promise.resolve({ match: false, upgraded: null });
+  if (stored.indexOf("pbkdf2$") !== 0) {
+    if (stored === plainText) return hashSecret(plainText).then(function(h) { return { match: true, upgraded: h }; });
+    return Promise.resolve({ match: false, upgraded: null });
+  }
+  var parts = stored.split("$");
+  var iterations = parseInt(parts[1], 10);
+  var salt = b64ToBuf(parts[2]);
+  var expected = parts[3];
+  return crypto.subtle.importKey("raw", new TextEncoder().encode(plainText), { name: "PBKDF2" }, false, ["deriveBits"])
+    .then(function(keyMaterial) {
+      return crypto.subtle.deriveBits({ name: "PBKDF2", salt: salt, iterations: iterations, hash: "SHA-256" }, keyMaterial, 256);
+    })
+    .then(function(bits) {
+      return { match: bufToB64(bits) === expected, upgraded: null };
+    });
+}
+
 function persistProfileToAccounts() {
   if (!state.profile) return;
   for (var i = 0; i < state.accounts.length; i++) {
@@ -14701,6 +14970,21 @@ function persistProfileToAccounts() {
   }
   save();
   saveDoc("accounts", state.profile);
+}
+
+function renderForgotPasswordResetModal() {
+  var rd = state.forgotPasswordNewPwDraft || { password: "", password2: "" };
+  var html = '<div class="modal-overlay" id="forgot-password-reset-overlay" data-action="cancel-forgot-password-reset">';
+  html += '<div class="modal-sheet">';
+  html += '<div class="section-title" style="margin-bottom:6px;"><i class="fa-solid fa-key"></i> Choisissez un nouveau mot de passe</div>';
+  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:16px;">Votre identité a été vérifiée. Pour votre sécurité, votre ancien mot de passe n\'est jamais réaffiché — choisissez-en simplement un nouveau.</div>';
+  html += '<label class="field-label" style="margin-top:0;">Nouveau mot de passe</label>';
+  html += '<input class="input" type="password" value="' + esc(rd.password) + '" data-bind="forgotPasswordNewPwDraft.password" />';
+  html += '<label class="field-label">Confirmer le mot de passe</label>';
+  html += '<input class="input" type="password" value="' + esc(rd.password2) + '" data-bind="forgotPasswordNewPwDraft.password2" />';
+  html += '<button class="btn-primary" style="margin-top:18px;width:100%;" data-action="submit-forgot-password-reset">Valider</button>';
+  html += '</div></div>';
+  return html;
 }
 
 function renderForgotPasswordModal() {
@@ -14830,9 +15114,9 @@ function renderSensitiveConfirmModal() {
 // cadeau, clôture de cagnotte, ou finalisation d'une commande).
 function runSensitiveAction(kind, data) {
   if (kind === "walletTransfer") {
-    if (transferWallet(state.profile.phone, data.toPhone, data.amount, data.message)) state.showWalletTransfer = false;
+    if (transferWallet(state.profile.phone, data.toPhone, data.amount, data.message)) { state.showWalletTransfer = false; state.showWallet = true; }
   } else if (kind === "giftCard") {
-    if (sendGiftCard(state.profile.phone, data.toPhone, data.amount, data.message)) state.showGiftCard = false;
+    if (sendGiftCard(state.profile.phone, data.toPhone, data.amount, data.message)) { state.showGiftCard = false; state.showWallet = true; }
   } else if (kind === "closeCagnotte") {
     closeCagnotte(data.cagnotteId);
   } else if (kind === "mobileMoneyPayment") {
@@ -14848,8 +15132,12 @@ function runSensitiveAction(kind, data) {
 // créer, pas cette fenêtre-ci.
 function requireSensitiveConfirm(label, kind, data) {
   if (!state.profile || !state.profile.password) {
-    runSensitiveAction(kind, data);
-    render();
+    // Avant : l'action passait directement, sans jamais proposer de créer
+    // un mot de passe — un envoi d'argent, un bon cadeau ou une clôture de
+    // cagnotte pouvaient donc s'exécuter sur un compte qui n'a aucune
+    // protection. Cette étape existait déjà, mais seulement pour l'achat
+    // (voir requirePasswordSetup) — jamais câblée jusqu'ici.
+    requirePasswordSetup(kind, data);
     return;
   }
   state.pendingSensitiveKind = kind;
@@ -14896,6 +15184,11 @@ function runGatedPurchaseAction(kind, data) {
       persistProfileToAccounts();
       state.activeTour = { tourKey: "direct", index: 0, single: false };
     }
+  } else {
+    // walletTransfer, giftCard, closeCagnotte, mobileMoneyPayment — venus
+    // de requireSensitiveConfirm plutôt que du panier ; le mot de passe
+    // vient d'être créé, l'action peut maintenant s'exécuter directement.
+    runSensitiveAction(kind, data);
   }
   render();
 }
@@ -16524,6 +16817,9 @@ function renderCheckout() {
   html += '<label class="field-label">Mode de paiement</label>';
   html += '<div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">';
   html += paymentOption("paiement_livraison", "Paiement à la livraison", "fa-money-bill-wave");
+  var checkoutGrandTotal = checkoutSubtotal() + fee;
+  var buyerWalletBalance = state.profile ? getWallet(state.profile.phone).balance : 0;
+  html += paymentOption("portefeuille", "Portefeuille (solde : " + money(buyerWalletBalance) + ")", "fa-wallet", buyerWalletBalance >= checkoutGrandTotal, buyerWalletBalance < checkoutGrandTotal ? "Solde insuffisant" : null);
   html += paymentOption("orange_money", "Orange Money", "fa-mobile-screen");
   html += paymentOption("moov_money", "Moov Money", "fa-mobile-screen");
   html += '</div>';
@@ -16682,14 +16978,17 @@ function renderRelaisShopPicker() {
 
 
 
-function paymentOption(value, label, icon) {
+function paymentOption(value, label, icon, forceEnabled, warningLabel) {
   var active = state.checkoutForm.payment === value;
-  var isDisabled = value !== "paiement_livraison";
+  var isDisabled = value !== "paiement_livraison" && !forceEnabled;
   var html = '<button class="card-row" style="justify-content:flex-start;border-color:' + (active ? 'var(--accent)' : 'var(--border-color)') + ';' + (isDisabled ? 'opacity:0.6;' : '') + '" data-action="set-payment" data-value="' + value + '" ' + (isDisabled ? 'disabled' : '') + '>';
   html += '<div class="emoji-thumb"><i class="fa-solid ' + icon + '"></i></div>';
   html += '<div style="font-weight:700;font-size:13.5px;flex:1;text-align:left">' + label + '</div>';
-  if (isDisabled) {
+  if (isDisabled && !warningLabel) {
     html += '<span class="coming-soon" style="font-size:8px;background:var(--primary);color:white;padding:1px 6px;border-radius:999px;margin-left:4px;">Bientôt</span>';
+  }
+  if (warningLabel) {
+    html += '<span style="font-size:9px;background:var(--danger);color:white;padding:1px 6px;border-radius:999px;margin-left:4px;">' + warningLabel + '</span>';
   }
   if (active) {
     html += '<i class="fa-solid fa-circle-check" style="color:var(--accent)"></i>';
@@ -18458,7 +18757,7 @@ function renderAdmin() {
   else if (state.adminTab === "international") html += renderAdminInternational();
   else if (state.adminTab === "security") html += renderAdminSecurity();
   else if (state.adminTab === "reviews") html += renderAdminReviews();
-  else if (state.adminTab === "filature" && isOwner && !state.adminCountryScope) html += renderAdminFilature();
+  else if (state.adminTab === "filature" && currentAdminHasFilatureAccess()) html += renderAdminFilature();
 
   html += '</div></div>';
   return html;
@@ -19429,8 +19728,26 @@ function renderAdminRelaisApplications() {
 // Consultable, modifiable et supprimable pour chaque compte, avec
 // recherche — comme convenu, réservé à l'Admin principal.
 // ---------- ADMIN : FILATURE ----------
+function currentAdminHasFilatureAccess() {
+  if (state.adminIsOwner && !state.adminCountryScope) return true; // Groupe 1 global — accès à tous les pays
+  if (state.adminCountryScope) {
+    var scopedNa = state.nationalAdmins.find(function(a) { return a.country === state.adminCountryScope; });
+    return !!(scopedNa && scopedNa.filatureEnabled);
+  }
+  return false;
+}
+
 function renderAdminFilature() {
   var watchlist = getFilatureWatchlist();
+  // Un admin national voit seulement les comptes DE SON PAYS, même s'il a
+  // techniquement accès à l'onglet — jamais le reste du monde. Seul
+  // l'admin global (Groupe 1) voit tout.
+  if (state.adminCountryScope) {
+    watchlist = watchlist.filter(function(p) {
+      var wa = findAccountByPhone(p);
+      return wa && wa.country === state.adminCountryScope;
+    });
+  }
   var html = '<div class="glass-card" style="padding:14px;margin-bottom:16px;">';
   html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-user-secret"></i> Comptes surveillés</div>';
   html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:12px;">Aucun suivi détaillé n\'est jamais actif par défaut — uniquement pour les numéros ajoutés ici. Retirer un numéro arrête le suivi immédiatement (l\'historique déjà enregistré reste consultable).</div>';
@@ -20202,7 +20519,7 @@ function renderAdminAccountDetail(accountId) {
   if (state.adminLinkedFromConv) {
     html += '<button class="link-btn" style="margin-bottom:14px;margin-left:14px;" data-action="back-to-linked-message"><i class="fa-solid fa-comment"></i> Retour au message</button>';
   }
-  if (state.adminIsOwner && !state.adminCountryScope && a.phone) {
+  if (currentAdminHasFilatureAccess() && a.phone) {
     html += '<button class="link-btn" style="margin-bottom:14px;margin-left:14px;color:var(--text-dim);font-size:11px;" data-action="open-account-filature" data-value="' + esc(a.phone) + '"><i class="fa-solid fa-user-secret"></i> Filature</button>';
   }
 
@@ -20272,8 +20589,8 @@ function renderAdminAccountDetail(accountId) {
   html += '<div style="font-weight:800;font-size:13.5px;margin-bottom:8px;"><i class="fa-solid fa-shield-halved"></i> Sécurité (réservé à l\'administration)</div>';
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12.5px;margin-bottom:12px;">';
   html += '<div><span style="color:var(--text-dim);">Date de naissance</span><br><strong>' + (a.birthDate ? esc(a.birthDate) : '— (pas encore définie)') + '</strong></div>';
-  html += '<div><span style="color:var(--text-dim);">Mot de passe actuel</span><br><strong>' + (a.password ? esc(a.password) : '— (pas encore défini)') + '</strong></div>';
-  html += '<div style="grid-column:1/3;"><span style="color:var(--text-dim);">Code secret de récupération</span><br><strong>' + (a.recoveryCode ? esc(a.recoveryCode) : '— (pas encore généré)') + '</strong></div>';
+  html += '<div><span style="color:var(--text-dim);">Mot de passe</span><br><strong>' + (a.password ? '🔒 Défini (protégé, jamais affiché)' : '— (pas encore défini)') + '</strong></div>';
+  html += '<div style="grid-column:1/3;"><span style="color:var(--text-dim);">Code secret de récupération</span><br><strong>' + (a.recoveryCode ? '🔒 Défini (protégé, jamais affiché)' : '— (pas encore généré)') + '</strong></div>';
   html += '</div>';
   html += '<label class="field-label" style="margin-top:0;">Définir un nouveau mot de passe pour ce compte</label>';
   html += '<div style="display:flex;gap:8px;">';
@@ -20555,7 +20872,6 @@ function renderAdminParcelDetailModal() {
 // ---------- ADMIN : SÉCURITÉ (identifiants des deux groupes) ----------
 function renderAdminSecurity() {
   var ownerCreds = getAdminCredentials("owner");
-  var empCreds = getAdminCredentials("employee");
   var html = '';
 
   // ---- Diagnostic de taille — toujours visible, pour voir exactement ce
@@ -20621,20 +20937,33 @@ function renderAdminSecurity() {
 
   html += '<div class="glass-card" style="padding:14px;margin-bottom:16px;">';
   html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-crown"></i> Identifiants — Groupe 1 (Accès complet)</div>';
-  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:12px;">Ce sont ces identifiants qu\'il faudra utiliser au prochain déverrouillage — ne les perds pas.</div>';
+  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:12px;">Le mot de passe est protégé — il ne s\'affiche jamais ici. Laisse le champ vide pour ne rien changer, ou tape un nouveau mot de passe pour le remplacer.</div>';
   html += '<label class="field-label" style="margin-top:0;">Nom d\'utilisateur</label>';
   html += '<input class="input" id="owner-cred-user" value="' + esc(ownerCreds.username) + '" data-action-input="owner-cred-username" />';
-  html += '<label class="field-label">Mot de passe</label>';
-  html += '<input class="input" id="owner-cred-pass" value="' + esc(ownerCreds.password) + '" data-action-input="owner-cred-password" />';
+  html += '<label class="field-label">Nouveau mot de passe (laisser vide pour garder l\'actuel)</label>';
+  html += '<input class="input" type="password" id="owner-cred-pass" value="" placeholder="🔒 Protégé — tapez pour remplacer" data-action-input="owner-cred-password" />';
   html += '</div>';
 
   html += '<div class="glass-card" style="padding:14px;">';
-  html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-user-tie"></i> Identifiants — Groupe 2 (Accès limité)</div>';
-  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:12px;">Communique ces identifiants à tes employés — modifiables à tout moment si besoin.</div>';
-  html += '<label class="field-label" style="margin-top:0;">Nom d\'utilisateur</label>';
-  html += '<input class="input" id="emp-cred-user" value="' + esc(empCreds.username) + '" data-action-input="employee-cred-username" />';
-  html += '<label class="field-label">Mot de passe</label>';
-  html += '<input class="input" id="emp-cred-pass" value="' + esc(empCreds.password) + '" data-action-input="employee-cred-password" />';
+  html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-user-tie"></i> Groupe 2 (Accès limité) — par numéro, sans mot de passe</div>';
+  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:12px;">Ajoute directement le numéro d\'un compte Sounsouni existant : dès qu\'il se connecte avec ce numéro, il peut basculer vers cet espace sans rien saisir. Retire le numéro pour couper l\'accès.</div>';
+  html += '<div style="display:flex;gap:8px;margin-bottom:10px;">';
+  html += '<input class="input" id="g2-global-phone" placeholder="Numéro (ex : 70 00 00 00)" data-format="phone" style="flex:1;" />';
+  html += '<button class="btn-primary" style="flex:0;padding:0 16px;" data-action="add-group2-global"><i class="fa-solid fa-plus"></i></button>';
+  html += '</div>';
+  var g2List = state.group2GlobalWhitelist || [];
+  if (g2List.length === 0) {
+    html += '<div style="font-size:11.5px;color:var(--text-dim);">Aucun numéro autorisé pour l\'instant.</div>';
+  } else {
+    for (var g2i = 0; g2i < g2List.length; g2i++) {
+      var g2w = g2List[g2i];
+      var g2Acc = findAccountByPhone(g2w.phone);
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--border-color);">';
+      html += '<div><div style="font-weight:700;font-size:12.5px;">' + esc(g2Acc ? g2Acc.name : (g2w.name || "Compte")) + '</div><div style="font-size:11px;color:var(--text-dim);">' + esc(g2w.phone) + '</div></div>';
+      html += '<button class="link-btn" style="color:var(--danger);" data-action="remove-group2-global" data-value="' + esc(g2w.id) + '"><i class="fa-solid fa-trash"></i></button>';
+      html += '</div>';
+    }
+  }
   html += '</div>';
 
   // ---- Admins nationaux (expansion internationale) — réservé au Groupe 1
@@ -20649,10 +20978,25 @@ function renderAdminSecurity() {
       html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div style="font-weight:800;font-size:13px;">' + esc(na.country) + '</div><button class="link-btn" style="color:var(--danger);font-size:11px;" data-action="remove-national-admin" data-value="' + na.id + '"><i class="fa-solid fa-trash"></i></button></div>';
       html += '<label class="field-label" style="margin-top:0;font-size:10px;">Identifiants admin national (pouvoir complet, ce pays)</label>';
       html += '<input class="input" style="margin-bottom:6px;" value="' + esc(na.ownerUsername) + '" data-action-input="national-owner-username" data-config="' + na.id + '" placeholder="Nom d\'utilisateur" />';
-      html += '<input class="input" value="' + esc(na.ownerPassword) + '" data-action-input="national-owner-password" data-config="' + na.id + '" placeholder="Mot de passe" />';
-      html += '<label class="field-label" style="font-size:10px;">Identifiants employés (pouvoir limité, ce pays)</label>';
-      html += '<input class="input" style="margin-bottom:6px;" value="' + esc(na.employeeUsername) + '" data-action-input="national-employee-username" data-config="' + na.id + '" placeholder="Nom d\'utilisateur" />';
-      html += '<input class="input" value="' + esc(na.employeePassword) + '" data-action-input="national-employee-password" data-config="' + na.id + '" placeholder="Mot de passe" />';
+      html += '<input class="input" type="password" value="" placeholder="🔒 Protégé — tapez pour remplacer" data-action-input="national-owner-password" data-config="' + na.id + '" />';
+      html += '<label class="field-label" style="font-size:10px;">Groupe 2 de ce pays — par numéro, sans mot de passe</label>';
+      html += '<div style="display:flex;gap:8px;margin-bottom:8px;">';
+      html += '<input class="input" id="g2-national-phone-' + na.id + '" placeholder="Numéro (ex : 70 00 00 00)" data-format="phone" style="flex:1;" />';
+      html += '<button class="btn-primary" style="flex:0;padding:0 14px;" data-action="add-group2-national" data-value="' + na.id + '"><i class="fa-solid fa-plus"></i></button>';
+      html += '</div>';
+      var naG2List = na.employeeWhitelist || [];
+      if (naG2List.length === 0) {
+        html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">Aucun numéro autorisé pour l\'instant.</div>';
+      } else {
+        for (var nag2i = 0; nag2i < naG2List.length; nag2i++) {
+          var nag2w = naG2List[nag2i];
+          var nag2Acc = findAccountByPhone(nag2w.phone);
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:1px solid var(--border-color);">';
+          html += '<div><div style="font-weight:700;font-size:11.5px;">' + esc(nag2Acc ? nag2Acc.name : (nag2w.name || "Compte")) + '</div><div style="font-size:10px;color:var(--text-dim);">' + esc(nag2w.phone) + '</div></div>';
+          html += '<button class="link-btn" style="color:var(--danger);" data-action="remove-group2-national" data-value="' + esc(nag2w.id) + '" data-config="' + na.id + '"><i class="fa-solid fa-trash"></i></button>';
+          html += '</div>';
+        }
+      }
       html += '<label class="field-label" style="font-size:10px;"><i class="fa-solid fa-lock"></i> Statut (visible uniquement par toi)</label>';
       html += '<button class="vendor-hub-card" style="padding:10px;" data-action="toggle-national-partner" data-value="' + na.id + '"><i class="fa-solid ' + (na.isPartner ? 'fa-toggle-on' : 'fa-toggle-off') + '" style="color:' + (na.isPartner ? 'var(--accent)' : 'var(--text-dim)') + ';"></i><div><div class="vh-title" style="font-size:12px;">' + (na.isPartner ? 'Partenaire (touche une commission)' : 'Administrateur embauché (pas de commission)') + '</div></div></button>';
       if (na.isPartner) {
@@ -20753,6 +21097,7 @@ function renderAdminInternational() {
     if (selNA) {
       html += '<div class="data-row" style="display:flex;justify-content:space-between;padding:6px 0;"><span style="color:var(--mc-dim);">Statut</span><span class="status-tag" style="background:var(--mc-green-dim);color:var(--mc-green);padding:3px 9px;border-radius:99px;font-size:10.5px;font-weight:700;">Actif</span></div>';
       html += '<div class="data-row" style="display:flex;justify-content:space-between;padding:6px 0;"><span style="color:var(--mc-dim);">Partenaire</span><span class="mono">' + (selNA.isPartner ? 'Oui — ' + (selNA.commissionRate || 0) + '%' : 'Non — admin embauché') + '</span></div>';
+      html += '<div class="data-row" style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:1px solid var(--mc-line);margin-top:4px;"><span style="color:var(--mc-dim);"><i class="fa-solid fa-user-secret"></i> Filature (dans son pays)</span><button class="link-btn" style="font-size:11px;font-weight:700;color:' + (selNA.filatureEnabled ? 'var(--mc-green)' : 'var(--mc-dim)') + ';" data-action="toggle-national-admin-filature" data-value="' + esc(selNA.id) + '">' + (selNA.filatureEnabled ? 'Activée — désactiver' : 'Désactivée — activer') + '</button></div>';
       html += '<button class="link-btn" style="margin-top:8px;" data-action="set-admin-tab" data-value="security"><i class="fa-solid fa-arrow-right"></i> Gérer ses identifiants (Sécurité)</button>';
     } else {
       html += '<div style="font-size:12px;color:var(--mc-dim);margin-bottom:8px;">Aucun admin national pour ce pays.</div>';
@@ -21571,7 +21916,7 @@ function renderAdminOrderModal() {
     }
   }
   if (!o) return '';
-  var paymentLabels = { paiement_livraison: "Paiement à la livraison", orange_money: "Orange Money", moov_money: "Moov Money" };
+  var paymentLabels = { paiement_livraison: "Paiement à la livraison", orange_money: "Orange Money", moov_money: "Moov Money", portefeuille: "Portefeuille Sounsouni" };
   
   var html = '<div class="modal-overlay" id="admin-order-overlay" data-action="close-admin-order">';
   html += '<div class="modal-sheet">';
@@ -21643,24 +21988,14 @@ function renderAdminOrderModal() {
 }
 
 // ---------- RENDER ADMIN GATE ----------
+// Groupe 2 n'a plus de mot de passe (accès direct par liste blanche de
+// numéro, voir switchRole) — cette fenêtre ne concerne donc plus que le
+// Groupe 1, plus besoin de demander lequel des deux espaces choisir.
 function renderAdminGateModal() {
   var html = '<div class="modal-overlay"><div class="modal-sheet" style="max-width:340px;">';
   html += '<button class="modal-close" data-action="close-admin-gate"><i class="fa-solid fa-xmark"></i></button>';
-
-  if (!state.adminGateChosenGroup) {
-    html += '<div style="text-align:center;font-size:32px;margin-bottom:8px;">🔒</div>';
-    html += '<div class="section-title" style="text-align:center;font-size:18px;">Accès restreint</div>';
-    html += '<div style="font-size:12.5px;color:var(--text-dim);text-align:center;margin-bottom:18px;">Choisissez votre espace.</div>';
-    html += '<button type="button" class="type-modal-card" style="width:100%;margin-bottom:10px;" data-action="choose-admin-group" data-value="owner"><i class="fa-solid fa-crown"></i><div><div class="vh-title">Groupe 1</div><div class="vh-sub">Accès complet</div></div></button>';
-    html += '<button type="button" class="type-modal-card" style="width:100%;" data-action="choose-admin-group" data-value="employee"><i class="fa-solid fa-user-tie"></i><div><div class="vh-title">Groupe 2</div><div class="vh-sub">Accès limité</div></div></button>';
-    html += '</div></div>';
-    return html;
-  }
-
-  var isOwnerGroup = state.adminGateChosenGroup === "owner";
-  html += '<button class="link-btn" style="margin-bottom:10px;" data-action="back-admin-group-choice"><i class="fa-solid fa-arrow-left"></i> Changer d\'espace</button>';
-  html += '<div style="text-align:center;font-size:32px;margin-bottom:8px;">' + (isOwnerGroup ? '👑' : '🔒') + '</div>';
-  html += '<div class="section-title" style="text-align:center;font-size:18px;">' + (isOwnerGroup ? 'Groupe 1 — Accès complet' : 'Groupe 2 — Accès limité') + '</div>';
+  html += '<div style="text-align:center;font-size:32px;margin-bottom:8px;">👑</div>';
+  html += '<div class="section-title" style="text-align:center;font-size:18px;">Accès restreint</div>';
   html += '<div style="font-size:12.5px;color:var(--text-dim);text-align:center;margin-bottom:18px;">L\'espace ' + (ROLE_LABELS[state.pendingRole] || "") + ' est réservé.</div>';
   html += '<label class="field-label">Nom d\'utilisateur</label>';
   html += '<input class="input" value="' + esc(state.adminGateUser) + '" data-bind="adminGateUser" placeholder="Nom" />';
@@ -22675,14 +23010,14 @@ function paintFrameEditor(configId) {
   root.addEventListener("touchstart", function(e) {
     var sheet = e.target.closest(".modal-sheet, .notif-panel");
     if (!sheet || sheet.scrollTop > 2) { pullStartY = null; pullSheet = null; return; }
-    // La fenêtre "Placer votre position" (carte) est exclue du geste de
-    // fermeture par glissement : elle est partagée par TOUTES les prises de
-    // position sur carte de l'app (boutique à l'inscription, profil
-    // boutique/relais, position acheteur en commande, points du quartier en
-    // Admin) — et manipuler la carte (glisser/zoomer) déclenchait sans le
-    // vouloir la fermeture de la fenêtre.
-    var overlay = sheet.closest(".modal-overlay, .notif-panel-overlay");
-    if (overlay && overlay.id === "location-picker-overlay") { pullStartY = null; pullSheet = null; return; }
+    // Aucune fenêtre contenant une carte (Leaflet) ne doit jamais déclencher
+    // ce geste de fermeture — sinon glisser sur la carte pour la déplacer
+    // se transforme en tentative de fermer la fenêtre à la place, et la
+    // carte reste visuellement figée. Avant, seule la fenêtre "Placer votre
+    // position" (choix d'adresse à la livraison) était exclue par son id —
+    // ça ratait toutes les AUTRES cartes de l'app (inscription boutique,
+    // profil boutique/relais, quartiers en Admin...).
+    if (sheet.querySelector(".leaflet-container")) { pullStartY = null; pullSheet = null; return; }
     pullStartY = e.touches[0].clientY;
     pullSheet = sheet;
     pulling = false;
@@ -22723,6 +23058,11 @@ function paintFrameEditor(configId) {
   var pulling = false;
   root.addEventListener("touchstart", function(e) {
     if (SWIPE_BACK_VIEWS.indexOf(state.view) === -1 || window.scrollY > 2) { pullStartY = null; return; }
+    // Même exclusion que pour le geste de fermeture des fenêtres : si le
+    // doigt démarre sur une carte (Leaflet), ce geste de retour ne doit
+    // jamais s'en mêler, sinon glisser sur la carte revient en arrière
+    // dans la page au lieu de déplacer la carte.
+    if (e.target.closest(".leaflet-container")) { pullStartY = null; return; }
     pullStartY = e.touches[0].clientY;
     pulling = false;
   }, { passive: true });
@@ -23447,7 +23787,9 @@ root.addEventListener("click", function(e) {
       break;
     }
     case "open-affiliate-program": state.showAffiliateProgram = true; state.showProfileScreen = false; state.showVendorHub = false; render(); break;
-    case "close-affiliate-program": state.showAffiliateProgram = false; render(); break;
+    case "close-affiliate-program": state.showAffiliateProgram = false; state.showProfileScreen = true; render(); break;
+    case "open-earnings": state.showEarnings = true; state.showProfileScreen = false; render(); break;
+    case "close-earnings": state.showEarnings = false; state.showProfileScreen = true; render(); break;
     case "enter-shop": {
       state.showShopPicker = false;
       state.showRoleMenu = false;
@@ -23771,18 +24113,19 @@ root.addEventListener("click", function(e) {
       var sPwEl = document.getElementById('sensitive-confirm-password');
       var sEnteredPw = sPwEl ? sPwEl.value : "";
       if (!sEnteredPw) { showToast("❌ Entrez votre mot de passe."); break; }
-      if (!state.profile || sEnteredPw !== state.profile.password) {
-        showToast("❌ Mot de passe incorrect.");
-        break;
-      }
-      var sKind = state.pendingSensitiveKind;
-      var sData = state.pendingSensitiveData;
-      runSensitiveAction(sKind, sData);
-      state.showSensitiveConfirm = false;
-      state.pendingSensitiveKind = null;
-      state.pendingSensitiveData = null;
-      state.sensitiveConfirmLabel = null;
-      render();
+      if (!state.profile) { showToast("❌ Mot de passe incorrect."); break; }
+      verifySecret(sEnteredPw, state.profile.password).then(function(result) {
+        if (!result.match) { showToast("❌ Mot de passe incorrect."); return; }
+        if (result.upgraded) { state.profile.password = result.upgraded; persistProfileToAccounts(); }
+        var sKind = state.pendingSensitiveKind;
+        var sData = state.pendingSensitiveData;
+        runSensitiveAction(sKind, sData);
+        state.showSensitiveConfirm = false;
+        state.pendingSensitiveKind = null;
+        state.pendingSensitiveData = null;
+        state.sensitiveConfirmLabel = null;
+        render();
+      });
       break;
     }
     case "cancel-password-setup": {
@@ -23801,19 +24144,22 @@ root.addEventListener("click", function(e) {
       if (!pd.birthDate) { showToast("❌ La date de naissance est obligatoire."); break; }
       if (!pd.password || pd.password.length < 4) { showToast("❌ Le mot de passe doit faire au moins 4 caractères."); break; }
       if (pd.password !== pd.password2) { showToast("❌ Les deux mots de passe ne correspondent pas."); break; }
-      if (needsEmailNow) state.profile.email = pd.email.trim();
-      state.profile.birthDate = pd.birthDate;
-      state.profile.password = pd.password;
-      state.profile.recoveryCode = generateRecoveryCode();
-      persistProfileToAccounts();
-      addNotification("whatsapp", "🔐 Voici votre code secret de récupération, à conserver précieusement : " + state.profile.recoveryCode + ". Il vous permettra de récupérer votre mot de passe en cas d'oubli.", state.profile.id, null);
-      state.showCreatePasswordGate = false;
-      // L'action d'achat qui a déclenché tout ça (ajouter au panier, acheter
-      // maintenant...) reste en attente le temps que l'utilisateur confirme
-      // avoir bien noté son code — elle reprend juste après.
-      state.recoveryCodeRevealValue = state.profile.recoveryCode;
-      state.showRecoveryCodeReveal = true;
-      render();
+      var newRecoveryCodePlain = generateRecoveryCode();
+      Promise.all([hashSecret(pd.password), hashSecret(newRecoveryCodePlain)]).then(function(hashed) {
+        if (needsEmailNow) state.profile.email = pd.email.trim();
+        state.profile.birthDate = pd.birthDate;
+        state.profile.password = hashed[0];
+        state.profile.recoveryCode = hashed[1];
+        persistProfileToAccounts();
+        addNotification("whatsapp", "🔐 Voici votre code secret de récupération, à conserver précieusement : " + newRecoveryCodePlain + ". Il vous permettra de récupérer votre compte en cas d'oubli.", state.profile.id, null);
+        state.showCreatePasswordGate = false;
+        // L'action d'achat qui a déclenché tout ça (ajouter au panier, acheter
+        // maintenant...) reste en attente le temps que l'utilisateur confirme
+        // avoir bien noté son code — elle reprend juste après.
+        state.recoveryCodeRevealValue = newRecoveryCodePlain;
+        state.showRecoveryCodeReveal = true;
+        render();
+      });
       break;
     }
     case "confirm-recovery-code-reveal": {
@@ -23853,15 +24199,20 @@ root.addEventListener("click", function(e) {
       if (!uAcc) { showToast("❌ Compte introuvable."); break; }
       if (!ud.name || !ud.name.trim()) { showToast("❌ Entrez le nom complet."); break; }
       if (!ud.password) { showToast("❌ Entrez le mot de passe."); break; }
-      if (ud.name.trim().toLowerCase() !== (uAcc.name || "").trim().toLowerCase() || ud.password !== uAcc.password) {
+      if (ud.name.trim().toLowerCase() !== (uAcc.name || "").trim().toLowerCase()) {
         showToast("❌ Nom complet ou mot de passe incorrect.");
         break;
       }
-      var unlockedId = state.unlockAccountId;
-      state.showUnlockAccount = false;
-      state.unlockAccountId = null;
-      state.unlockAccountDraft = null;
-      loginAccount(unlockedId);
+      verifySecret(ud.password, uAcc.password).then(function(result) {
+        if (!result.match) { showToast("❌ Nom complet ou mot de passe incorrect."); return; }
+        if (result.upgraded) { uAcc.password = result.upgraded; saveDoc("accounts", uAcc); save(); }
+        var unlockedId = state.unlockAccountId;
+        state.showUnlockAccount = false;
+        state.unlockAccountId = null;
+        state.unlockAccountDraft = null;
+        loginAccount(unlockedId);
+        render();
+      });
       break;
     }
     case "close-forgot-password": {
@@ -23888,16 +24239,51 @@ root.addEventListener("click", function(e) {
       var fMatch = state.accounts.find(function(a) {
         var aDigits = (a.phone || "").replace(/\D/g, "");
         var phoneMatches = aDigits === (fd.countryCode + fDigits).replace(/\D/g, "") || aDigits.endsWith(fDigits);
-        return phoneMatches && (a.name || "").trim().toLowerCase() === fNameNorm && a.birthDate === fd.birthDate && a.recoveryCode === fd.recoveryCode.trim().toUpperCase();
+        return phoneMatches && (a.name || "").trim().toLowerCase() === fNameNorm && a.birthDate === fd.birthDate;
       });
       if (!fMatch) {
         showToast("❌ Aucune correspondance trouvée. Vérifiez chaque champ, ou utilisez \"J'ai perdu le code\".");
         break;
       }
-      state.showForgotPassword = false;
-      state.forgotPasswordDraft = null;
-      showToast("✅ Votre mot de passe est : " + fMatch.password);
+      verifySecret(fd.recoveryCode.trim().toUpperCase(), fMatch.recoveryCode).then(function(result) {
+        if (!result.match) {
+          showToast("❌ Aucune correspondance trouvée. Vérifiez chaque champ, ou utilisez \"J'ai perdu le code\".");
+          return;
+        }
+        if (result.upgraded) { fMatch.recoveryCode = result.upgraded; saveDoc("accounts", fMatch); save(); }
+        state.showForgotPassword = false;
+        state.forgotPasswordDraft = null;
+        state.forgotPasswordResetAccountId = fMatch.id;
+        state.forgotPasswordNewPwDraft = { password: "", password2: "" };
+        render();
+      });
+      break;
+    }
+    case "cancel-forgot-password-reset": {
+      state.forgotPasswordResetAccountId = null;
+      state.forgotPasswordNewPwDraft = null;
       render();
+      break;
+    }
+    case "submit-forgot-password-reset": {
+      var rd = state.forgotPasswordNewPwDraft;
+      if (!rd.password || rd.password.length < 4) { showToast("❌ Le mot de passe doit faire au moins 4 caractères."); break; }
+      if (rd.password !== rd.password2) { showToast("❌ Les deux mots de passe ne correspondent pas."); break; }
+      var resetAccId = state.forgotPasswordResetAccountId;
+      hashSecret(rd.password).then(function(hashed) {
+        for (var rai = 0; rai < state.accounts.length; rai++) {
+          if (state.accounts[rai].id === resetAccId) {
+            state.accounts[rai].password = hashed;
+            saveDoc("accounts", state.accounts[rai]);
+            break;
+          }
+        }
+        save();
+        state.forgotPasswordResetAccountId = null;
+        state.forgotPasswordNewPwDraft = null;
+        showToast("✅ Nouveau mot de passe enregistré — vous pouvez maintenant l'utiliser.");
+        render();
+      });
       break;
     }
     case "submit-lost-code-request": {
@@ -23938,24 +24324,26 @@ root.addEventListener("click", function(e) {
       var newPw = newPwEl ? newPwEl.value : "";
       if (!newPw || newPw.length < 4) { showToast("❌ Le mot de passe doit faire au moins 4 caractères."); break; }
       var targetAccId = value;
-      for (var apwi = 0; apwi < state.accounts.length; apwi++) {
-        if (state.accounts[apwi].id === targetAccId) {
-          state.accounts[apwi].password = newPw;
-          saveDoc("accounts", state.accounts[apwi]);
-          break;
-        }
-      }
-      if (state.passwordRecoveryRequests) {
-        for (var arqi = 0; arqi < state.passwordRecoveryRequests.length; arqi++) {
-          if (state.passwordRecoveryRequests[arqi].accountId === targetAccId && state.passwordRecoveryRequests[arqi].status === "pending") {
-            state.passwordRecoveryRequests[arqi].status = "resolved";
-            saveDoc("passwordRecoveryRequests", state.passwordRecoveryRequests[arqi]);
+      hashSecret(newPw).then(function(hashed) {
+        for (var apwi = 0; apwi < state.accounts.length; apwi++) {
+          if (state.accounts[apwi].id === targetAccId) {
+            state.accounts[apwi].password = hashed;
+            saveDoc("accounts", state.accounts[apwi]);
+            break;
           }
         }
-      }
-      save();
-      showToast("✅ Nouveau mot de passe défini pour ce compte.");
-      render();
+        if (state.passwordRecoveryRequests) {
+          for (var arqi = 0; arqi < state.passwordRecoveryRequests.length; arqi++) {
+            if (state.passwordRecoveryRequests[arqi].accountId === targetAccId && state.passwordRecoveryRequests[arqi].status === "pending") {
+              state.passwordRecoveryRequests[arqi].status = "resolved";
+              saveDoc("passwordRecoveryRequests", state.passwordRecoveryRequests[arqi]);
+            }
+          }
+        }
+        save();
+        showToast("✅ Nouveau mot de passe défini pour ce compte.");
+        render();
+      });
       break;
     }
     case "dismiss-recovery-request": {
@@ -24093,6 +24481,12 @@ root.addEventListener("click", function(e) {
       var resolvedWatchPhone = resolveWalletPhone(addPhoneVal);
       var matchedWatchAcc = findAccountByPhone(addPhoneVal);
       if (matchedWatchAcc) resolvedWatchPhone = matchedWatchAcc.phone;
+      // Un admin national ne peut surveiller que des comptes DE SON PROPRE
+      // PAYS — jamais le reste du monde, même s'il a accès à l'onglet.
+      if (state.adminCountryScope && matchedWatchAcc && matchedWatchAcc.country !== state.adminCountryScope) {
+        showToast("❌ Ce compte n'est pas dans votre pays — accès refusé.");
+        break;
+      }
       var currentWatchlist = getFilatureWatchlist();
       if (currentWatchlist.some(function(p) { return normalizeWalletPhone(p) === normalizeWalletPhone(resolvedWatchPhone); })) {
         showToast("Ce numéro est déjà surveillé.");
@@ -24112,6 +24506,7 @@ root.addEventListener("click", function(e) {
       }
       state.adminFilatureOpenPhone = normalizeWalletPhone(value);
       state.adminTab = "filature";
+      state.adminAccountDetailId = null;
       render();
       break;
     }
@@ -24185,6 +24580,39 @@ root.addEventListener("click", function(e) {
     case "toggle-dark-mode": {
       state.darkMode = !state.darkMode;
       save();
+      render();
+      break;
+    }
+    case "disable-push-notifications": {
+      if (!state.profile) break;
+      var isCapApp = !!window.Capacitor;
+      if (isCapApp) {
+        // On ne peut pas révoquer la permission système depuis le
+        // JavaScript (Android ne le permet pas) — mais en supprimant le(s)
+        // jeton(s) Firebase enregistrés pour ce compte, le serveur ne lui
+        // envoie plus rien : c'est le résultat concret que la personne
+        // attend en touchant "Désactiver".
+        var remainingFcm = [];
+        (state.fcmTokens || []).forEach(function(t) {
+          if (t.accountId === state.profile.id) deleteRemoteDoc("fcmTokens", t.id);
+          else remainingFcm.push(t);
+        });
+        state.fcmTokens = remainingFcm;
+      } else {
+        var remainingSubs = [];
+        (state.pushSubscriptions || []).forEach(function(s) {
+          if (s.accountId === state.profile.id) deleteRemoteDoc("pushSubscriptions", s.id);
+          else remainingSubs.push(s);
+        });
+        state.pushSubscriptions = remainingSubs;
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker.ready.then(function(reg) {
+            reg.pushManager.getSubscription().then(function(sub) { if (sub) sub.unsubscribe(); });
+          });
+        }
+      }
+      save();
+      showToast("Notifications désactivées.");
       render();
       break;
     }
@@ -24601,7 +25029,7 @@ root.addEventListener("click", function(e) {
       break;
     }
     case "set-payment": {
-      if (value !== "paiement_livraison") {
+      if (value !== "paiement_livraison" && value !== "portefeuille") {
         showToast("Ce mode de paiement est en cours de développement. Il sera bientôt disponible. Merci de choisir le paiement à la livraison pour le moment.");
         return;
       }
@@ -25385,12 +25813,79 @@ root.addEventListener("click", function(e) {
       render();
       break;
     }
+    case "add-group2-global": {
+      var g2PhoneEl = document.getElementById('g2-global-phone');
+      var g2PhoneVal = g2PhoneEl ? g2PhoneEl.value.trim() : "";
+      if (g2PhoneVal.replace(/\D/g, "").length < 8) { showToast("Entrez un numéro valide."); break; }
+      var g2ResolvedPhone = g2PhoneVal;
+      var g2MatchedAcc = findAccountByPhone(g2PhoneVal);
+      if (g2MatchedAcc) g2ResolvedPhone = g2MatchedAcc.phone;
+      if (!state.group2GlobalWhitelist) state.group2GlobalWhitelist = [];
+      if (state.group2GlobalWhitelist.some(function(w) { return normalizeWalletPhone(w.phone) === normalizeWalletPhone(g2ResolvedPhone); })) {
+        showToast("Ce numéro est déjà autorisé.");
+        break;
+      }
+      var g2Entry = { id: uid(), phone: g2ResolvedPhone, name: g2MatchedAcc ? g2MatchedAcc.name : "" };
+      state.group2GlobalWhitelist.push(g2Entry);
+      save();
+      saveDoc("group2GlobalWhitelist", g2Entry);
+      showToast("✅ Numéro autorisé pour le Groupe 2.");
+      render();
+      break;
+    }
+    case "remove-group2-global": {
+      state.group2GlobalWhitelist = (state.group2GlobalWhitelist || []).filter(function(w) { return w.id !== value; });
+      save();
+      deleteRemoteDoc("group2GlobalWhitelist", value);
+      showToast("Accès retiré.");
+      render();
+      break;
+    }
+    case "add-group2-national": {
+      var naForAdd = state.nationalAdmins.find(function(a) { return a.id === value; });
+      if (!naForAdd) break;
+      var g2NatPhoneEl = document.getElementById('g2-national-phone-' + value);
+      var g2NatPhoneVal = g2NatPhoneEl ? g2NatPhoneEl.value.trim() : "";
+      if (g2NatPhoneVal.replace(/\D/g, "").length < 8) { showToast("Entrez un numéro valide."); break; }
+      var g2NatResolvedPhone = g2NatPhoneVal;
+      var g2NatMatchedAcc = findAccountByPhone(g2NatPhoneVal);
+      if (g2NatMatchedAcc) g2NatResolvedPhone = g2NatMatchedAcc.phone;
+      if (!naForAdd.employeeWhitelist) naForAdd.employeeWhitelist = [];
+      if (naForAdd.employeeWhitelist.some(function(w) { return normalizeWalletPhone(w.phone) === normalizeWalletPhone(g2NatResolvedPhone); })) {
+        showToast("Ce numéro est déjà autorisé.");
+        break;
+      }
+      naForAdd.employeeWhitelist.push({ id: uid(), phone: g2NatResolvedPhone, name: g2NatMatchedAcc ? g2NatMatchedAcc.name : "" });
+      updateNationalAdmin(naForAdd);
+      showToast("✅ Numéro autorisé pour le Groupe 2 de ce pays.");
+      render();
+      break;
+    }
+    case "remove-group2-national": {
+      var naForRemove = state.nationalAdmins.find(function(a) { return a.id === btn.dataset.config; });
+      if (!naForRemove) break;
+      naForRemove.employeeWhitelist = (naForRemove.employeeWhitelist || []).filter(function(w) { return w.id !== value; });
+      updateNationalAdmin(naForRemove);
+      showToast("Accès retiré.");
+      render();
+      break;
+    }
     case "toggle-national-partner": {
       var naToggle = state.nationalAdmins.find(function(a) { return a.id === value; });
       if (naToggle) {
         naToggle.isPartner = !naToggle.isPartner;
         if (!naToggle.isPartner) naToggle.commissionRate = null;
         updateNationalAdmin(naToggle);
+      }
+      render();
+      break;
+    }
+    case "toggle-national-admin-filature": {
+      var naFilature = state.nationalAdmins.find(function(a) { return a.id === value; });
+      if (naFilature) {
+        naFilature.filatureEnabled = !naFilature.filatureEnabled;
+        updateNationalAdmin(naFilature);
+        showToast(naFilature.filatureEnabled ? "✅ Filature activée pour cet admin, dans son pays." : "Filature désactivée pour cet admin.");
       }
       render();
       break;
@@ -26704,31 +27199,37 @@ root.addEventListener("input", function(e) {
     if (pc3) { pc3.amount = parseInt(el.value, 10) || 0; updatePlatformCommission(pc3); }
     return;
   }
-  if (actionInput === "owner-cred-username" || actionInput === "owner-cred-password") {
+  if (actionInput === "owner-cred-username") {
     var ownerC = getAdminCredentials("owner");
-    if (actionInput === "owner-cred-username") ownerC.username = el.value;
-    else ownerC.password = el.value;
+    ownerC.username = el.value;
     saveAdminCredentials("owner", ownerC);
     return;
   }
-  if (actionInput === "employee-cred-username" || actionInput === "employee-cred-password") {
-    var empC = getAdminCredentials("employee");
-    if (actionInput === "employee-cred-username") empC.username = el.value;
-    else empC.password = el.value;
-    saveAdminCredentials("employee", empC);
+  if (actionInput === "owner-cred-password") {
+    if (!el.value) return; // champ vide = on ne touche pas au mot de passe actuel
+    var ownerC2 = getAdminCredentials("owner");
+    hashSecret(el.value).then(function(hashed) {
+      ownerC2.password = hashed;
+      saveAdminCredentials("owner", ownerC2);
+    });
     return;
   }
-  if (actionInput === "national-owner-username" || actionInput === "national-owner-password" ||
-      actionInput === "national-employee-username" || actionInput === "national-employee-password" ||
-      actionInput === "national-commission-rate") {
+  if (actionInput === "national-owner-username" || actionInput === "national-commission-rate") {
     var naEdit = state.nationalAdmins.find(function(a) { return a.id === el.dataset.config; });
     if (!naEdit) return;
     if (actionInput === "national-owner-username") naEdit.ownerUsername = el.value;
-    else if (actionInput === "national-owner-password") naEdit.ownerPassword = el.value;
-    else if (actionInput === "national-employee-username") naEdit.employeeUsername = el.value;
-    else if (actionInput === "national-employee-password") naEdit.employeePassword = el.value;
-    else if (actionInput === "national-commission-rate") naEdit.commissionRate = el.value === "" ? null : parseFloat(el.value);
+    else naEdit.commissionRate = el.value === "" ? null : parseFloat(el.value);
     updateNationalAdmin(naEdit);
+    return;
+  }
+  if (actionInput === "national-owner-password") {
+    if (!el.value) return; // champ vide = on ne touche pas au mot de passe actuel
+    var naEditPw = state.nationalAdmins.find(function(a) { return a.id === el.dataset.config; });
+    if (!naEditPw) return;
+    hashSecret(el.value).then(function(hashed) {
+      naEditPw.ownerPassword = hashed;
+      updateNationalAdmin(naEditPw);
+    });
     return;
   }
   if (actionInput === "intl-city-quartiers") {
