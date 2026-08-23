@@ -1495,7 +1495,7 @@ button:active {
 .product-image img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   position: relative;
   z-index: 1;
 }
@@ -2201,6 +2201,25 @@ html.has-bg-pattern .modal-sheet {
   font-size: 10.5px;
   margin-top: 2px;
   opacity: 0.85;
+}
+
+.dm-deal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 800;
+  color: white;
+  background: linear-gradient(135deg, #ff7a1a, #ff4d4d);
+  padding: 3px 8px;
+  border-radius: 999px;
+  margin-top: 3px;
+  animation: dmBadgePulse 1.8s ease-in-out infinite;
+}
+
+@keyframes dmBadgePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
 }
 
 .relais-shop-list {
@@ -6783,6 +6802,7 @@ function defaultState() {
     disputeDraft: { reason: "produit_endommage", description: "" },
     showBoostModal: false,
     showLocationPicker: false,
+    imagePositionEditorIndex: null,
     showAddressModal: false,
     addressDraft: null,
     showProfileInfoModal: false,
@@ -6866,7 +6886,7 @@ function emptyProductDraft(profileForDefault) {
   var p = profileForDefault;
   var defaultNonQuantifiable = p && p.sellerType === "entreprise" && (p.sellerSector === "decoration" || p.sellerSector === "evenementiel");
   var defaultCategory = (p && isServiceSeller(p)) ? "Autre" : CATEGORIES[1].name;
-  return { name: "", price: "", oldPrice: "", stock: "", isQuantifiable: !defaultNonQuantifiable, category: defaultCategory, description: "", emoji: "🛍️", images: [], video: null, colors: [], sizes: [], fitNote: "", tieredPricing: [], barcode: "", materiau: "", poidsBijou: "", contenance: "", typePeauUsage: "", ingredientsCosmetique: "", datePeremption: "", marqueElectro: "", modeleElectro: "", etatElectro: "neuf", garantieElectro: "", specsElectro: "", puissanceElectro: "", quantitePoidsAgri: "", uniteVenteAgri: "kg", saisonRecolte: "", fraicheurAgri: "", etatFraicheur: "", marqueAuto: "", modeleAuto: "", anneeAuto: "", etatAuto: "neuf", kilometrageAuto: "",
+  return { name: "", price: "", oldPrice: "", stock: "", isQuantifiable: !defaultNonQuantifiable, category: defaultCategory, description: "", emoji: "🛍️", images: [], imagePositions: [], video: null, colors: [], sizes: [], fitNote: "", tieredPricing: [], barcode: "", materiau: "", poidsBijou: "", contenance: "", typePeauUsage: "", ingredientsCosmetique: "", datePeremption: "", marqueElectro: "", modeleElectro: "", etatElectro: "neuf", garantieElectro: "", specsElectro: "", puissanceElectro: "", quantitePoidsAgri: "", uniteVenteAgri: "kg", saisonRecolte: "", fraicheurAgri: "", etatFraicheur: "", marqueAuto: "", modeleAuto: "", anneeAuto: "", etatAuto: "neuf", kilometrageAuto: "",
     matiereMode: "", occasionMode: "", etatMode: "neuf", genreEnfant: "mixte", ageRecommande: "",
     typeChaussure: "", matiereChaussure: "", etatChaussure: "neuf",
     typeSolaire: "", puissanceSolaire: "", autonomieSolaire: "", garantieSolaire: "",
@@ -10660,6 +10680,29 @@ function renderEmailRequiredModal() {
   return html;
 }
 
+function renderImagePositionEditorModal() {
+  var idx = state.imagePositionEditorIndex;
+  var d = state.productDraft;
+  var imgUrl = d.images && d.images[idx];
+  if (!imgUrl) return '';
+  var pos = getImagePosition(d.imagePositions, idx);
+  var html = '<div class="modal-overlay" id="image-position-editor-overlay" data-action="close-image-position-editor">';
+  html += '<div class="modal-sheet">';
+  html += '<button class="modal-close" data-action="close-image-position-editor"><i class="fa-solid fa-xmark"></i></button>';
+  html += '<div class="section-title" style="margin-bottom:4px;">Positionner la photo</div>';
+  html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">Cette photo est recadrée en carré ou en rond à plusieurs endroits de l\'app. Déplacez les curseurs pour choisir la partie qui reste toujours visible.</div>';
+  html += '<div style="width:100%;max-width:220px;aspect-ratio:1/1;margin:0 auto 18px;border-radius:16px;overflow:hidden;border:2px solid var(--border-color);background:var(--bg-body);">';
+  html += '<img loading="lazy" src="' + imgUrl + '" alt="" style="width:100%;height:100%;object-fit:cover;object-position:' + pos.x + '% ' + pos.y + '%;" />';
+  html += '</div>';
+  html += '<label class="field-label">Position horizontale</label>';
+  html += '<input type="range" min="0" max="100" value="' + pos.x + '" data-action-input="image-position-x" data-value="' + idx + '" style="width:100%;" />';
+  html += '<label class="field-label">Position verticale</label>';
+  html += '<input type="range" min="0" max="100" value="' + pos.y + '" data-action-input="image-position-y" data-value="' + idx + '" style="width:100%;" />';
+  html += '<button class="btn-primary" style="margin-top:16px;" data-action="close-image-position-editor">Valider cette position</button>';
+  html += '</div></div>';
+  return html;
+}
+
 function renderLocationPickerModal() {
   var latPath = "onboardDraft.shopLat", lngPath = "onboardDraft.shopLng";
   if (state.locationPickerTarget === "shop-profile") { latPath = "profile.shopLat"; lngPath = "profile.shopLng"; }
@@ -10695,6 +10738,17 @@ function mountLocationPickerMap() {
     el.style.background = 'var(--bg-body)';
     el.innerHTML = '<div style="font-size:12.5px;color:var(--text-dim);"><i class="fa-solid fa-map-slash" style="font-size:22px;display:block;margin-bottom:8px;"></i>La carte n\'a pas pu se charger (connexion). Utilisez le champ de coordonnées ci-dessous à la place.</div>';
     return;
+  }
+  // Même filet de sécurité que renderMap() : si un second rendu survient
+  // pendant que cette carte est déjà ouverte (ex: une notification qui
+  // arrive, un compteur qui se met à jour ailleurs dans l'app), le
+  // conteneur peut encore porter une instance Leaflet précédente. Sans ce
+  // nettoyage, L.map() lève une erreur "Map container is already
+  // initialized" qui casse silencieusement l'initialisation — résultat :
+  // la carte s'affiche un instant puis reste vide pour de bon.
+  if (el._leaflet_id) {
+    el._leaflet_id = null;
+    el.innerHTML = '';
   }
   var map = L.map('location-picker-map').setView([12.6392, -8.0029], 12);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
@@ -12305,6 +12359,7 @@ var OVERLAY_REGISTRY = [
   { key: "sellerType", isOpen: function () { return state.showSellerTypeModal; }, close: function () { state.showSellerTypeModal = false; } },
   { key: "emailRequired", isOpen: function () { return state.showEmailRequiredModal; }, close: function () { state.showEmailRequiredModal = false; } },
   { key: "locationPicker", isOpen: function () { return state.showLocationPicker; }, close: function () { state.showLocationPicker = false; } },
+  { key: "imagePositionEditor", isOpen: function () { return state.imagePositionEditorIndex !== null; }, close: function () { state.imagePositionEditorIndex = null; } },
   { key: "adminProductEdit", isOpen: function () { return state.showAdminProductEdit; }, close: function () { state.showAdminProductEdit = false; state.adminProductEditDraft = null; } },
   { key: "livreurRefuse", isOpen: function () { return state.showLivreurRefuseModal; }, close: function () { state.showLivreurRefuseModal = false; state.livreurRefuseOrderId = null; } },
   { key: "adminViewingConv", isOpen: function () { return !!state.adminViewingConversationId; }, close: function () { state.adminViewingConversationId = null; } },
@@ -12828,6 +12883,7 @@ function buildHTML() {
   if (state.showVendorConsentGate) html += renderVendorConsentGateModal();
   if (state.showAddressModal && state.addressDraft) html += renderAddressModal();
   if (state.showLocationPicker) html += renderLocationPickerModal();
+  if (state.imagePositionEditorIndex !== null) html += renderImagePositionEditorModal();
   if (state.showEmailRequiredModal) html += renderEmailRequiredModal();
   if (state.showDisputeModal) html += renderDisputeModal();
   if (state.showNonLivrableModal) html += renderNonLivrableModal();
@@ -15041,7 +15097,7 @@ function renderAdminProductsListModal() {
     var p = products[i];
     html += '<div class="card-row">';
     if (p.images && p.images.length > 0) {
-      html += '<img loading="lazy" src="' + p.images[0] + '" style="width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0;" />';
+      html += '<img loading="lazy" src="' + p.images[0] + '" style="width:38px;height:38px;border-radius:8px;object-fit:cover;object-position:' + imagePositionCss(p.imagePositions, 0) + ';flex-shrink:0;" />';
     } else {
       html += '<div class="emoji-thumb" style="width:38px;height:38px;font-size:16px;flex-shrink:0;">' + (p.emoji || '📦') + '</div>';
     }
@@ -15237,7 +15293,7 @@ function renderRecommendationsCircles(items) {
     html += '<div class="reco-circle-item" data-action="open-product" data-value="' + p.id + '">';
     html += '<div class="reco-circle-img" style="animation-delay:' + (i * 0.3) + 's;border-color:' + recoCfg.shapeColor + ';">';
     html += '<div class="reco-circle-glow" style="animation-delay:' + (i * 0.7) + 's;background:' + recoCfg.shapeColor + ';"></div>';
-    if (p.images && p.images.length) html += '<img loading="lazy" src="' + p.images[0] + '" alt="" />';
+    if (p.images && p.images.length) html += '<img loading="lazy" src="' + p.images[0] + '" alt="" style="object-position:' + imagePositionCss(p.imagePositions, 0) + ';" />';
     else html += '<span>' + (p.emoji || '🛍️') + '</span>';
     html += '</div>';
     html += '<div class="reco-circle-name">' + esc(shortName) + '</div>';
@@ -16020,7 +16076,7 @@ function productCard(p, disableImageSwipe, compactBadgeLine, marketBadges) {
       for (var pci = 0; pci < p.images.length; pci++) {
         html += '<div style="position:relative;width:100%;height:100%;flex-shrink:0;overflow:hidden;">';
         html += '<div class="product-image-backdrop" style="background-image:url(\'' + p.images[pci] + '\');"></div>';
-        html += '<img loading="lazy" src="' + p.images[pci] + '" alt="' + esc(p.name) + '" />';
+        html += '<img loading="lazy" src="' + p.images[pci] + '" alt="' + esc(p.name) + '" style="object-position:' + imagePositionCss(p.imagePositions, pci) + ';" />';
         html += '</div>';
       }
       html += '</div>';
@@ -16031,7 +16087,7 @@ function productCard(p, disableImageSwipe, compactBadgeLine, marketBadges) {
       html += '</div>';
     } else {
       html += '<div class="product-image-backdrop" style="background-image:url(\'' + p.images[0] + '\');"></div>';
-      html += '<img loading="lazy" src="' + p.images[0] + '" alt="' + esc(p.name) + '" />';
+      html += '<img loading="lazy" src="' + p.images[0] + '" alt="' + esc(p.name) + '" style="object-position:' + imagePositionCss(p.imagePositions, 0) + ';" />';
     }
   } else {
     html += '<span class="emoji-placeholder">' + p.emoji + '</span>';
@@ -16266,7 +16322,8 @@ function renderCheckout() {
     '<div class="dm-sub">' + money(previewExpressFee) + ' · Livré chez vous</div></button>';
   html += '<button class="delivery-mode-card ' + (isRelais ? 'active' : '') + '" data-action="set-delivery-mode" data-value="relais">' +
     '<i class="fa-solid fa-shop"></i><div class="dm-title">Point de Retrait</div>' +
-    '<div class="dm-sub">' + money(previewRelaisFee) + ' · ' + relaisTimeEstimate() + '</div></button>';
+    '<div class="dm-deal-badge">🔥 Beaucoup moins cher</div>' +
+    '<div class="dm-sub">' + relaisTimeEstimate() + '</div></button>';
   html += '</div>';
 
 
@@ -16722,7 +16779,7 @@ function renderOrders() {
       html += '<div style="display:flex;align-items:center;gap:8px;padding:3px 0">';
       if (boProd) {
         if (boProd.images && boProd.images.length > 0) {
-          html += '<img loading="lazy" src="' + boProd.images[0] + '" style="width:32px;height:32px;border-radius:7px;object-fit:cover;flex-shrink:0;cursor:pointer;" data-action="open-product" data-value="' + boProd.id + '" />';
+          html += '<img loading="lazy" src="' + boProd.images[0] + '" style="width:32px;height:32px;border-radius:7px;object-fit:cover;object-position:' + imagePositionCss(boProd.imagePositions, 0) + ';flex-shrink:0;cursor:pointer;" data-action="open-product" data-value="' + boProd.id + '" />';
         } else {
           html += '<div class="emoji-thumb" style="width:32px;height:32px;font-size:14px;flex-shrink:0;cursor:pointer;" data-action="open-product" data-value="' + boProd.id + '">' + (boProd.emoji || '📦') + '</div>';
         }
@@ -17019,7 +17076,7 @@ function renderMyProductsGrid(myProducts) {
     html += '<div class="product-card">';
     html += '<div class="product-image" style="height:110px;">';
     if (p.images && p.images.length > 0) {
-      html += '<img loading="lazy" src="' + p.images[0] + '" alt="' + esc(p.name) + '" style="width:100%;height:100%;object-fit:cover;" />';
+      html += '<img loading="lazy" src="' + p.images[0] + '" alt="' + esc(p.name) + '" style="width:100%;height:100%;object-fit:cover;object-position:' + imagePositionCss(p.imagePositions, 0) + ';" />';
     } else {
       html += '<span style="font-size:40px;">' + p.emoji + '</span>';
     }
@@ -17252,11 +17309,13 @@ function renderSellerProducts() {
     html += '<div class="draft-media-row" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">';
     for (var i = 0; i < d.images.length; i++) {
       html += '<div class="draft-media-thumb" style="position:relative;width:62px;height:62px;border-radius:10px;overflow:hidden;background:var(--bg-body);border:1.5px solid var(--border-color);flex-shrink:0;">';
-      html += '<img loading="lazy" src="' + d.images[i] + '" alt="" style="width:100%;height:100%;object-fit:cover;" />';
+      html += '<img loading="lazy" src="' + d.images[i] + '" alt="" style="width:100%;height:100%;object-fit:cover;object-position:' + imagePositionCss(d.imagePositions, i) + ';" />';
       html += '<button data-action="remove-draft-image" data-value="' + i + '" style="position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:9px;display:flex;align-items:center;justify-content:center;"><i class="fa-solid fa-xmark"></i></button>';
+      html += '<button data-action="open-image-position-editor" data-value="' + i + '" title="Repositionner" style="position:absolute;bottom:2px;right:2px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:9px;display:flex;align-items:center;justify-content:center;"><i class="fa-solid fa-arrows-up-down-left-right"></i></button>';
       html += '</div>';
     }
     html += '</div>';
+    html += '<div style="font-size:10px;color:var(--text-dim);margin-top:4px;"><i class="fa-solid fa-arrows-up-down-left-right"></i> Touchez ce bouton sur une photo pour choisir la partie qui reste visible une fois recadrée.</div>';
   } else {
     html += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:6px;">Aucune photo.</div>';
   }
@@ -17407,7 +17466,7 @@ function renderSellerOrders() {
       for (var sip = 0; sip < state.products.length; sip++) { if (state.products[sip].id === it.productId) { sellerItProd = state.products[sip]; break; } }
       html += '<div style="display:flex;align-items:center;gap:8px;padding:2px 0;' + (it.refused ? 'opacity:0.5;text-decoration:line-through;' : '') + '">';
       if (sellerItProd) {
-        html += '<img loading="lazy" src="' + ((sellerItProd.images && sellerItProd.images[0]) || '') + '" style="width:32px;height:32px;border-radius:7px;object-fit:cover;flex-shrink:0;cursor:pointer;' + (sellerItProd.images && sellerItProd.images[0] ? '' : 'display:none;') + '" data-action="open-product" data-value="' + sellerItProd.id + '" />';
+        html += '<img loading="lazy" src="' + ((sellerItProd.images && sellerItProd.images[0]) || '') + '" style="width:32px;height:32px;border-radius:7px;object-fit:cover;object-position:' + imagePositionCss(sellerItProd.imagePositions, 0) + ';flex-shrink:0;cursor:pointer;' + (sellerItProd.images && sellerItProd.images[0] ? '' : 'display:none;') + '" data-action="open-product" data-value="' + sellerItProd.id + '" />';
       }
       html += '<div style="font-size:13px;flex:1;">' + it.qty + '× ' + esc(it.name) + itemVariant(it) + '</div>';
       html += '</div>';
@@ -17647,7 +17706,7 @@ function renderLivreur() {
         for (var ip = 0; ip < state.products.length; ip++) { if (state.products[ip].id === it.productId) { itProd = state.products[ip]; break; } }
         html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">';
         if (itProd && itProd.images && itProd.images.length > 0) {
-          html += '<img loading="lazy" src="' + itProd.images[0] + '" style="width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0;" />';
+          html += '<img loading="lazy" src="' + itProd.images[0] + '" style="width:38px;height:38px;border-radius:8px;object-fit:cover;object-position:' + imagePositionCss(itProd.imagePositions, 0) + ';flex-shrink:0;" />';
         } else {
           html += '<div class="emoji-thumb" style="width:38px;height:38px;font-size:16px;flex-shrink:0;">' + (itProd ? itProd.emoji || '📦' : '📦') + '</div>';
         }
@@ -17959,7 +18018,7 @@ function relaisOrderCard(order, stage) {
     for (var ip = 0; ip < state.products.length; ip++) { if (state.products[ip].id === it.productId) { itProd = state.products[ip]; break; } }
     html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">';
     if (itProd && itProd.images && itProd.images.length > 0) {
-      html += '<img loading="lazy" src="' + itProd.images[0] + '" style="width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0;" />';
+      html += '<img loading="lazy" src="' + itProd.images[0] + '" style="width:38px;height:38px;border-radius:8px;object-fit:cover;object-position:' + imagePositionCss(itProd.imagePositions, 0) + ';flex-shrink:0;" />';
     } else {
       html += '<div class="emoji-thumb" style="width:38px;height:38px;font-size:16px;flex-shrink:0;">' + (itProd ? itProd.emoji || '📦' : '📦') + '</div>';
     }
@@ -18085,7 +18144,7 @@ function renderAdminSearchResults(q) {
     for (var j = 0; j < matchedProducts.length; j++) {
       var p = matchedProducts[j];
       html += '<div class="card-row" style="cursor:pointer;" data-action="admin-edit-product" data-value="' + p.id + '">';
-      if (p.images && p.images.length > 0) html += '<img loading="lazy" src="' + p.images[0] + '" style="width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0;" />';
+      if (p.images && p.images.length > 0) html += '<img loading="lazy" src="' + p.images[0] + '" style="width:38px;height:38px;border-radius:8px;object-fit:cover;object-position:' + imagePositionCss(p.imagePositions, 0) + ';flex-shrink:0;" />';
       else html += '<div class="emoji-thumb" style="width:38px;height:38px;font-size:16px;">' + (p.emoji || '📦') + '</div>';
       html += '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:12.5px;">' + esc(p.name) + '</div><div style="font-size:10.5px;color:var(--text-dim);">' + esc(p.shopName || '') + ' · ' + money(p.price) + '</div></div>';
       html += '<i class="fa-solid fa-chevron-right" style="color:var(--text-dim);"></i></div>';
@@ -21917,6 +21976,8 @@ function handleFileInput(el) {
               showToast('Échec de l\'envoi de "' + file.name + '" (' + (err.code || err.message || "erreur inconnue") + ').');
             } else {
               state.productDraft.images.push(url);
+              if (!state.productDraft.imagePositions) state.productDraft.imagePositions = [];
+              state.productDraft.imagePositions.push({ x: 50, y: 50 });
               addedCount++;
             }
             // On sauvegarde/rafraîchit une seule fois, une fois tous les envois terminés.
@@ -22040,10 +22101,25 @@ function removeDraftImage(index) {
   if (state.productDraft.images && state.productDraft.images.length > index) {
     var removedUrl = state.productDraft.images[index];
     state.productDraft.images.splice(index, 1);
+    if (state.productDraft.imagePositions) state.productDraft.imagePositions.splice(index, 1);
     save();
     deleteStorageFiles([removedUrl]);
     render();
   }
+}
+
+// Position d'affichage d'une photo produit dans un cadre recadré
+// (object-fit: cover) — {x, y} en pourcentage, centre par défaut si le
+// vendeur n'a jamais réglé cette photo (ou si le produit existait avant
+// l'ajout de cette fonctionnalité).
+function getImagePosition(positionsArray, index) {
+  var pos = positionsArray && positionsArray[index];
+  if (!pos || typeof pos.x !== "number" || typeof pos.y !== "number") return { x: 50, y: 50 };
+  return pos;
+}
+function imagePositionCss(positionsArray, index) {
+  var pos = getImagePosition(positionsArray, index);
+  return pos.x + "% " + pos.y + "%";
 }
 
 function removeDraftVideo() {
@@ -22136,6 +22212,7 @@ function submitProductDraft() {
       description: d.description || "",
       emoji: d.emoji || "🛍️",
       images: d.images || [],
+      imagePositions: d.imagePositions || [],
       video: d.video || null,
       colors: d.colors || [],
       sizes: d.sizes || [],
@@ -22308,6 +22385,7 @@ function startEditProduct(productId) {
     description: product.description || "",
     emoji: product.emoji || "🛍️",
     images: product.images ? product.images.slice() : [],
+    imagePositions: product.images ? product.images.map(function(img, imgIdx) { return getImagePosition(product.imagePositions, imgIdx); }) : [],
     video: product.video || null,
     colors: product.colors ? product.colors.slice() : [],
     sizes: product.sizes ? product.sizes.slice() : [],
@@ -26323,6 +26401,16 @@ root.addEventListener("click", function(e) {
       render();
       break;
     }
+    case "open-image-position-editor": {
+      state.imagePositionEditorIndex = Number(value);
+      render();
+      break;
+    }
+    case "close-image-position-editor": {
+      state.imagePositionEditorIndex = null;
+      render();
+      break;
+    }
     case "confirm-manual-location": {
       if (window._manualPinLatLng) {
         if (state.locationPickerTarget === "shop") {
@@ -26542,6 +26630,17 @@ root.addEventListener("input", function(e) {
     return;
   }
   var actionInput = el.dataset.actionInput;
+  if (actionInput === "image-position-x" || actionInput === "image-position-y") {
+    var imgPosIdx = Number(el.dataset.value);
+    if (!state.productDraft.imagePositions) state.productDraft.imagePositions = [];
+    var currentImgPos = getImagePosition(state.productDraft.imagePositions, imgPosIdx);
+    var updatedImgPos = { x: currentImgPos.x, y: currentImgPos.y };
+    if (actionInput === "image-position-x") updatedImgPos.x = parseInt(el.value, 10);
+    else updatedImgPos.y = parseInt(el.value, 10);
+    state.productDraft.imagePositions[imgPosIdx] = updatedImgPos;
+    render();
+    return;
+  }
   if (actionInput === "admin-global-search") {
     state.adminGlobalSearch = el.value;
     return;
@@ -26901,6 +27000,29 @@ window.addEventListener("popstate", function(e) {
   state.view = (e.state && e.state.view) || ROLE_HOME_VIEW[state.profile.role] || "market";
   render();
 });
+
+// Sous TWA, Android reliait automatiquement son bouton retour matériel au
+// retour du navigateur (Chrome gère ça nativement) — tout le système de
+// pushState/popstate ci-dessus en profitait sans rien faire de plus. Sous
+// Capacitor, ce lien n'existe pas : sans ce branchement explicite, CHAQUE
+// appui sur le bouton retour matériel quitte directement l'application
+// (comportement par défaut de Capacitor quand rien n'écoute l'évènement),
+// peu importe la fenêtre ouverte. On relie donc le bouton matériel au
+// même history.back() que le reste de l'app utilise déjà, pour que le
+// système existant (fermeture des fenêtres, navigation entre pages)
+// fonctionne à l'identique dans les deux versions.
+if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+  window.Capacitor.Plugins.App.addListener("backButton", function() {
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      // Plus rien à dépiler (écran d'accueil) — on met l'app en arrière-
+      // plan comme le fait tout Android normal, plutôt que de la fermer
+      // brutalement (perte de session, formulaire en cours, etc.).
+      window.Capacitor.Plugins.App.minimizeApp();
+    }
+  });
+}
 
 // ---------- SPLASH SCREEN (logo animé au lancement) ----------
 // ---------- LOGO G (réutilisé par le splash et le header) ----------
