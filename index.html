@@ -10915,6 +10915,14 @@ function mountLocationPickerMap() {
   }
   var map = L.map('location-picker-map').setView([12.6392, -8.0029], 12);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+  // Leaflet calcule sa taille au moment précis de l'initialisation — si la
+  // fenêtre n'est pas encore totalement stabilisée à cet instant (l'espace
+  // d'une fraction de seconde), cette taille reste fausse en interne pour
+  // toute la suite. Visuellement la carte semble normale, mais le
+  // glissement (qui dépend de ce calcul) reste figé alors que le clic
+  // continue de fonctionner à peu près. Ce recalcul forcé, une fois le
+  // rendu terminé, corrige ça une bonne fois pour toutes.
+  setTimeout(function() { map.invalidateSize(); }, 150);
   var marker = null;
   map.on('click', function(e) {
     if (marker) map.removeLayer(marker);
@@ -16091,6 +16099,7 @@ function renderShopCustomize() {
     html += '<button type="button" class="btn-secondary" style="margin-top:4px" data-action="capture-shop-gps-profile">';
     html += '<i class="fa-solid fa-location-crosshairs"></i> ' + ((a.shopLat != null && a.shopLng != null) ? 'Position capturée ✅ (recommencer)' : 'Localiser ma boutique');
     html += '</button>';
+    html += '<button type="button" class="link-btn" style="width:100%;text-align:center;margin-top:6px;font-size:12px;" data-action="open-manual-location-picker" data-value="shop-profile"><i class="fa-solid fa-map-location-dot"></i> Choisir un autre point sur la carte</button>';
     if (a.shopLat != null && a.shopLng != null) {
       html += '<div style="font-size:11px;color:var(--success);margin-top:6px">📍 ' + a.shopLat.toFixed(5) + ', ' + a.shopLng.toFixed(5) + '</div>';
     }
@@ -16764,6 +16773,7 @@ function renderCheckout() {
       addrSectionHtml += '<div style="font-size:10.5px;color:var(--text-dim);margin-bottom:10px;">Par défaut, votre numéro d\'inscription — changez-le si un autre numéro est plus facile à joindre pour cette commande.</div>';
       addrSectionHtml += '<label class="field-label">Position exacte (optionnel — précise le tarif si votre coin du quartier est éloigné)</label>';
       addrSectionHtml += '<button type="button" class="btn-secondary" data-action="capture-buyer-gps"><i class="fa-solid fa-location-crosshairs"></i> Localiser ma position</button>';
+      addrSectionHtml += '<button type="button" class="link-btn" style="width:100%;text-align:center;margin-top:6px;font-size:12px;" data-action="open-manual-location-picker" data-value="buyer"><i class="fa-solid fa-map-location-dot"></i> Choisir un autre point sur la carte</button>';
       addrSectionHtml += renderGpsPasteField("checkoutForm.buyerLat", "checkoutForm.buyerLng");
       if (f.buyerLat != null) {
         addrSectionHtml += '<div class="glass-card" style="padding:12px;margin-top:10px;background:rgba(46,158,79,0.08);">';
@@ -23393,6 +23403,12 @@ root.addEventListener("click", function(e) {
       state.view = "pointvente";
       render();
       showToast("✅ Demande envoyée — vos modifications seront appliquées après validation par l'administration.");
+      break;
+    }
+    case "open-manual-location-picker": {
+      state.locationPickerTarget = value;
+      state.showLocationPicker = true;
+      render();
       break;
     }
     case "capture-shop-gps-profile":
