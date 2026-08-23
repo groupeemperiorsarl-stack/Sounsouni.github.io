@@ -13726,7 +13726,7 @@ function renderProfileModal() {
   if (pushIsOn && !isCapacitorApp) {
     html += '<button class="vendor-hub-card" data-action="test-local-notification" style="background:var(--bg-body);"><i class="fa-solid fa-vial"></i><div><div class="vh-title">Test rapide (sans passer par le serveur)</div><div class="vh-sub">Vérifie si ce téléphone affiche des notifications de ce site, tout court</div></div></button>';
   }
-  html += '<button class="vendor-hub-card" data-action="scan-coming-soon" style="background:var(--bg-body);"><i class="fa-solid fa-shield-halved"></i><div><div class="vh-title">Politique de confidentialité</div><div class="vh-sub">Bientôt disponible</div></div><i class="fa-solid fa-chevron-right"></i></button>';
+  html += '<a href="https://groupeemperiorsarl-stack.github.io/Sounsouni.github.io/privacy.html" target="_blank" class="vendor-hub-card" style="background:var(--bg-body);text-decoration:none;"><i class="fa-solid fa-shield-halved"></i><div><div class="vh-title">Politique de confidentialité</div><div class="vh-sub">Comment nous protégeons vos données</div></div><i class="fa-solid fa-chevron-right"></i></a>';
   html += '</div>';
 
   html += '<button class="link-btn" style="color:var(--danger);margin-top:18px;width:100%;text-align:center;" data-action="logout"><i class="fa-solid fa-right-from-bracket"></i> Se déconnecter</button>';
