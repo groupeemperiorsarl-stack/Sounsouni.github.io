@@ -2362,7 +2362,7 @@ html.has-bg-pattern .modal-sheet {
   font-size: 13px;
   font-weight: 600;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-  z-index: 200;
+  z-index: 100000;
   max-width: 90%;
   text-align: center;
   animation: fadeIn 0.25s ease;
@@ -11874,44 +11874,15 @@ function startVoiceRecording(conversationId) {
   // pouvait le laisser "occupé" sur beaucoup de téléphones, empêchant la
   // reconnaissance de démarrer, en silence, sans aucune erreur visible.
   //
-  // Dans l'app compilée (Capacitor), l'outil de reconnaissance du
-  // navigateur (webkitSpeechRecognition) ouvrait une fenêtre native
-  // Google visible (le flash noir observé) et parasitait l'accès au
-  // micro du vrai enregistrement. On utilise donc ici le vrai outil
-  // natif Android dédié (plugin SpeechRecognition), avec popup:false —
-  // il tourne en arrière-plan, sans jamais rien afficher à l'écran.
-  var nativeSR = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SpeechRecognition) || null;
-  if (nativeSR) {
-    nativeSR.available().then(function(res) {
-      if (!res || !res.available) {
-        console.warn("⚠️ Reconnaissance vocale native indisponible sur cet appareil.");
-        return;
-      }
-      nativeSR.requestPermissions().then(function() {
-        nativeSR.removeAllListeners();
-        nativeSR.addListener("partialResults", function(data) {
-          if (data && data.matches && data.matches.length) {
-            voiceTranscript = data.matches.join(" ");
-            console.log("🎙️ Transcription en cours (jamais affichée à l'utilisateur) :", voiceTranscript);
-          }
-        });
-        nativeSR.start({ language: "fr-FR", partialResults: true, popup: false }).catch(function(err) {
-          console.error("❌ Erreur de reconnaissance vocale native :", err);
-        });
-      }).catch(function(err) {
-        console.error("❌ Permission de reconnaissance vocale refusée :", err);
-      });
-    }).catch(function(err) {
-      console.error("❌ Impossible de vérifier la reconnaissance vocale native :", err);
-    });
-    voiceSpeechRecognition = {
-      stop: function() {
-        nativeSR.stop().catch(function() {});
-        nativeSR.removeAllListeners().catch(function() {});
-      }
-    };
-  } else {
-  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  // Dans l'app compilée (Capacitor), AUCUN outil de reconnaissance vocale
+  // n'est utilisé, volontairement — que ce soit celui du navigateur ou un
+  // outil natif dédié, les deux ouvrent le micro en parallèle de
+  // l'enregistrement réel, et Android ne permet pas à deux choses à la
+  // fois d'y accéder ("NotReadableError"). Le choix a été fait de garder
+  // l'enregistrement 100% fiable dans l'app plutôt que d'avoir les deux
+  // en conflit. Cette détection reste active normalement sur le site web
+  // (navigateurs basés sur Chrome uniquement).
+  var SR = (window.Capacitor) ? null : (window.SpeechRecognition || window.webkitSpeechRecognition);
   if (SR) {
     try {
       voiceSpeechRecognition = new SR();
@@ -11939,8 +11910,7 @@ function startVoiceRecording(conversationId) {
       voiceSpeechRecognition = null;
     }
   } else {
-    console.warn("⚠️ La reconnaissance vocale n'est pas supportée par ce navigateur — aucune détection de numéro ne sera possible sur ce message vocal.");
-  }
+    console.warn("⚠️ Reconnaissance vocale indisponible dans ce contexte — aucune détection de numéro ne sera possible sur ce message vocal (l'enregistrement lui-même n'est pas affecté).");
   }
 
   navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
