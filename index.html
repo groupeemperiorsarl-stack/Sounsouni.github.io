@@ -5567,6 +5567,34 @@ function findNationalAdminByEmployeePhone(phone) {
   return null;
 }
 
+// Adresses principale/de secours utilisées par l'app Capacitor pour savoir
+// où charger le site — voir le petit programme de démarrage embarqué dans
+// le projet Capacitor, qui lit ce même réglage sur Supabase avant même
+// d'afficher quoi que ce soit. Changer ces deux champs ici prend effet
+// immédiatement pour l'app, sans jamais recompiler.
+function getAppUrlsConfig() {
+  var defaults = {
+    primaryUrl: "https://groupeemperiorsarl-stack.github.io/Sounsouni.github.io/",
+    backupUrl: "https://groupeemperiorsarl-stack.github.io/Sounsouni.github.io/"
+  };
+  if (state.settings) {
+    for (var i = 0; i < state.settings.length; i++) {
+      if (state.settings[i].id === "app_urls") return Object.assign({ id: "app_urls" }, defaults, state.settings[i]);
+    }
+  }
+  return Object.assign({ id: "app_urls" }, defaults);
+}
+function saveAppUrlsConfig(cfg) {
+  cfg.id = "app_urls";
+  var idx = -1;
+  for (var i = 0; i < state.settings.length; i++) {
+    if (state.settings[i].id === "app_urls") { idx = i; break; }
+  }
+  if (idx === -1) state.settings.push(cfg); else state.settings[idx] = cfg;
+  save();
+  saveDoc("settings", cfg);
+}
+
 function getAdminCredentials(group) {
   var defaults = group === "owner"
     ? { username: ADMIN_USERNAME, password: ADMIN_PASSWORD }
@@ -21251,6 +21279,18 @@ function renderAdminSecurity() {
   var ownerCreds = getAdminCredentials("owner");
   var html = '';
 
+  if (state.adminIsOwner && !state.adminCountryScope) {
+    var appUrls = getAppUrlsConfig();
+    html += '<div class="glass-card" style="padding:14px;margin-bottom:16px;">';
+    html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-globe"></i> Adresse du site (app Android)</div>';
+    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:12px;">L\'app essaie d\'abord l\'adresse principale au démarrage. Si elle ne répond pas, elle bascule automatiquement sur l\'adresse de secours — sans jamais recompiler l\'app. Changement pris en compte immédiatement.</div>';
+    html += '<label class="field-label" style="margin-top:0;">Adresse principale</label>';
+    html += '<input class="input" style="margin-bottom:10px;" value="' + esc(appUrls.primaryUrl) + '" data-action-input="app-primary-url" />';
+    html += '<label class="field-label">Adresse de secours</label>';
+    html += '<input class="input" value="' + esc(appUrls.backupUrl) + '" data-action-input="app-backup-url" />';
+    html += '</div>';
+  }
+
   // ---- Diagnostic de taille — toujours visible, pour voir exactement ce
   // qui prend de la place, indépendamment des autres outils ci-dessous. ----
   var sizeDiag = computeStateSizeBreakdown();
@@ -27742,6 +27782,13 @@ root.addEventListener("input", function(e) {
   if (actionInput === "platform-commission-amount") {
     var pc3 = state.platformCommissions.find(function(p) { return p.id === el.dataset.config; });
     if (pc3) { pc3.amount = parseInt(el.value, 10) || 0; updatePlatformCommission(pc3); }
+    return;
+  }
+  if (actionInput === "app-primary-url" || actionInput === "app-backup-url") {
+    var urlsCfg = getAppUrlsConfig();
+    if (actionInput === "app-primary-url") urlsCfg.primaryUrl = el.value.trim();
+    else urlsCfg.backupUrl = el.value.trim();
+    saveAppUrlsConfig(urlsCfg);
     return;
   }
   if (actionInput === "owner-cred-username") {
