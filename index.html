@@ -11873,6 +11873,44 @@ function startVoiceRecording(conversationId) {
   // déjà ouvert le micro pour l'enregistrement (comme c'était fait avant)
   // pouvait le laisser "occupé" sur beaucoup de téléphones, empêchant la
   // reconnaissance de démarrer, en silence, sans aucune erreur visible.
+  //
+  // Dans l'app compilée (Capacitor), l'outil de reconnaissance du
+  // navigateur (webkitSpeechRecognition) ouvrait une fenêtre native
+  // Google visible (le flash noir observé) et parasitait l'accès au
+  // micro du vrai enregistrement. On utilise donc ici le vrai outil
+  // natif Android dédié (plugin SpeechRecognition), avec popup:false —
+  // il tourne en arrière-plan, sans jamais rien afficher à l'écran.
+  var nativeSR = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SpeechRecognition) || null;
+  if (nativeSR) {
+    nativeSR.available().then(function(res) {
+      if (!res || !res.available) {
+        console.warn("⚠️ Reconnaissance vocale native indisponible sur cet appareil.");
+        return;
+      }
+      nativeSR.requestPermissions().then(function() {
+        nativeSR.removeAllListeners();
+        nativeSR.addListener("partialResults", function(data) {
+          if (data && data.matches && data.matches.length) {
+            voiceTranscript = data.matches.join(" ");
+            console.log("🎙️ Transcription en cours (jamais affichée à l'utilisateur) :", voiceTranscript);
+          }
+        });
+        nativeSR.start({ language: "fr-FR", partialResults: true, popup: false }).catch(function(err) {
+          console.error("❌ Erreur de reconnaissance vocale native :", err);
+        });
+      }).catch(function(err) {
+        console.error("❌ Permission de reconnaissance vocale refusée :", err);
+      });
+    }).catch(function(err) {
+      console.error("❌ Impossible de vérifier la reconnaissance vocale native :", err);
+    });
+    voiceSpeechRecognition = {
+      stop: function() {
+        nativeSR.stop().catch(function() {});
+        nativeSR.removeAllListeners().catch(function() {});
+      }
+    };
+  } else {
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (SR) {
     try {
@@ -11902,6 +11940,7 @@ function startVoiceRecording(conversationId) {
     }
   } else {
     console.warn("⚠️ La reconnaissance vocale n'est pas supportée par ce navigateur — aucune détection de numéro ne sera possible sur ce message vocal.");
+  }
   }
 
   navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
@@ -13338,7 +13377,7 @@ function renderPartnerDashboard() {
     html += '<label class="field-label" style="margin-top:0;">Nom d\'utilisateur</label>';
     html += '<input class="input" value="' + esc(state.partnerGateUser || '') + '" data-bind="partnerGateUser" placeholder="Nom d\'utilisateur" />';
     html += '<label class="field-label">Mot de passe</label>';
-    html += '<input class="input" type="password" value="' + esc(state.partnerGatePass || '') + '" data-bind="partnerGatePass" placeholder="Mot de passe" />';
+    html += '<div style="position:relative;"><input class="input" type="password" style="padding-right:44px;" value="' + esc(state.partnerGatePass || '') + '" data-bind="partnerGatePass" placeholder="Mot de passe" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>';
     if (state.partnerGateError) html += '<div style="color:var(--danger);font-size:12px;font-weight:700;margin-top:8px;">' + esc(state.partnerGateError) + '</div>';
     html += '<button class="btn-primary" style="margin-top:16px;" data-action="submit-partner-gate"><i class="fa-solid fa-unlock"></i> Se connecter</button>';
     html += '</div></div>';
@@ -13609,7 +13648,7 @@ function renderFindAccountModal() {
   html += '<input class="input" placeholder="Ex: 70000000" value="' + esc(d.phone) + '" data-bind="findAccountDraft.phone" />';
   html += '</div>';
   html += '<label class="field-label">Mot de passe (si ce compte en a créé un)</label>';
-  html += '<input class="input" id="fa-password" type="password" value="' + esc(d.password || '') + '" data-bind="findAccountDraft.password" />';
+  html += '<div style="position:relative;"><input class="input" id="fa-password" type="password" style="padding-right:44px;" value="' + esc(d.password || '') + '" data-bind="findAccountDraft.password" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>';
   html += '<button class="btn-primary" style="margin-top:18px;" data-action="attempt-find-account">Retrouver mon compte</button>';
   html += '<button class="link-btn" style="width:100%;text-align:center;margin-top:12px;" data-action="open-forgot-password"><i class="fa-solid fa-circle-question"></i> Mot de passe oublié</button>';
   html += '</div></div>';
@@ -14687,7 +14726,7 @@ function renderDeleteAccountConfirmModal() {
   html += '<div style="font-size:12.5px;color:var(--text-dim);margin:12px 0;line-height:1.6;">Cette action est <b>définitive et irréversible</b>. Seront supprimés : votre compte, vos produits en vente, votre Portefeuille et vos Gains. Vos anciennes commandes restent visibles côté acheteurs/vendeurs concernés, comme n\'importe quel historique de transaction.</div>';
   if (hasPw) {
     html += '<label class="field-label">Confirmez avec votre mot de passe</label>';
-    html += '<input class="input" type="password" value="' + esc(state.deleteAccountPasswordInput) + '" data-bind="deleteAccountPasswordInput" placeholder="Mot de passe" />';
+    html += '<div style="position:relative;"><input class="input" type="password" style="padding-right:44px;" value="' + esc(state.deleteAccountPasswordInput) + '" data-bind="deleteAccountPasswordInput" placeholder="Mot de passe" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>';
   } else {
     html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">Ce compte n\'a pas de mot de passe — confirmez simplement ci-dessous.</div>';
   }
@@ -15234,9 +15273,9 @@ function renderForgotPasswordResetModal() {
   html += '<div class="section-title" style="margin-bottom:6px;"><i class="fa-solid fa-key"></i> Choisissez un nouveau mot de passe</div>';
   html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:16px;">Votre identité a été vérifiée. Pour votre sécurité, votre ancien mot de passe n\'est jamais réaffiché — choisissez-en simplement un nouveau.</div>';
   html += '<label class="field-label" style="margin-top:0;">Nouveau mot de passe</label>';
-  html += '<input class="input" type="password" value="' + esc(rd.password) + '" data-bind="forgotPasswordNewPwDraft.password" />';
+  html += '<div style="position:relative;"><input class="input" type="password" style="padding-right:44px;" value="' + esc(rd.password) + '" data-bind="forgotPasswordNewPwDraft.password" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>';
   html += '<label class="field-label">Confirmer le mot de passe</label>';
-  html += '<input class="input" type="password" value="' + esc(rd.password2) + '" data-bind="forgotPasswordNewPwDraft.password2" />';
+  html += '<div style="position:relative;"><input class="input" type="password" style="padding-right:44px;" value="' + esc(rd.password2) + '" data-bind="forgotPasswordNewPwDraft.password2" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>';
   html += '<button class="btn-primary" style="margin-top:18px;width:100%;" data-action="submit-forgot-password-reset">Valider</button>';
   html += '</div></div>';
   return html;
@@ -15299,7 +15338,7 @@ function renderUnlockAccountModal() {
   html += '<label class="field-label" style="margin-top:0;">Nom complet</label>';
   html += '<input class="input" id="unlock-name" placeholder="Ex : Issa Traor\u00e9" value="' + esc(d.name) + '" data-bind="unlockAccountDraft.name" />';
   html += '<label class="field-label">Mot de passe</label>';
-  html += '<input class="input" id="unlock-password" type="password" value="' + esc(d.password) + '" data-bind="unlockAccountDraft.password" />';
+  html += '<div style="position:relative;"><input class="input" id="unlock-password" type="password" style="padding-right:44px;" value="' + esc(d.password) + '" data-bind="unlockAccountDraft.password" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>';
   html += '<button class="btn-primary" style="margin-top:18px;width:100%;" data-action="submit-unlock-account"><i class="fa-solid fa-check"></i> Se connecter</button>';
   html += '<button class="link-btn" style="width:100%;text-align:center;margin-top:12px;" data-action="open-forgot-password"><i class="fa-solid fa-circle-question"></i> Mot de passe oubli\u00e9</button>';
   html += '</div></div>';
@@ -15341,9 +15380,9 @@ function renderCreatePasswordGateModal() {
   html += '<label class="field-label"' + (needsEmail ? '' : ' style="margin-top:0;"') + '>Date de naissance</label>';
   html += '<input class="input" id="pw-setup-birthdate" type="date" value="' + esc(d.birthDate) + '" data-bind="passwordSetupDraft.birthDate" />';
   html += '<label class="field-label">Créer un mot de passe</label>';
-  html += '<input class="input" id="pw-setup-password" type="password" value="' + esc(d.password) + '" data-bind="passwordSetupDraft.password" />';
+  html += '<div style="position:relative;"><input class="input" id="pw-setup-password" type="password" style="padding-right:44px;" value="' + esc(d.password) + '" data-bind="passwordSetupDraft.password" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>';
   html += '<label class="field-label">Confirmer le mot de passe</label>';
-  html += '<input class="input" id="pw-setup-password2" type="password" value="' + esc(d.password2) + '" data-bind="passwordSetupDraft.password2" />';
+  html += '<div style="position:relative;"><input class="input" id="pw-setup-password2" type="password" style="padding-right:44px;" value="' + esc(d.password2) + '" data-bind="passwordSetupDraft.password2" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>';
   html += '<button class="btn-primary" style="margin-top:18px;width:100%;" data-action="submit-password-setup"><i class="fa-solid fa-check"></i> Valider et continuer</button>';
   html += '</div></div>';
   return html;
@@ -15358,7 +15397,7 @@ function renderSensitiveConfirmModal() {
   html += '<div class="section-title" style="margin-bottom:6px;"><i class="fa-solid fa-lock"></i> Confirmation de sécurité</div>';
   html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:16px;">Pour confirmer « ' + esc(state.sensitiveConfirmLabel || 'cette action') + ' », entrez votre mot de passe.</div>';
   html += '<label class="field-label" style="margin-top:0;">Mot de passe</label>';
-  html += '<input class="input" type="password" id="sensitive-confirm-password" />';
+  html += '<div style="position:relative;"><input class="input" type="password" id="sensitive-confirm-password" style="padding-right:44px;" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>';
   html += '<button class="btn-primary" style="margin-top:18px;width:100%;" data-action="submit-sensitive-confirm"><i class="fa-solid fa-check"></i> Confirmer</button>';
   html += '<button class="link-btn" style="width:100%;text-align:center;margin-top:12px;" data-action="open-forgot-password"><i class="fa-solid fa-circle-question"></i> Mot de passe oublié</button>';
   html += '</div></div>';
@@ -21318,7 +21357,7 @@ function renderAdminSecurity() {
   html += '<label class="field-label" style="margin-top:0;">Nom d\'utilisateur</label>';
   html += '<input class="input" id="owner-cred-user" value="' + esc(ownerCreds.username) + '" data-action-input="owner-cred-username" />';
   html += '<label class="field-label">Nouveau mot de passe (laisser vide pour garder l\'actuel)</label>';
-  html += '<input class="input" type="password" id="owner-cred-pass" value="" placeholder="🔒 Protégé — tapez pour remplacer" data-action-input="owner-cred-password" />';
+  html += '<div style="position:relative;"><input class="input" type="password" id="owner-cred-pass" value="" style="padding-right:44px;" placeholder="🔒 Protégé — tapez pour remplacer" data-action-input="owner-cred-password" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>';
   html += '</div>';
 
   html += '<div class="glass-card" style="padding:14px;">';
@@ -21364,7 +21403,7 @@ function renderAdminSecurity() {
       html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div style="font-weight:800;font-size:13px;">' + esc(na.country) + '</div><button class="link-btn" style="color:var(--danger);font-size:11px;" data-action="remove-national-admin" data-value="' + na.id + '"><i class="fa-solid fa-trash"></i></button></div>';
       html += '<label class="field-label" style="margin-top:0;font-size:10px;">Identifiants admin national (pouvoir complet, ce pays)</label>';
       html += '<input class="input" style="margin-bottom:6px;" value="' + esc(na.ownerUsername) + '" data-action-input="national-owner-username" data-config="' + na.id + '" placeholder="Nom d\'utilisateur" />';
-      html += '<input class="input" type="password" value="" placeholder="🔒 Protégé — tapez pour remplacer" data-action-input="national-owner-password" data-config="' + na.id + '" />';
+      html += '<div style="position:relative;"><input class="input" type="password" value="" style="padding-right:44px;" placeholder="🔒 Protégé — tapez pour remplacer" data-action-input="national-owner-password" data-config="' + na.id + '" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>';
       html += '<label class="field-label" style="font-size:10px;">Groupe 2 de ce pays — par numéro, sans mot de passe</label>';
       html += '<div style="display:flex;gap:8px;margin-bottom:8px;">';
       html += '<input class="input" id="g2-national-phone-' + na.id + '" placeholder="Numéro (ex : 70 00 00 00)" data-format="phone" style="flex:1;" />';
@@ -21700,7 +21739,7 @@ function renderWebhookPartnersSection() {
     html += '<div style="display:flex;gap:8px;align-items:center;"><div class="toggle-switch ' + (w.enabled ? 'active' : '') + '" data-action="toggle-webhook-partner" data-value="' + w.id + '"><div class="toggle-knob"></div></div><button class="link-btn" style="color:var(--danger);padding:2px;" data-action="remove-webhook-partner" data-value="' + w.id + '"><i class="fa-solid fa-trash"></i></button></div>';
     html += '</div>';
     html += '<input class="input" id="webhook-url-' + w.id + '" placeholder="https://partenaire.exemple.com/webhook" value="' + esc(w.url) + '" data-action-input="webhook-partner-url" data-config="' + w.id + '" style="margin-bottom:6px;" />';
-    html += '<input class="input" id="webhook-token-' + w.id + '" type="password" placeholder="Jeton d\'authentification (optionnel)" value="' + esc(w.authToken) + '" data-action-input="webhook-partner-token" data-config="' + w.id + '" />';
+    html += '<div style="position:relative;"><input class="input" id="webhook-token-' + w.id + '" type="password" style="padding-right:44px;" placeholder="Jeton d\'authentification (optionnel)" value="' + esc(w.authToken) + '" data-action-input="webhook-partner-token" data-config="' + w.id + '" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>';
     html += '<button class="btn-secondary" style="margin-top:8px;width:100%;font-size:12px;padding:6px;" data-action="test-webhook-partner" data-value="' + w.id + '"><i class="fa-solid fa-vial"></i> Envoyer un test</button>';
     if (w.lastTestResult) html += '<div style="font-size:10.5px;margin-top:6px;color:' + (w.lastTestResult === "success" ? "#2e9e4f" : "var(--danger)") + ';">' + (w.lastTestResult === "success" ? "✅ Test envoyé." : "❌ Échec.") + '</div>';
     html += '</div>';
@@ -21722,7 +21761,7 @@ function renderDashboardPartnersSection() {
     html += '<div style="display:flex;gap:8px;align-items:center;"><div class="toggle-switch ' + (d.enabled ? 'active' : '') + '" data-action="toggle-dashboard-partner" data-value="' + d.id + '"><div class="toggle-knob"></div></div><button class="link-btn" style="color:var(--danger);padding:2px;" data-action="remove-dashboard-partner" data-value="' + d.id + '"><i class="fa-solid fa-trash"></i></button></div>';
     html += '</div>';
     html += '<input class="input" id="dash-user-' + d.id + '" placeholder="Nom d\'utilisateur" value="' + esc(d.username) + '" data-action-input="dashboard-partner-username" data-config="' + d.id + '" style="margin-bottom:6px;" />';
-    html += '<input class="input" id="dash-pass-' + d.id + '" type="password" placeholder="Mot de passe" value="' + esc(d.password) + '" data-action-input="dashboard-partner-password" data-config="' + d.id + '" />';
+    html += '<div style="position:relative;"><input class="input" id="dash-pass-' + d.id + '" type="password" style="padding-right:44px;" placeholder="Mot de passe" value="' + esc(d.password) + '" data-action-input="dashboard-partner-password" data-config="' + d.id + '" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>';
     if (d.enabled && d.username) {
       html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:8px;background:var(--bg-card);padding:6px;border-radius:6px;word-break:break-all;">Lien : ' + window.location.origin + window.location.pathname + '#partner-dashboard</div>';
     }
@@ -23974,6 +24013,20 @@ root.addEventListener("click", function(e) {
       break;
     }
     case "toggle-admin-pass-visible": state.adminGatePassVisible = !state.adminGatePassVisible; render(); break;
+    case "toggle-pw-visibility": {
+      // Générique, réutilisable sur n'importe quel champ mot de passe de
+      // l'app : le bouton œil est toujours juste après le champ dans le
+      // HTML, donc pas besoin d'identifiant unique ni de re-rendu — une
+      // simple bascule directe sur l'élément, qui garde la saisie intacte.
+      var pwInput = btn.previousElementSibling;
+      if (pwInput) {
+        var nowVisible = pwInput.type === "password";
+        pwInput.type = nowVisible ? "text" : "password";
+        var eyeIcon = btn.querySelector("i");
+        if (eyeIcon) eyeIcon.className = nowVisible ? "fa-solid fa-eye-slash" : "fa-solid fa-eye";
+      }
+      break;
+    }
     case "apply-livreur": applyToBecomeLivreur(); break;
     case "open-become-relais": {
       state.relaisApplyDraft = { email: state.profile.email || "", shopName: "", commune: "", quartier: "", addressDetail: "", shopLat: null, shopLng: null, selfiePhotoUri: null, verificationDocs: [], useAutreQuartier: false, autreQuartierNom: "", autreQuartierLat: null, autreQuartierLng: null };
