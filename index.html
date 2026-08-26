@@ -3543,6 +3543,13 @@ html.has-bg-pattern .notif-panel {
   margin-bottom: 4px;
 }
 
+.profile-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
 .vendor-hub-card {
   display: flex;
   align-items: center;
@@ -3856,10 +3863,10 @@ html.has-bg-pattern .notif-panel {
   transform: scale(0.92);
 }
 
-/* Titre "À la une" : noir pour rester lisible sur fond blanc, avec un
+/* Titre "À la une" : lisible dans les deux modes (clair/sombre), avec un
    contour bleu nuit lumineux qui rappelle l'éclat du phare. */
 .new-arrivals-title-glow {
-  color: #0a0a0a;
+  color: var(--text-primary);
   text-shadow: 0 0 4px rgba(30, 80, 160, 0.9), 0 0 10px rgba(50, 110, 220, 0.55);
 }
 
@@ -4020,7 +4027,7 @@ html.has-bg-pattern .notif-panel {
   font-weight: 700;
   font-style: italic;
   font-family: Georgia, 'Times New Roman', serif;
-  color: #0a0a0a;
+  color: var(--text-primary);
   text-shadow: 0 0 5px rgba(212, 175, 55, 0.9), 0 0 12px rgba(212, 175, 55, 0.55);
   letter-spacing: 0.2px;
 }
@@ -4379,6 +4386,148 @@ html.has-bg-pattern .notif-panel {
     .mc-filter-row{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
     .mc-filter-chip{font-size:11.5px;font-weight:700;background:var(--mc-panel-2);border:1px solid var(--mc-line);color:var(--mc-dim);padding:7px 14px;border-radius:99px;cursor:pointer;}
     .mc-filter-chip.active{background:var(--mc-green-dim);border-color:var(--mc-green);color:var(--mc-green);}
+
+    /* ================= MODE ORDINATEUR ================= */
+    /* Étape 1 du chantier bureau : la structure générale (menu, largeur,
+       grilles principales). L'app reste construite mobile-first — cette
+       section ne fait que RÉAJUSTER cette même mise en page pour un grand
+       écran, sans dupliquer le HTML. Les écrans qui n'ont pas encore leur
+       propre réglage ici gardent leur largeur mobile centrée par défaut :
+       ce n'est pas cassé, juste pas encore élargi — à compléter dans les
+       prochaines étapes de ce chantier. */
+    @media (min-width: 900px) {
+      #root {
+        max-width: 1100px;
+        padding-left: 230px;
+        padding-bottom: 40px;
+      }
+
+      .gems-header {
+        max-width: 1100px;
+        left: 50%;
+        padding-left: 246px;
+        box-sizing: border-box;
+      }
+
+      /* Le menu du bas devient un menu latéral fixe à gauche, sur toute
+         la hauteur de l'écran — même liste de boutons, juste réorganisée. */
+      .bottom-nav {
+        top: 0;
+        bottom: 0;
+        left: max(0px, calc(50% - 550px));
+        transform: none;
+        width: 210px;
+        max-width: 210px;
+        flex-direction: column;
+        justify-content: flex-start;
+        align-items: stretch;
+        gap: 4px;
+        padding: 24px 12px;
+        border-top: none;
+        border-right: 1px solid var(--border-color);
+        box-shadow: none;
+        overflow-y: auto;
+      }
+
+      .nav-item {
+        flex-direction: row;
+        justify-content: flex-start;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        padding: 12px 14px;
+        border-radius: 12px;
+        font-size: 13.5px;
+      }
+
+      .nav-item:hover {
+        background: var(--bg-body);
+      }
+
+      .nav-item.active {
+        background: var(--accent-glow, rgba(123, 203, 58, 0.12));
+      }
+
+      .nav-item i {
+        font-size: 18px;
+        width: 22px;
+        text-align: center;
+      }
+
+      /* Grilles principales : plus de colonnes avec l'espace disponible. */
+      .product-grid {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 14px;
+      }
+
+      .admin-stats-grid {
+        grid-template-columns: repeat(4, 1fr);
+      }
+
+      /* Fiche produit : image et achat côte à côte, au lieu d'empilés.
+         La description/avis/suggestions restent en pleine largeur
+         en dessous — comme sur la plupart des sites marchands. */
+      #modal-overlay .modal-sheet {
+        max-width: 780px;
+      }
+      .pd-layout {
+        display: flex;
+        gap: 28px;
+        align-items: flex-start;
+      }
+      .pd-media {
+        flex: 0 0 340px;
+        width: 340px;
+      }
+      .pd-buybox {
+        flex: 1;
+        min-width: 0;
+      }
+
+      /* Panier et Paiement : listes simples, pas besoin d'une mise en
+         page à deux colonnes comme la fiche produit — juste un peu plus
+         de place pour respirer, sans s'étirer sur toute la largeur. */
+      .cart-view, .checkout-view {
+        max-width: 640px;
+        margin: 0 auto;
+      }
+
+      /* Toutes les fenêtres (Profil, Portefeuille, Gains, réglages...)
+         profitent d'un peu plus de largeur sur ordinateur. Les fenêtres
+         qui ont leur propre largeur fixée (ex : la fiche produit à 780px,
+         la connexion Admin à 340px) gardent la leur — un style écrit
+         directement sur l'élément passe toujours avant cette règle. */
+      .modal-sheet {
+        max-width: 600px;
+      }
+
+      /* Catégories du marché : centrées au lieu de rester collées à
+         gauche quand il y a beaucoup plus de place qu'il n'en faut. */
+      .star-cats-row {
+        display: flex;
+        justify-content: center;
+      }
+      .sector-icons-grid {
+        justify-content: center;
+      }
+
+      .orders-view, .signup-form-view {
+        max-width: 640px;
+        margin: 0 auto;
+      }
+
+      /* Profil : le menu (Mes informations, Historique, Guide...) passe
+         en 2 colonnes au lieu de rester empilé en une seule — sinon la
+         fenêtre plus large ne fait que laisser du vide sur les côtés. */
+      #profile-overlay .modal-sheet {
+        max-width: 700px;
+      }
+      .profile-menu-list {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+    }
     </style>
 </head>
 <body>
@@ -6839,6 +6988,11 @@ function defaultState() {
     showBoostModal: false,
     showLocationPicker: false,
     showEarnings: false,
+    collapsedAdminSections: {},
+    adminOrdersSearch: "",
+    adminReviewsSearch: "",
+    showDeleteAccountConfirm: false,
+    deleteAccountPasswordInput: "",
     forgotPasswordResetAccountId: null,
     forgotPasswordNewPwDraft: null,
     imagePositionEditorIndex: null,
@@ -8194,6 +8348,44 @@ function loginAccount(accountId) {
   save();
   saveDoc("accounts", account);
   render();
+}
+
+// Suppression complète d'un compte — utilisée à la fois depuis l'Admin et
+// depuis "Supprimer mon compte" (Profil). Retire aussi tout ce qui
+// appartient EXCLUSIVEMENT à ce compte (produits en vente, portefeuille,
+// gains, jetons de notification). Les commandes déjà passées restent
+// intactes : elles appartiennent aussi à l'autre partie (acheteur ou
+// vendeur) et les supprimer casserait son propre historique.
+function deleteAccountCompletely(accountId) {
+  var acc = state.accounts.find(function(a) { return a.id === accountId; });
+  if (!acc) return;
+  state.products = state.products.filter(function(p) {
+    if (p.sellerId === accountId) { deleteRemoteDoc("products", p.id); return false; }
+    return true;
+  });
+  if (acc.phone) {
+    var delWid = normalizeWalletPhone(acc.phone);
+    state.wallets = (state.wallets || []).filter(function(w) {
+      if (w.id === delWid) { deleteRemoteDoc("wallets", w.id); return false; }
+      return true;
+    });
+    state.earningsLedgers = (state.earningsLedgers || []).filter(function(e) {
+      if (e.id === delWid) { deleteRemoteDoc("earningsLedgers", e.id); return false; }
+      return true;
+    });
+  }
+  state.fcmTokens = (state.fcmTokens || []).filter(function(t) {
+    if (t.accountId === accountId) { deleteRemoteDoc("fcmTokens", t.id); return false; }
+    return true;
+  });
+  state.pushSubscriptions = (state.pushSubscriptions || []).filter(function(s) {
+    if (s.accountId === accountId) { deleteRemoteDoc("pushSubscriptions", s.id); return false; }
+    return true;
+  });
+  state.accounts = state.accounts.filter(function(a) { return a.id !== accountId; });
+  deleteRemoteDoc("accounts", accountId);
+  if (state.deviceAccountIds) state.deviceAccountIds = state.deviceAccountIds.filter(function(id) { return id !== accountId; });
+  save();
 }
 
 function logout() {
@@ -10878,7 +11070,23 @@ function renderLocationPickerModal() {
   html += '<button class="modal-close" data-action="close-location-picker"><i class="fa-solid fa-xmark"></i></button>';
   html += '<div class="section-title" style="margin-bottom:4px;">Placer votre position</div>';
   html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">La localisation automatique n\'a pas répondu. Touchez la carte à l\'endroit voulu pour placer votre position manuellement.</div>';
+  html += '<div style="position:relative;">';
   html += '<div id="location-picker-map" style="height:300px;border-radius:14px;overflow:hidden;position:relative;isolation:isolate;z-index:0;"></div>';
+  html += '<div style="position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:500;background:rgba(30,30,30,0.92);color:white;font-size:11.5px;font-weight:600;padding:8px 14px;border-radius:12px;display:flex;align-items:center;gap:8px;box-shadow:0 4px 12px rgba(0,0,0,0.25);max-width:88%;text-align:center;">';
+  html += '<i class="fa-solid fa-hand" style="font-size:15px;flex-shrink:0;"></i>';
+  html += 'Utilisez <b>deux doigts</b> pour déplacer la carte';
+  html += '<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:6px solid rgba(30,30,30,0.92);"></div>';
+  html += '</div>';
+  html += '</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px;max-width:180px;margin-left:auto;margin-right:auto;">';
+  html += '<div></div><button type="button" class="btn-secondary" style="padding:8px;" data-action="pan-location-picker" data-value="up"><i class="fa-solid fa-arrow-up"></i></button><div></div>';
+  html += '<button type="button" class="btn-secondary" style="padding:8px;" data-action="pan-location-picker" data-value="left"><i class="fa-solid fa-arrow-left"></i></button>';
+  html += '<button type="button" class="btn-secondary" style="padding:8px;" data-action="pan-location-picker" data-value="zoomout"><i class="fa-solid fa-magnifying-glass-minus"></i></button>';
+  html += '<button type="button" class="btn-secondary" style="padding:8px;" data-action="pan-location-picker" data-value="right"><i class="fa-solid fa-arrow-right"></i></button>';
+  html += '<div></div><button type="button" class="btn-secondary" style="padding:8px;" data-action="pan-location-picker" data-value="down"><i class="fa-solid fa-arrow-down"></i></button>';
+  html += '<button type="button" class="btn-secondary" style="padding:8px;" data-action="pan-location-picker" data-value="zoomin"><i class="fa-solid fa-magnifying-glass-plus"></i></button>';
+  html += '</div>';
+  html += '<div style="font-size:10.5px;color:var(--text-dim);text-align:center;margin-top:6px;">Vous pouvez aussi utiliser ces boutons pour déplacer la carte, puis toucher l\'endroit voulu.</div>';
   html += '<button class="btn-primary" id="confirm-manual-location-btn" style="margin-top:14px;" data-action="confirm-manual-location" disabled>Confirmer cette position</button>';
   html += '<div class="divider-dashed" style="margin:16px 0;"></div>';
   html += renderGpsPasteField(latPath, lngPath);
@@ -10889,6 +11097,21 @@ function renderLocationPickerModal() {
 function mountLocationPickerMap() {
   var el = document.getElementById('location-picker-map');
   if (!el) return;
+  if (typeof L !== 'undefined' && !window._leafletPointerPatchApplied) {
+    // Certaines WebView Android (dont celle de Capacitor) gèrent mal le
+    // système "Pointer Events" que Leaflet utilise par défaut pour le
+    // glissement à un seul doigt — ce qui explique précisément le
+    // symptôme observé : le pincement à deux doigts (qui passe par un
+    // système tactile différent, non affecté) fonctionne, mais le
+    // glissement à un doigt reste figé. On force donc Leaflet à utiliser
+    // son ancien système tactile, plus lent à standardiser mais bien plus
+    // fiable dans ce genre de WebView embarquée.
+    L.Browser.pointer = false;
+    L.Browser.msPointer = false;
+    L.Browser.pointerEvents = false;
+    L.Browser.touch = true;
+    window._leafletPointerPatchApplied = true;
+  }
   if (typeof L === 'undefined') {
     // La bibliothèque de carte n'a pas pu se charger (réseau) — on
     // n'abandonne pas silencieusement, on guide vers le champ de
@@ -10914,6 +11137,7 @@ function mountLocationPickerMap() {
     el.innerHTML = '';
   }
   var map = L.map('location-picker-map').setView([12.6392, -8.0029], 12);
+  window._locationPickerMapInstance = map;
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
   // Leaflet calcule sa taille au moment précis de l'initialisation — si la
   // fenêtre n'est pas encore totalement stabilisée à cet instant (l'espace
@@ -12532,6 +12756,7 @@ var OVERLAY_REGISTRY = [
   { key: "locationPicker", isOpen: function () { return state.showLocationPicker; }, close: function () { state.showLocationPicker = false; } },
   { key: "imagePositionEditor", isOpen: function () { return state.imagePositionEditorIndex !== null; }, close: function () { state.imagePositionEditorIndex = null; } },
   { key: "earnings", isOpen: function () { return state.showEarnings; }, close: function () { state.showEarnings = false; state.showProfileScreen = true; } },
+  { key: "deleteAccountConfirm", isOpen: function () { return state.showDeleteAccountConfirm; }, close: function () { state.showDeleteAccountConfirm = false; state.deleteAccountPasswordInput = ""; state.showProfileScreen = true; } },
   { key: "forgotPasswordReset", isOpen: function () { return state.forgotPasswordResetAccountId !== null; }, close: function () { state.forgotPasswordResetAccountId = null; state.forgotPasswordNewPwDraft = null; } },
   { key: "adminProductEdit", isOpen: function () { return state.showAdminProductEdit; }, close: function () { state.showAdminProductEdit = false; state.adminProductEditDraft = null; } },
   { key: "livreurRefuse", isOpen: function () { return state.showLivreurRefuseModal; }, close: function () { state.showLivreurRefuseModal = false; state.livreurRefuseOrderId = null; } },
@@ -13055,6 +13280,7 @@ function buildHTML() {
   if (state.showLocationPicker) html += renderLocationPickerModal();
   if (state.imagePositionEditorIndex !== null) html += renderImagePositionEditorModal();
   if (state.showEarnings) html += renderEarningsModal();
+  if (state.showDeleteAccountConfirm) html += renderDeleteAccountConfirmModal();
   if (state.forgotPasswordResetAccountId !== null) html += renderForgotPasswordResetModal();
   if (state.showEmailRequiredModal) html += renderEmailRequiredModal();
   if (state.showDisputeModal) html += renderDisputeModal();
@@ -13174,7 +13400,7 @@ function renderPublicRelaisPage(relaisId) {
   }
   var html = '<div style="min-height:100vh;background:var(--bg-body);padding:20px 16px;font-family:inherit;">';
   html += '<div style="text-align:center;margin-bottom:18px;">';
-  html += '<div style="display:inline-flex;align-items:center;gap:6px;font-weight:800;font-size:16px;color:#0a0a0a;">GE<span style="font-style:italic;font-weight:500;">market</span>S</div>';
+  html += '<div style="display:inline-flex;align-items:center;gap:6px;font-weight:800;font-size:16px;color:var(--text-primary);">Sounsouni</div>';
   html += '</div>';
 
   if (!account || account.relaisApplicationStatus !== "approved") {
@@ -13926,7 +14152,7 @@ function renderProfileModal() {
   }
   html += '</div>';
 
-  html += '<div style="display:flex;flex-direction:column;gap:10px;margin-top:4px;">';
+  html += '<div class="profile-menu-list">';
   html += '<button class="vendor-hub-card" data-action="open-profile-info" style="background:var(--bg-body);"><i class="fa-solid fa-id-card"></i><div><div class="vh-title">Mes informations & adresses</div><div class="vh-sub">Nom, téléphone, email, adresses de livraison</div></div><i class="fa-solid fa-chevron-right"></i></button>';
   html += '<button class="vendor-hub-card" data-action="open-history" style="background:var(--bg-body);"><i class="fa-solid fa-clock-rotate-left"></i><div><div class="vh-title">Historique</div><div class="vh-sub">Tous mes achats et toutes mes ventes</div></div><i class="fa-solid fa-chevron-right"></i></button>';
   html += '<button class="vendor-hub-card" data-action="open-affiliate-program" style="background:var(--bg-body);"><i class="fa-solid fa-hand-holding-dollar"></i><div><div class="vh-title">Programme d\'affiliation</div><div class="vh-sub">Mon code, mon lien, mes gains</div></div><i class="fa-solid fa-chevron-right"></i></button>';
@@ -13963,7 +14189,7 @@ function renderProfileModal() {
   html += '</div>';
 
 
-  html += '<div style="display:flex;flex-direction:column;gap:10px;margin-top:20px;">';
+  html += '<div class="profile-menu-list" style="margin-top:20px;">';
   html += '<button class="vendor-hub-card" data-action="open-user-guide" style="background:var(--bg-body);"><i class="fa-solid fa-book-open"></i><div><div class="vh-title">Guide d\'utilisation de l\'application</div><div class="vh-sub">Comment naviguer et utiliser Sounsouni</div></div><i class="fa-solid fa-chevron-right"></i></button>';
   html += '<button class="vendor-hub-card" data-action="toggle-dark-mode" style="background:var(--bg-body);"><i class="fa-solid ' + (state.darkMode ? 'fa-sun' : 'fa-moon') + '"></i><div><div class="vh-title">' + (state.darkMode ? 'Mode clair' : 'Mode sombre') + '</div><div class="vh-sub">' + (state.darkMode ? 'Revenir à l\'affichage clair' : 'Passer à un affichage sombre') + '</div></div><div class="dark-mode-switch' + (state.darkMode ? ' on' : '') + '"><div class="dark-mode-knob"></div></div></button>';
   // Dans l'app Capacitor, la permission web classique (Notification.permission)
@@ -13980,6 +14206,7 @@ function renderProfileModal() {
   html += '</div>';
 
   html += '<button class="link-btn" style="color:var(--danger);margin-top:18px;width:100%;text-align:center;" data-action="logout"><i class="fa-solid fa-right-from-bracket"></i> Se déconnecter</button>';
+  html += '<button class="link-btn" style="color:var(--text-dim);margin-top:10px;width:100%;text-align:center;font-size:11.5px;" data-action="open-delete-account"><i class="fa-solid fa-trash-can"></i> Supprimer mon compte</button>';
   html += '</div></div>';
   return html;
 }
@@ -14446,6 +14673,26 @@ function renderEarningsModal() {
       html += '</div>';
     }
   }
+  html += '</div></div>';
+  return html;
+}
+
+function renderDeleteAccountConfirmModal() {
+  var hasPw = state.profile && !!state.profile.password;
+  var html = '<div class="modal-overlay" id="delete-account-overlay" data-action="close-delete-account">';
+  html += '<div class="modal-sheet">';
+  html += '<button class="modal-close" data-action="close-delete-account"><i class="fa-solid fa-xmark"></i></button>';
+  html += '<div style="text-align:center;font-size:32px;margin-bottom:8px;">⚠️</div>';
+  html += '<div class="section-title" style="text-align:center;color:var(--danger);">Supprimer mon compte</div>';
+  html += '<div style="font-size:12.5px;color:var(--text-dim);margin:12px 0;line-height:1.6;">Cette action est <b>définitive et irréversible</b>. Seront supprimés : votre compte, vos produits en vente, votre Portefeuille et vos Gains. Vos anciennes commandes restent visibles côté acheteurs/vendeurs concernés, comme n\'importe quel historique de transaction.</div>';
+  if (hasPw) {
+    html += '<label class="field-label">Confirmez avec votre mot de passe</label>';
+    html += '<input class="input" type="password" value="' + esc(state.deleteAccountPasswordInput) + '" data-bind="deleteAccountPasswordInput" placeholder="Mot de passe" />';
+  } else {
+    html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">Ce compte n\'a pas de mot de passe — confirmez simplement ci-dessous.</div>';
+  }
+  html += '<button class="btn-primary" style="margin-top:16px;background:var(--danger);" data-action="submit-delete-account"><i class="fa-solid fa-trash-can"></i> Supprimer définitivement</button>';
+  html += '<button class="link-btn" style="width:100%;text-align:center;margin-top:10px;" data-action="close-delete-account">Annuler</button>';
   html += '</div></div>';
   return html;
 }
@@ -15419,11 +15666,26 @@ function renderAdminOrdersListModal() {
   var orders = state.orders.filter(inAdminScope).sort(function(a, b) { return b.createdAt - a.createdAt; });
   var title = "Toutes les commandes";
   if (filterKey === "delivered") { orders = orders.filter(function(o) { return o.status === "Livrée"; }); title = "Commandes livrées"; }
+  var ordersSearch = (state.adminOrdersSearch || "").toLowerCase().trim();
+  if (ordersSearch) {
+    orders = orders.filter(function(o) {
+      return o.id.slice(-5).toLowerCase().indexOf(ordersSearch) !== -1 ||
+        (o.buyerName || "").toLowerCase().indexOf(ordersSearch) !== -1 ||
+        (o.status || "").toLowerCase().indexOf(ordersSearch) !== -1;
+    });
+  }
+  var ordersCollapsed = !!state.collapsedAdminSections.ordersList;
 
   var html = '<div class="modal-overlay" id="admin-orders-list-overlay" data-action="close-admin-orders-list">';
   html += '<div class="modal-sheet" style="max-height:85vh;">';
   html += '<button class="modal-close" data-action="close-admin-orders-list"><i class="fa-solid fa-xmark"></i></button>';
   html += '<div class="section-title" style="margin-bottom:4px;">' + title + '</div>';
+  if (!state.adminOrderDetailId) {
+    html += '<div style="display:flex;align-items:center;gap:8px;margin:10px 0;">';
+    html += '<input class="input" placeholder="Rechercher (n° commande, client, statut)…" value="' + esc(state.adminOrdersSearch || "") + '" data-action-input="admin-orders-search" style="flex:1;" />';
+    html += '<button class="link-btn" style="flex:0;padding:8px;" data-action="toggle-admin-section" data-value="ordersList"><i class="fa-solid ' + (ordersCollapsed ? 'fa-chevron-down' : 'fa-chevron-up') + '"></i></button>';
+    html += '</div>';
+  }
   html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:14px;">' + orders.length + ' commande(s)</div>';
   if (state.adminOrderDetailId) {
     var o = null;
@@ -15455,7 +15717,7 @@ function renderAdminOrdersListModal() {
       html += '<button class="link-btn" style="color:var(--danger);margin-top:10px;" data-action="admin-delete-order" data-value="' + o.id + '"><i class="fa-solid fa-trash"></i> Supprimer cette commande</button>';
       html += '</div>';
     }
-  } else {
+  } else if (!ordersCollapsed) {
     for (var j = 0; j < orders.length && j < 100; j++) {
       var o2 = orders[j];
       html += '<div class="card-row" style="cursor:pointer;" data-action="open-admin-order-detail" data-value="' + o2.id + '">';
@@ -15808,7 +16070,7 @@ function renderTrustBanner() {
 // tourner d'une pub à l'autre ne redessine jamais toute la page.
 function renderVipAdItem(vipAd) {
   if (!vipAd) return '';
-  var itemStyle = 'color:' + (vipAd.textColor || '#ffffff') + ';';
+  var itemStyle = 'color:' + (vipAd.textColor || '#1a1a2e') + ';';
   if (vipAd.bgColor) itemStyle += 'background:' + vipAd.bgColor + ';';
   var effectClass = vipAd.effect && vipAd.effect !== 'none' ? ' vip-fx-' + vipAd.effect : '';
   var out = '<div class="vip-ad-banner' + effectClass + '" style="' + itemStyle + '"' + (vipAd.link ? ' data-action="open-vip-ad-link" data-value="' + esc(vipAd.link) + '"' : '') + '>';
@@ -16494,10 +16756,10 @@ function renderCart() {
   var backLink = '<button class="link-btn back-to-market" data-action="continue-shopping"><i class="fa-solid fa-arrow-left"></i> Continuer mes achats</button>';
   
   if (groups.length === 0 || groups.every(function(g) { return g.items.length === 0; })) {
-    return backLink + '<div class="empty-state">' + renderCartIcon(48) + '<div class="title">Panier vide</div><button class="link-btn" data-action="go" data-value="market">Parcourir le marché</button></div>';
+    return '<div class="cart-view">' + backLink + '<div class="empty-state">' + renderCartIcon(48) + '<div class="title">Panier vide</div><button class="link-btn" data-action="go" data-value="market">Parcourir le marché</button></div></div>';
   }
   
-  var html = backLink + '<div class="section-title">Mon panier</div>';
+  var html = '<div class="cart-view">' + backLink + '<div class="section-title">Mon panier</div>';
   // Total général — additionné PAR DEVISE plutôt que dans une seule
   // somme, pour ne jamais afficher un chiffre faux si le panier contient
   // (encore, avant validation) des articles de pays différents.
@@ -16562,6 +16824,7 @@ function renderCart() {
   }
   html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:16px;"><i class="fa-solid fa-circle-info"></i> Les frais de livraison seront calculés à l\'étape suivante, selon le nombre de boutiques et le mode choisi (Express ou Point de Retrait).</div>';
   html += '<button class="btn-primary" data-action="go-checkout-from-cart">Passer à la livraison <i class="fa-solid fa-arrow-right"></i></button>';
+  html += '</div>';
   return html;
 }
 
@@ -16597,7 +16860,7 @@ function renderCheckout() {
   var items = checkoutItems();
   var refCode = getReferralCode();
   
-  var html = '<div class="section-title">Livraison & paiement</div>';
+  var html = '<div class="checkout-view"><div class="section-title">Livraison & paiement</div>';
   if (state.quickBuyItem) {
     var itemNames = '';
     for (var k = 0; k < items.length; k++) {
@@ -16871,6 +17134,7 @@ function renderCheckout() {
   html += '<span>Total</span><span style="color:var(--accent)">' + money(checkoutSubtotal() + fee) + '</span>';
   html += '</div>';
   html += '<button class="btn-primary" data-action="place-order">Confirmer <i class="fa-solid fa-arrow-right"></i></button>';
+  html += '</div>';
   return html;
 }
 
@@ -17037,7 +17301,7 @@ function renderOrders() {
     }
   }
   if (allMyOrders.length === 0) {
-    return '<div class="empty-state"><i class="fa-solid fa-box"></i><div class="title">Aucun achat</div></div>';
+    return '<div class="orders-view"><div class="empty-state"><i class="fa-solid fa-box"></i><div class="title">Aucun achat</div></div></div>';
   }
   // Un achat livré depuis plus de 24h bascule automatiquement dans
   // l'historique — calculé à l'affichage (jamais de vraie "migration" de
@@ -17058,13 +17322,14 @@ function renderOrders() {
   var activeTab = state.ordersTab || "current";
   var myOrders = activeTab === "history" ? historyOrders : currentOrders;
 
-  var html = '<div class="section-title">Mes achats</div>';
+  var html = '<div class="orders-view"><div class="section-title">Mes achats</div>';
   html += '<div class="tab-row" style="margin-bottom:12px;">';
   html += '<button class="tab-btn ' + (activeTab !== "history" ? 'active' : '') + '" data-action="set-orders-tab" data-value="current">En cours (' + currentOrders.length + ')</button>';
   html += '<button class="tab-btn ' + (activeTab === "history" ? 'active' : '') + '" data-action="set-orders-tab" data-value="history">Historique (' + historyOrders.length + ')</button>';
   html += '</div>';
   if (myOrders.length === 0) {
     html += '<div class="empty-state"><i class="fa-solid fa-box"></i><div class="title">' + (activeTab === "history" ? "Aucun achat livré depuis plus de 24h pour l'instant" : "Aucun achat en cours") + '</div></div>';
+    html += '</div>';
     return html;
   }
   for (var j = 0; j < myOrders.length; j++) {
@@ -17140,6 +17405,7 @@ function renderOrders() {
     html += '</div>';
     html += '</div>';
   }
+  html += '</div>';
   return html;
 }
 
@@ -17153,7 +17419,7 @@ function renderSellerProfileSetup() {
   var gpsOk = p.shopLat != null && p.shopLng != null;
   var fromPublish = !!state.pendingProductPublish;
 
-  var html = '<div class="section-title"><i class="fa-solid ' + (fromPublish ? 'fa-map-pin' : typeInfo.icon) + '"></i> ' + (fromPublish ? 'Où récupérer vos articles ?' : 'Complétez votre profil') + '</div>';
+  var html = '<div class="signup-form-view"><div class="section-title"><i class="fa-solid ' + (fromPublish ? 'fa-map-pin' : typeInfo.icon) + '"></i> ' + (fromPublish ? 'Où récupérer vos articles ?' : 'Complétez votre profil') + '</div>';
   html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:16px;">' + (fromPublish ? 'Pour que le livreur puisse récupérer facilement vos articles vendus, indiquez précisément où vous vous trouvez — commune, quartier, et si possible un endroit connu tout proche (arrêt, marché, école...).' : 'Ces informations sont obligatoires pour les vendeurs de type "' + esc(typeInfo.label) + '" avant d\'accéder à votre espace.') + '</div>';
 
   var qDataShop = getQuartiersData();
@@ -17179,6 +17445,7 @@ function renderSellerProfileSetup() {
   html += '<button type="button" class="btn-secondary" style="margin-top:4px" data-action="capture-shop-gps-profile">';
   html += '<i class="fa-solid fa-location-crosshairs"></i> ' + (gpsOk ? 'Position capturée ✅ (recommencer)' : 'Localiser mon activité');
   html += '</button>';
+  html += '<button type="button" class="link-btn" style="width:100%;text-align:center;margin-top:6px;font-size:12px;" data-action="open-manual-location-picker" data-value="shop-profile"><i class="fa-solid fa-map-location-dot"></i> Choisir un autre point sur la carte</button>';
   html += gpsOk ? ('<div style="font-size:11px;color:var(--success);margin-top:6px">📍 ' + p.shopLat.toFixed(5) + ', ' + p.shopLng.toFixed(5) + '</div>') : '<div style="font-size:11px;color:var(--text-dim);margin-top:6px">Obligatoire pour continuer.</div>';
 
   html += '<button class="btn-primary" style="margin-top:20px;" data-action="complete-seller-profile">' + (fromPublish ? 'Enregistrer et continuer' : 'Continuer') + ' <i class="fa-solid fa-arrow-right"></i></button>';
@@ -17188,6 +17455,7 @@ function renderSellerProfileSetup() {
   } else {
     html += '<button class="link-btn" style="margin-top:12px;width:100%;text-align:center;color:var(--text-dim);" data-action="cancel-pending-publish">Annuler la publication</button>';
   }
+  html += '</div>';
   return html;
 }
 
@@ -17225,6 +17493,7 @@ function renderRelaisEditInfo() {
   html += '<button type="button" class="btn-secondary" style="margin-top:4px" data-action="capture-shop-gps-profile">';
   html += '<i class="fa-solid fa-location-crosshairs"></i> ' + (p.shopLat != null ? 'Position capturée ✅ (recommencer)' : 'Localiser ma boutique');
   html += '</button>';
+  html += '<button type="button" class="link-btn" style="width:100%;text-align:center;margin-top:6px;font-size:12px;" data-action="open-manual-location-picker" data-value="shop-profile"><i class="fa-solid fa-map-location-dot"></i> Choisir un autre point sur la carte</button>';
   if (p.shopLat != null) html += '<div style="font-size:11px;color:var(--success);margin-top:6px">📍 ' + p.shopLat.toFixed(5) + ', ' + p.shopLng.toFixed(5) + '</div>';
   html += '<button class="btn-primary" style="margin-top:20px;" data-action="save-relais-info">Enregistrer les modifications</button>';
   return html;
@@ -19221,12 +19490,16 @@ function renderAdminVipAds() {
   if (editing) html += '<button class="btn-secondary" style="flex:0;width:auto;padding:0 16px;" data-action="cancel-edit-vip-ad">Annuler</button>';
   html += '</div></div>';
 
-  html += '<div style="font-weight:800;font-size:14px;margin-bottom:10px;">Publicités (' + state.vipAds.length + ')</div>';
+  var vipCollapsed = !!state.collapsedAdminSections.vipAdsList;
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div style="font-weight:800;font-size:14px;">Publicités (' + state.vipAds.length + ')</div><button class="link-btn" style="padding:6px;" data-action="toggle-admin-section" data-value="vipAdsList"><i class="fa-solid ' + (vipCollapsed ? 'fa-chevron-down' : 'fa-chevron-up') + '"></i></button></div>';
   if (state.vipAds.length === 0) {
     html += '<div class="empty-state"><i class="fa-solid fa-crown"></i><div class="title">Aucune publicité VIP pour l\'instant</div></div>';
-  } else {
-    for (var i = 0; i < state.vipAds.length; i++) {
-      var ad = state.vipAds[i];
+  } else if (!vipCollapsed) {
+    if (state.vipAds.length > 6) html += '<input class="input" style="margin-bottom:10px;" placeholder="Rechercher une publicité (titre)…" value="' + esc(state.adminVipAdsSearch || "") + '" data-action-input="admin-vipads-search" />';
+    var vipSearch = (state.adminVipAdsSearch || "").toLowerCase().trim();
+    var vipAdsToShow = vipSearch ? state.vipAds.filter(function(a) { return (a.title || "").toLowerCase().indexOf(vipSearch) !== -1; }) : state.vipAds;
+    for (var i = 0; i < vipAdsToShow.length; i++) {
+      var ad = vipAdsToShow[i];
       var isActiveNow = isVipAdActive(ad);
       html += '<div class="card-row">';
       if (ad.imageUrl) html += '<img loading="lazy" src="' + esc(ad.imageUrl) + '" style="width:40px;height:40px;border-radius:8px;object-fit:cover;" />';
@@ -19260,11 +19533,15 @@ function renderAdminBoosts() {
   html += '<div class="mono" style="font-size:24px;font-weight:700;color:var(--mc-green,var(--accent));">' + money(totalBoostRevenue, state.adminCountryScope) + '</div>';
   html += '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">' + confirmedBoosts.length + ' achat(s) confirmé(s) au total</div>';
   html += '<div class="divider-dashed" style="margin:14px 0;"></div>';
-  html += '<div style="font-weight:700;font-size:12px;margin-bottom:8px;">Historique des achats</div>';
+  var boostsCollapsed = !!state.collapsedAdminSections.boostsHistory;
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><div style="font-weight:700;font-size:12px;">Historique des achats</div><button class="link-btn" style="padding:6px;" data-action="toggle-admin-section" data-value="boostsHistory"><i class="fa-solid ' + (boostsCollapsed ? 'fa-chevron-down' : 'fa-chevron-up') + '"></i></button></div>';
   if (confirmedBoosts.length === 0) {
     html += '<div style="font-size:12px;color:var(--text-dim);">Aucun achat confirmé pour l\'instant.</div>';
-  } else {
+  } else if (!boostsCollapsed) {
+    if (confirmedBoosts.length > 8) html += '<input class="input" style="margin-bottom:10px;" placeholder="Rechercher un vendeur…" value="' + esc(state.adminBoostsSearch || "") + '" data-action-input="admin-boosts-search" />';
+    var boostsSearch = (state.adminBoostsSearch || "").toLowerCase().trim();
     var sortedBoosts = confirmedBoosts.slice().sort(function(a, b) { return (b.activatedAt || b.createdAt) - (a.activatedAt || a.createdAt); });
+    if (boostsSearch) sortedBoosts = sortedBoosts.filter(function(sb) { return (sb.sellerName || "").toLowerCase().indexOf(boostsSearch) !== -1; });
     for (var sbi = 0; sbi < Math.min(sortedBoosts.length, 20); sbi++) {
       var sb = sortedBoosts[sbi];
       html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-color);font-size:12px;">';
@@ -19424,7 +19701,11 @@ function renderAdminQuartiers() {
   }
 
   html += '<div class="divider-dashed" style="margin:16px 0;"></div>';
-  html += '<div style="font-weight:800;font-size:14px;margin-bottom:10px;"><i class="fa-solid fa-map"></i> Liste actuelle (modifiable)</div>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+  html += '<div style="font-weight:800;font-size:14px;"><i class="fa-solid fa-map"></i> Liste actuelle (modifiable)</div>';
+  var quartiersCollapsed = !!state.collapsedAdminSections.quartiersList;
+  html += '<button class="link-btn" style="padding:6px;" data-action="toggle-admin-section" data-value="quartiersList"><i class="fa-solid ' + (quartiersCollapsed ? 'fa-chevron-down' : 'fa-chevron-up') + '"></i></button>';
+  html += '</div>';
 
   // ---- Ajouter une commune ----
   html += '<div style="display:flex;gap:8px;margin-bottom:14px;">';
@@ -19432,8 +19713,19 @@ function renderAdminQuartiers() {
   html += '<button class="btn-secondary" style="width:auto;padding:0 14px;" data-action="admin-add-commune"><i class="fa-solid fa-plus"></i></button>';
   html += '</div>';
 
-  for (var ci2 = 0; ci2 < communes.length; ci2++) {
-    var commune = communes[ci2];
+  var quartiersSearch = (state.adminQuartiersSearch || "").toLowerCase().trim();
+  var communesToShow = communes;
+  if (quartiersSearch) {
+    communesToShow = communes.filter(function(c) {
+      if (c.toLowerCase().indexOf(quartiersSearch) !== -1) return true;
+      return (data[c] || []).some(function(q) { return q.toLowerCase().indexOf(quartiersSearch) !== -1; });
+    });
+  }
+  if (communes.length > 4) html += '<input class="input" style="margin-bottom:14px;" placeholder="Rechercher une commune ou un quartier…" value="' + esc(state.adminQuartiersSearch || "") + '" data-action-input="admin-quartiers-search" />';
+
+  if (!quartiersCollapsed) {
+  for (var ci2 = 0; ci2 < communesToShow.length; ci2++) {
+    var commune = communesToShow[ci2];
     html += '<div class="glass-card" style="padding:12px;margin-bottom:10px;">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
     html += '<div style="font-weight:800;font-size:13.5px;">' + esc(commune) + '</div>';
@@ -19485,6 +19777,7 @@ function renderAdminQuartiers() {
     html += '<button class="link-btn" data-action="admin-add-quartier" data-value="' + esc(commune) + '"><i class="fa-solid fa-plus"></i></button>';
     html += '</div>';
     html += '</div>';
+  }
   }
   return html;
 }
@@ -19598,7 +19891,7 @@ function renderAdminMessagerie() {
   html += '<button class="btn-primary" style="margin-top:10px;" data-action="send-admin-broadcast"><i class="fa-solid fa-paper-plane"></i> Envoyer à tous les comptes (' + scopedAccountsCount + ')</button>';
   html += '</div>';
 
-  function renderChannelSection(title, icon, roleFilter) {
+  function renderChannelSection(title, icon, roleFilter, sectionKey) {
     var accountIds = {};
     for (var a = 0; a < state.accounts.length; a++) {
       var acc = state.accounts[a];
@@ -19610,7 +19903,14 @@ function renderAdminMessagerie() {
       if (matches) accountIds[acc.id] = acc;
     }
     var convs = state.adminConversations.filter(function(c) { return accountIds[c.accountId]; }).sort(function(x, y) { return y.lastMessageTime - x.lastMessageTime; });
-    var sectionHtml = '<div style="font-weight:800;font-size:14px;margin:16px 0 10px;"><i class="fa-solid ' + icon + '"></i> ' + title + '</div>';
+    var msgSearch = (state.adminMessagerieSearch || "").toLowerCase().trim();
+    if (msgSearch) convs = convs.filter(function(c) { return (accountIds[c.accountId].name || "").toLowerCase().indexOf(msgSearch) !== -1; });
+    var sectionCollapsed = !!state.collapsedAdminSections[sectionKey];
+    var sectionHtml = '<div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0 10px;">';
+    sectionHtml += '<div style="font-weight:800;font-size:14px;"><i class="fa-solid ' + icon + '"></i> ' + title + ' (' + convs.length + ')</div>';
+    sectionHtml += '<button class="link-btn" style="padding:6px;" data-action="toggle-admin-section" data-value="' + sectionKey + '"><i class="fa-solid ' + (sectionCollapsed ? 'fa-chevron-down' : 'fa-chevron-up') + '"></i></button>';
+    sectionHtml += '</div>';
+    if (sectionCollapsed) return sectionHtml;
     if (convs.length === 0) {
       sectionHtml += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;">Aucune conversation pour l\'instant.</div>';
       return sectionHtml;
@@ -19632,9 +19932,10 @@ function renderAdminMessagerie() {
     return sectionHtml;
   }
 
-  html += renderChannelSection("Livreurs", "fa-truck-fast", "livreur");
-  html += renderChannelSection("Points de Retrait", "fa-shop", "point_vente");
-  html += renderChannelSection("Autres comptes", "fa-user", "autres");
+  html += '<input class="input" style="margin-bottom:6px;" placeholder="Rechercher une conversation (nom du compte)…" value="' + esc(state.adminMessagerieSearch || "") + '" data-action-input="admin-messagerie-search" />';
+  html += renderChannelSection("Livreurs", "fa-truck-fast", "livreur", "msgLivreurs");
+  html += renderChannelSection("Points de Retrait", "fa-shop", "point_vente", "msgPointsVente");
+  html += renderChannelSection("Autres comptes", "fa-user", "autres", "msgAutres");
 
   return html;
 }
@@ -19772,8 +20073,19 @@ function renderAdminFilature() {
     return html;
   }
 
-  for (var i = 0; i < watchlist.length; i++) {
-    var wPhone = watchlist[i];
+  var filatureSearch = (state.adminFilatureSearch || "").toLowerCase().trim();
+  var filteredWatchlist = watchlist;
+  if (filatureSearch) {
+    filteredWatchlist = watchlist.filter(function(p) {
+      var wa2 = findAccountByPhone(p);
+      return p.toLowerCase().indexOf(filatureSearch) !== -1 ||
+        (wa2 && ((wa2.name || "").toLowerCase().indexOf(filatureSearch) !== -1 || (wa2.shopName || "").toLowerCase().indexOf(filatureSearch) !== -1));
+    });
+  }
+  if (watchlist.length > 5) html += '<input class="input" style="margin-bottom:12px;" placeholder="Rechercher un compte surveillé…" value="' + esc(state.adminFilatureSearch || "") + '" data-action-input="admin-filature-search" />';
+
+  for (var i = 0; i < filteredWatchlist.length; i++) {
+    var wPhone = filteredWatchlist[i];
     var wAcc = findAccountByPhone(wPhone);
     var wLog = getFilatureLog(wPhone);
     var isOpenLog = state.adminFilatureOpenPhone === normalizeWalletPhone(wPhone);
@@ -19892,22 +20204,38 @@ function renderAdminWallets() {
 }
 
 function renderAdminLivreurs() {
-  var livreurs = state.accounts.filter(function(a) { return a.role === "livreur" || a.livreurApplicationStatus === "approved"; });
-  if (livreurs.length === 0) {
+  var allLivreurs = state.accounts.filter(function(a) { return a.role === "livreur" || a.livreurApplicationStatus === "approved"; });
+  if (allLivreurs.length === 0) {
     return '<div class="empty-state"><i class="fa-solid fa-truck-fast"></i><div class="title">Aucun livreur inscrit pour l\'instant</div></div>';
   }
+  var livSearch = (state.adminLivreursSearch || "").toLowerCase().trim();
+  var livreurs = allLivreurs;
+  if (livSearch) {
+    livreurs = allLivreurs.filter(function(a) { return (a.name || "").toLowerCase().indexOf(livSearch) !== -1 || (a.phone || "").indexOf(livSearch) !== -1; });
+  }
+  var livCollapsed = !!state.collapsedAdminSections.livreursList;
   var html = '';
   var grandTotalEarnings = 0;
   var grandTotalDeliveries = 0;
-  for (var i = 0; i < livreurs.length; i++) {
+  // Les totaux globaux portent toujours sur TOUS les livreurs, même
+  // repliés ou filtrés par la recherche — seule la liste détaillée
+  // ci-dessous change avec ces deux réglages.
+  for (var gi = 0; gi < allLivreurs.length; gi++) {
+    var gLiv = allLivreurs[gi];
+    var gLivOrders = state.orders.filter(function(o) { return o.livreurId === gLiv.id && o.status === "Livrée"; });
+    var gLivParcels = state.externalParcels.filter(function(p) { return p.livreurId === gLiv.id && p.status === "Livré"; });
+    grandTotalDeliveries += gLivOrders.length + gLivParcels.length;
+    for (var gj = 0; gj < gLivOrders.length; gj++) grandTotalEarnings += gLivOrders[gj].deliveryFee || 0;
+    for (var gk = 0; gk < gLivParcels.length; gk++) grandTotalEarnings += gLivParcels[gk].deliveryFee || 0;
+  }
+  if (allLivreurs.length > 5) html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;"><input class="input" placeholder="Rechercher un livreur (nom, téléphone)…" value="' + esc(state.adminLivreursSearch || "") + '" data-action-input="admin-livreurs-search" style="flex:1;" /><button class="link-btn" style="flex:0;padding:8px;" data-action="toggle-admin-section" data-value="livreursList"><i class="fa-solid ' + (livCollapsed ? 'fa-chevron-down' : 'fa-chevron-up') + '"></i></button></div>';
+  for (var i = 0; i < livreurs.length && !livCollapsed; i++) {
     var liv = livreurs[i];
     var livOrders = state.orders.filter(function(o) { return o.livreurId === liv.id && o.status === "Livrée"; });
     var livParcels = state.externalParcels.filter(function(p) { return p.livreurId === liv.id && p.status === "Livré"; });
     var earnings = 0;
     for (var j = 0; j < livOrders.length; j++) earnings += livOrders[j].deliveryFee || 0;
     for (var k = 0; k < livParcels.length; k++) earnings += livParcels[k].deliveryFee || 0;
-    grandTotalEarnings += earnings;
-    grandTotalDeliveries += livOrders.length + livParcels.length;
 
     html += '<div class="card-row" style="flex-direction:column;align-items:stretch;cursor:pointer;" data-action="open-admin-livreur-detail" data-value="' + liv.id + '">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
@@ -19918,21 +20246,35 @@ function renderAdminLivreurs() {
     html += '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:var(--accent)"><span>Gains cumulés</span><span style="font-weight:800">' + money(earnings) + '</span></div>';
     html += '</div>';
   }
-  html = '<div class="stats-row"><div class="stat-card"><div class="stat-value">' + livreurs.length + '</div><div class="stat-label">Livreurs</div></div>' +
+  html = '<div class="stats-row"><div class="stat-card"><div class="stat-value">' + allLivreurs.length + '</div><div class="stat-label">Livreurs</div></div>' +
     '<div class="stat-card"><div class="stat-value">' + grandTotalDeliveries + '</div><div class="stat-label">Livraisons</div></div>' +
     '<div class="stat-card"><div class="stat-value" style="color:var(--accent)">' + money(grandTotalEarnings) + '</div><div class="stat-label">Gains cumulés</div></div></div>' + html;
   return html;
 }
 
 function renderAdminPointsVente() {
-  var shops = relaisShopsList();
+  var allShops = relaisShopsList();
   var html = '';
-  if (shops.length === 0) {
+  if (allShops.length === 0) {
     return '<div class="empty-state"><i class="fa-solid fa-shop-slash"></i><div class="title">Aucun point de retrait inscrit pour l\'instant</div></div>';
   }
 
   var grandTotalDue = 0;
-  for (var i = 0; i < shops.length; i++) {
+  for (var gi = 0; gi < allShops.length; gi++) {
+    var gShopOrders = state.orders.filter(function(o) { return o.deliveryMode === "relais" && o.relaisShopId === allShops[gi].id && o.status === "Livrée"; });
+    for (var gj = 0; gj < gShopOrders.length; gj++) {
+      if (!gShopOrders[gj].commissionSettled) grandTotalDue += gShopOrders[gj].commissionAmount || 0;
+    }
+  }
+
+  var pvSearch = (state.adminPointsVenteSearch || "").toLowerCase().trim();
+  var shops = allShops;
+  if (pvSearch) {
+    shops = allShops.filter(function(s) { return ((s.shopName || s.name || "").toLowerCase().indexOf(pvSearch) !== -1) || (s.phone || "").indexOf(pvSearch) !== -1; });
+  }
+  var pvCollapsed = !!state.collapsedAdminSections.pointsVenteList;
+  if (allShops.length > 5) html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;"><input class="input" placeholder="Rechercher un point de retrait (nom, téléphone)…" value="' + esc(state.adminPointsVenteSearch || "") + '" data-action-input="admin-pointsvente-search" style="flex:1;" /><button class="link-btn" style="flex:0;padding:8px;" data-action="toggle-admin-section" data-value="pointsVenteList"><i class="fa-solid ' + (pvCollapsed ? 'fa-chevron-down' : 'fa-chevron-up') + '"></i></button></div>';
+  for (var i = 0; i < shops.length && !pvCollapsed; i++) {
     var shop = shops[i];
     var shopOrders = state.orders.filter(function(o) { return o.deliveryMode === "relais" && o.relaisShopId === shop.id && o.status === "Livrée"; });
     var encaisse = 0, due = 0, reglee = 0, unsettledCount = 0;
@@ -19941,7 +20283,6 @@ function renderAdminPointsVente() {
       if (shopOrders[j].commissionSettled) reglee += shopOrders[j].commissionAmount || 0;
       else { due += shopOrders[j].commissionAmount || 0; unsettledCount++; }
     }
-    grandTotalDue += due;
 
     html += '<div class="card-row" style="flex-direction:column;align-items:stretch">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
@@ -19960,7 +20301,7 @@ function renderAdminPointsVente() {
     html += '</div>';
   }
 
-  html = '<div class="stats-row"><div class="stat-card"><div class="stat-value">' + shops.length + '</div><div class="stat-label">Points de Retrait</div></div>' +
+  html = '<div class="stats-row"><div class="stat-card"><div class="stat-value">' + allShops.length + '</div><div class="stat-label">Points de Retrait</div></div>' +
     '<div class="stat-card"><div class="stat-value" style="color:var(--accent)">' + money(grandTotalDue) + '</div><div class="stat-label">Commission totale due</div></div></div>' + html;
 
   return html;
@@ -20174,20 +20515,24 @@ function renderAdminSellers(stats) {
   html += '</div>';
 
   var mcfgV = getMarketConfig();
+  var sellersSearch = (state.adminSellersSearch || "").toLowerCase().trim();
+  var rankCollapsed = !!state.collapsedAdminSections.sellerRanking;
   html += '<div style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius);padding:14px;margin-bottom:16px;box-shadow:var(--shadow);">';
-  html += '<div style="font-weight:700;font-size:14px;margin-bottom:10px;">Classement des vendeurs</div>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div style="font-weight:700;font-size:14px;">Classement des vendeurs</div><button class="link-btn" style="padding:6px;" data-action="toggle-admin-section" data-value="sellerRanking"><i class="fa-solid ' + (rankCollapsed ? 'fa-chevron-down' : 'fa-chevron-up') + '"></i></button></div>';
+  if (stats.sellerRanking.length > 6) html += '<input class="input" style="margin-bottom:10px;" placeholder="Rechercher un vendeur…" value="' + esc(state.adminSellersSearch || "") + '" data-action-input="admin-sellers-search" />';
   if (stats.sellerRanking.length === 0) {
     html += '<div style="font-size:12px;color:var(--text-dim)">Aucun vendeur actif.</div>';
-  } else {
+  } else if (!rankCollapsed) {
+    var rankingToShow = sellersSearch ? stats.sellerRanking.filter(function(s) { return (s.name || "").toLowerCase().indexOf(sellersSearch) !== -1; }) : stats.sellerRanking;
     html += '<table class="seller-rank-table"><tr><th>#</th><th>Vendeur</th><th>Ventes</th><th>Commandes</th><th>Réputation</th></tr>';
-    for (var i = 0; i < stats.sellerRanking.length; i++) {
-      var s = stats.sellerRanking[i];
+    for (var i = 0; i < rankingToShow.length; i++) {
+      var s = rankingToShow[i];
       var repHtml = '—';
       if (s.sellerId) {
         var rep = computeSellerReputation(s.sellerId);
         if (rep.totalOrders >= 3) repHtml = rep.stars.toFixed(1) + '/5 · ' + rep.label;
       }
-      html += '<tr style="' + (s.sellerId ? 'cursor:pointer;' : '') + '" ' + (s.sellerId ? 'data-action="open-admin-account-detail" data-value="' + s.sellerId + '"' : '') + '><td class="rank-num">' + (i+1) + '</td><td>' + esc(s.name) + '</td><td>' + money(s.total) + '</td><td>' + s.orders + '</td><td style="font-size:10.5px;">' + repHtml + '</td></tr>';
+      html += '<tr style="' + (s.sellerId ? 'cursor:pointer;' : '') + '" ' + (s.sellerId ? 'data-action="open-admin-account-detail" data-value="' + s.sellerId + '"' : '') + '><td class="rank-num">' + (stats.sellerRanking.indexOf(s) + 1) + '</td><td>' + esc(s.name) + '</td><td>' + money(s.total) + '</td><td>' + s.orders + '</td><td style="font-size:10.5px;">' + repHtml + '</td></tr>';
     }
     html += '</table>';
   }
@@ -20205,11 +20550,16 @@ function renderAdminSellers(stats) {
     if (sellerIds.indexOf(state.products[pi].sellerId) === -1) sellerIds.push(state.products[pi].sellerId);
   }
   if (sellerIds.length > 0) {
+    var perfCollapsed = !!state.collapsedAdminSections.sellerPerformance;
     html += '<div style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius);padding:14px;margin-top:16px;box-shadow:var(--shadow);overflow-x:auto;">';
-    html += '<div style="font-weight:700;font-size:14px;margin-bottom:10px;">Performance par vendeur</div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div style="font-weight:700;font-size:14px;">Performance par vendeur</div><button class="link-btn" style="padding:6px;" data-action="toggle-admin-section" data-value="sellerPerformance"><i class="fa-solid ' + (perfCollapsed ? 'fa-chevron-down' : 'fa-chevron-up') + '"></i></button></div>';
+    if (!perfCollapsed) {
     html += '<table class="seller-rank-table"><tr><th>Vendeur</th><th>Produits</th><th>Vues</th><th>Ventes</th><th>Conversion</th><th>Boosts actifs</th></tr>';
-    for (var si = 0; si < sellerIds.length; si++) {
-      var sid = sellerIds[si];
+    var sellerIdsToShow = sellersSearch ? sellerIds.filter(function(sid2) {
+      return state.products.some(function(p) { return p.sellerId === sid2 && (p.sellerName || "").toLowerCase().indexOf(sellersSearch) !== -1; });
+    }) : sellerIds;
+    for (var si = 0; si < sellerIdsToShow.length; si++) {
+      var sid = sellerIdsToShow[si];
       var sellerName = "";
       var sellerProductIds = [];
       for (var sp = 0; sp < state.products.length; sp++) {
@@ -20229,7 +20579,9 @@ function renderAdminSellers(stats) {
       var activeBoosts = state.boosts.filter(function(b) { return b.sellerId === sid && isBoostActive(b); }).length;
       html += '<tr><td>' + esc(sellerName) + '</td><td>' + sellerProductIds.length + '</td><td>' + viewCount + '</td><td>' + salesCount + '</td><td>' + conversion + '</td><td>' + activeBoosts + '</td></tr>';
     }
-    html += '</table></div>';
+    html += '</table>';
+    }
+    html += '</div>';
   }
   return html;
 }
@@ -20243,7 +20595,22 @@ function renderAdminDisputes() {
   if (disputes.length === 0) {
     return '<div class="empty-state"><i class="fa-solid fa-flag"></i><div class="title">Aucun litige pour l\'instant</div></div>';
   }
-  var html = '';
+  var disputesSearch = (state.adminDisputesSearch || "").toLowerCase().trim();
+  if (disputesSearch) {
+    disputes = disputes.filter(function(d) {
+      return d.orderId.slice(-5).toLowerCase().indexOf(disputesSearch) !== -1 ||
+        (d.buyerName || "").toLowerCase().indexOf(disputesSearch) !== -1 ||
+        (DISPUTE_REASONS[d.reason] || d.reason || "").toLowerCase().indexOf(disputesSearch) !== -1 ||
+        (d.status || "").toLowerCase().indexOf(disputesSearch) !== -1;
+    });
+  }
+  var disputesCollapsed = !!state.collapsedAdminSections.disputesList;
+  var html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">';
+  html += '<input class="input" placeholder="Rechercher (n° commande, client, motif, statut)…" value="' + esc(state.adminDisputesSearch || "") + '" data-action-input="admin-disputes-search" style="flex:1;" />';
+  html += '<button class="link-btn" style="flex:0;padding:8px;" data-action="toggle-admin-section" data-value="disputesList"><i class="fa-solid ' + (disputesCollapsed ? 'fa-chevron-down' : 'fa-chevron-up') + '"></i></button>';
+  html += '</div>';
+  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;">' + disputes.length + ' litige(s)</div>';
+  if (disputesCollapsed) return html;
   for (var i = 0; i < disputes.length; i++) {
     var d = disputes[i];
     var order = null;
@@ -20979,11 +21346,20 @@ function renderAdminSecurity() {
   // ---- Admins nationaux (expansion internationale) — réservé au Groupe 1
   // global uniquement, jamais visible par un admin national lui-même. ----
   if (state.adminIsOwner && !state.adminCountryScope) {
+    var naSearch = (state.adminNationalSearch || "").toLowerCase().trim();
+    var naListFiltered = state.nationalAdmins;
+    if (naSearch) naListFiltered = naListFiltered.filter(function(na) { return na.country.toLowerCase().indexOf(naSearch) !== -1; });
+    var naCollapsed = !!state.collapsedAdminSections.nationalAdminsList;
     html += '<div class="glass-card" style="padding:14px;margin-top:16px;">';
-    html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-earth-africa"></i> Admins nationaux</div>';
-    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:14px;">Un admin par pays étendu, avec le même pouvoir que toi mais limité à ce pays — et ses propres employés, à pouvoir limité comme les tiens.</div>';
-    for (var nai = 0; nai < state.nationalAdmins.length; nai++) {
-      var na = state.nationalAdmins[nai];
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+    html += '<div style="font-weight:800;font-size:14px;"><i class="fa-solid fa-earth-africa"></i> Admins nationaux (' + state.nationalAdmins.length + ')</div>';
+    html += '<button class="link-btn" style="padding:6px;" data-action="toggle-admin-section" data-value="nationalAdminsList"><i class="fa-solid ' + (naCollapsed ? 'fa-chevron-down' : 'fa-chevron-up') + '"></i></button>';
+    html += '</div>';
+    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;">Un admin par pays étendu, avec le même pouvoir que toi mais limité à ce pays — et ses propres employés, à pouvoir limité comme les tiens.</div>';
+    if (state.nationalAdmins.length > 5) html += '<input class="input" style="margin-bottom:12px;" placeholder="Rechercher un pays…" value="' + esc(state.adminNationalSearch || "") + '" data-action-input="admin-national-search" />';
+    if (!naCollapsed) {
+    for (var nai = 0; nai < naListFiltered.length; nai++) {
+      var na = naListFiltered[nai];
       html += '<div style="background:var(--bg-body);border-radius:12px;padding:12px;margin-bottom:10px;">';
       html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div style="font-weight:800;font-size:13px;">' + esc(na.country) + '</div><button class="link-btn" style="color:var(--danger);font-size:11px;" data-action="remove-national-admin" data-value="' + na.id + '"><i class="fa-solid fa-trash"></i></button></div>';
       html += '<label class="field-label" style="margin-top:0;font-size:10px;">Identifiants admin national (pouvoir complet, ce pays)</label>';
@@ -21014,6 +21390,7 @@ function renderAdminSecurity() {
         html += '<input class="input" type="number" value="' + (na.commissionRate != null ? na.commissionRate : '') + '" data-action-input="national-commission-rate" data-config="' + na.id + '" placeholder="Ex : 15" />';
       }
       html += '</div>';
+    }
     }
     html += '<button class="btn-secondary" data-action="add-national-admin"><i class="fa-solid fa-plus"></i> Ajouter un admin national</button>';
     html += '</div>';
@@ -21215,12 +21592,23 @@ function renderAdminExternalParcelsTab() {
   html += renderExternalParcelFormSection();
 
   html += '<div class="glass-card" style="padding:14px;">';
-  html += '<div style="font-weight:800;font-size:14px;margin-bottom:8px;"><i class="fa-solid fa-list"></i> Tous les colis (' + state.externalParcels.length + ')</div>';
+  var parcelsCollapsed = !!state.collapsedAdminSections.parcelsList;
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><div style="font-weight:800;font-size:14px;"><i class="fa-solid fa-list"></i> Tous les colis (' + state.externalParcels.length + ')</div><button class="link-btn" style="padding:6px;" data-action="toggle-admin-section" data-value="parcelsList"><i class="fa-solid ' + (parcelsCollapsed ? 'fa-chevron-down' : 'fa-chevron-up') + '"></i></button></div>';
   if (state.externalParcels.length === 0) {
     html += '<div style="font-size:12px;color:var(--text-dim);">Aucun colis externe enregistré pour l\'instant.</div>';
-  } else {
-    for (var i = 0; i < state.externalParcels.length && i < 40; i++) {
-      var p = state.externalParcels[i];
+  } else if (!parcelsCollapsed) {
+    if (state.externalParcels.length > 8) html += '<input class="input" style="margin-bottom:10px;" placeholder="Rechercher (n° suivi, destinataire, plateforme)…" value="' + esc(state.adminParcelsSearch || "") + '" data-action-input="admin-parcels-search" />';
+    var parcelsSearch = (state.adminParcelsSearch || "").toLowerCase().trim();
+    var parcelsToShow = state.externalParcels;
+    if (parcelsSearch) {
+      parcelsToShow = state.externalParcels.filter(function(p) {
+        return (p.trackingNumber || "").toLowerCase().indexOf(parcelsSearch) !== -1 ||
+          (p.recipientName || "").toLowerCase().indexOf(parcelsSearch) !== -1 ||
+          (p.platform || "").toLowerCase().indexOf(parcelsSearch) !== -1;
+      });
+    }
+    for (var i = 0; i < parcelsToShow.length && i < 40; i++) {
+      var p = parcelsToShow[i];
       html += '<div style="background:var(--bg-body);border-radius:10px;padding:10px;margin-bottom:8px;">';
       html += '<div style="display:flex;justify-content:space-between;"><span style="font-weight:700;font-size:12.5px;">' + esc(p.trackingNumber) + ' — ' + esc(p.platform) + '</span><span class="status-pill">' + p.status + '</span></div>';
       html += '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">' + esc(p.recipientName) + ' · ' + esc(p.relaisShopName) + '</div>';
@@ -21433,10 +21821,26 @@ function renderAdminReviews() {
   if (allReviews.length === 0) {
     return '<div class="empty-state"><i class="fa-solid fa-star"></i><div class="title">Aucun avis</div></div>';
   }
+  var reviewsSearch = (state.adminReviewsSearch || "").toLowerCase().trim();
+  var filteredReviews = allReviews;
+  if (reviewsSearch) {
+    filteredReviews = allReviews.filter(function(r) {
+      var prod = state.products.find(function(p) { return p.id === r.productId; });
+      return (r.userName || "").toLowerCase().indexOf(reviewsSearch) !== -1 ||
+        (r.comment || "").toLowerCase().indexOf(reviewsSearch) !== -1 ||
+        (prod && prod.name.toLowerCase().indexOf(reviewsSearch) !== -1);
+    });
+  }
+  var reviewsCollapsed = !!state.collapsedAdminSections.reviewsList;
   var html = '<div style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);">';
-  html += '<div style="font-weight:700;font-size:14px;margin-bottom:10px;">Tous les avis (' + allReviews.length + ')</div>';
-  var toShow = allReviews.slice(0, 20);
-  for (var i = 0; i < toShow.length; i++) {
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+  html += '<div style="font-weight:700;font-size:14px;">Tous les avis (' + filteredReviews.length + ')</div>';
+  html += '<button class="link-btn" style="padding:6px;" data-action="toggle-admin-section" data-value="reviewsList"><i class="fa-solid ' + (reviewsCollapsed ? 'fa-chevron-down' : 'fa-chevron-up') + '"></i></button>';
+  html += '</div>';
+  html += '<input class="input" style="margin-bottom:12px;" placeholder="Rechercher (client, produit, texte de l\'avis)…" value="' + esc(state.adminReviewsSearch || "") + '" data-action-input="admin-reviews-search" />';
+  if (!reviewsCollapsed) {
+    var toShow = filteredReviews.slice(0, 20);
+    for (var i = 0; i < toShow.length; i++) {
     var r = toShow[i];
     var product = null;
     for (var j = 0; j < state.products.length; j++) {
@@ -21451,6 +21855,7 @@ function renderAdminReviews() {
     html += '<div class="review-text">' + esc(r.comment) + '</div>';
     html += '<button class="link-btn" style="color:var(--danger);font-size:11px;margin-top:6px;" data-action="admin-delete-review" data-value="' + r.id + '"><i class="fa-solid fa-trash"></i> Supprimer cet avis</button>';
     html += '</div>';
+    }
   }
   html += '</div>';
   return html;
@@ -21531,6 +21936,7 @@ function renderProductModal() {
   html += '<div class="modal-sheet ' + (isFreshOpen ? '' : 'no-anim') + '">';
   html += '<button class="modal-close" data-action="close-product"><i class="fa-solid fa-xmark"></i></button>';
   html += '<button class="modal-close" style="right:56px" data-action="share-product" data-value="' + p.id + '"><i class="fa-solid fa-share-nodes"></i></button>';
+  html += '<div class="pd-layout"><div class="pd-media">';
   html += '<div class="modal-image swipeable-carousel" data-action="open-lightbox" data-value="' + p.id + '" data-index="' + state.activeImageIndex + '">';
   if (hasImages && p.images.length > 1) {
     html += '<div class="carousel-track" style="transform:translateX(-' + (state.activeImageIndex * 100) + '%);">';
@@ -21569,6 +21975,7 @@ function renderProductModal() {
   if (p.video) {
     html += '<div style="margin-top:12px;"><div class="field-label" style="margin:10px 0 6px;"><i class="fa-solid fa-video"></i> Vidéo</div><video id="product-detail-video" data-src="' + esc(p.video) + '" src="' + p.video + '" controls style="width:100%;border-radius:14px;"></video></div>';
   }
+  html += '</div><div class="pd-buybox">';
   html += '<div class="product-shop" style="margin:14px 0 4px;"><i class="fa-solid fa-store"></i> ' + esc(p.shopName) + (p.shopName !== p.sellerName ? ' — ' + esc(p.sellerName) : '') + '</div>';
   html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;"><i class="fa-solid fa-clock"></i> Publié ' + (relativeTimeAgo(p.createdAt) === "Aujourd\'hui" ? "aujourd\'hui" : relativeTimeAgo(p.createdAt).toLowerCase()) + '</div>';
   html += '<button class="link-btn" style="font-size:11.5px;margin-bottom:8px;" data-action="view-seller-shop" data-value="' + p.sellerId + '"><i class="fa-solid fa-shop"></i> Voir la boutique du vendeur</button>';
@@ -21683,6 +22090,7 @@ function renderProductModal() {
   }
   html += '<button class="link-btn" style="margin-top:8px;width:100%;text-align:center;" data-action="chat-seller" data-value="' + p.id + '"><i class="fa-solid fa-comment"></i> Contacter le vendeur</button>';
   html += '<button class="btn-whatsapp" data-action="whatsapp-coming-soon"><i class="fa-brands fa-whatsapp"></i> Discuter sur WhatsApp</button>';
+  html += '</div></div>';
   
   // Avis
   html += '<div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">';
@@ -23405,6 +23813,18 @@ root.addEventListener("click", function(e) {
       showToast("✅ Demande envoyée — vos modifications seront appliquées après validation par l'administration.");
       break;
     }
+    case "pan-location-picker": {
+      var lpMap = window._locationPickerMapInstance;
+      if (!lpMap) break;
+      var panStep = 80; // pixels — un cran net à chaque appui
+      if (value === "up") lpMap.panBy([0, -panStep]);
+      else if (value === "down") lpMap.panBy([0, panStep]);
+      else if (value === "left") lpMap.panBy([-panStep, 0]);
+      else if (value === "right") lpMap.panBy([panStep, 0]);
+      else if (value === "zoomin") lpMap.zoomIn();
+      else if (value === "zoomout") lpMap.zoomOut();
+      break;
+    }
     case "open-manual-location-picker": {
       state.locationPickerTarget = value;
       state.showLocationPicker = true;
@@ -23806,6 +24226,46 @@ root.addEventListener("click", function(e) {
     case "close-affiliate-program": state.showAffiliateProgram = false; state.showProfileScreen = true; render(); break;
     case "open-earnings": state.showEarnings = true; state.showProfileScreen = false; render(); break;
     case "close-earnings": state.showEarnings = false; state.showProfileScreen = true; render(); break;
+    case "open-delete-account": {
+      state.showDeleteAccountConfirm = true;
+      state.deleteAccountPasswordInput = "";
+      state.showProfileScreen = false;
+      render();
+      break;
+    }
+    case "close-delete-account": {
+      state.showDeleteAccountConfirm = false;
+      state.deleteAccountPasswordInput = "";
+      state.showProfileScreen = true;
+      render();
+      break;
+    }
+    case "submit-delete-account": {
+      if (!state.profile) break;
+      if (state.profile.password) {
+        if (!state.deleteAccountPasswordInput) { showToast("❌ Entrez votre mot de passe."); break; }
+        verifySecret(state.deleteAccountPasswordInput, state.profile.password).then(function(result) {
+          if (!result.match) { showToast("❌ Mot de passe incorrect."); return; }
+          var idToDelete = state.profile.id;
+          deleteAccountCompletely(idToDelete);
+          state.showDeleteAccountConfirm = false;
+          state.deleteAccountPasswordInput = "";
+          state.profile = null;
+          state.onboardMode = state.accounts.length > 0 ? "list" : "form";
+          showToast("✅ Votre compte a été supprimé.");
+          render();
+        });
+      } else {
+        var idToDelete2 = state.profile.id;
+        deleteAccountCompletely(idToDelete2);
+        state.showDeleteAccountConfirm = false;
+        state.profile = null;
+        state.onboardMode = state.accounts.length > 0 ? "list" : "form";
+        showToast("✅ Votre compte a été supprimé.");
+        render();
+      }
+      break;
+    }
     case "enter-shop": {
       state.showShopPicker = false;
       state.showRoleMenu = false;
@@ -26134,14 +26594,18 @@ root.addEventListener("click", function(e) {
       }
       break;
     }
+    case "toggle-admin-section": {
+      if (!state.collapsedAdminSections) state.collapsedAdminSections = {};
+      state.collapsedAdminSections[value] = !state.collapsedAdminSections[value];
+      render();
+      break;
+    }
     case "admin-delete-account": {
       var accToDelete = null;
       for (var adi = 0; adi < state.accounts.length; adi++) { if (state.accounts[adi].id === value) { accToDelete = state.accounts[adi]; break; } }
-      if (accToDelete && confirm("Supprimer définitivement le compte \"" + accToDelete.name + "\" ? Cette action est irréversible.")) {
-        state.accounts = state.accounts.filter(function(acc) { return acc.id !== value; });
+      if (accToDelete && confirm("Supprimer définitivement le compte \"" + accToDelete.name + "\" (et ses produits, portefeuille, gains) ? Cette action est irréversible.")) {
+        deleteAccountCompletely(value);
         state.adminAccountDetailId = null;
-        save();
-        deleteRemoteDoc("accounts", value);
         showToast("🗑️ Compte supprimé.");
         render();
       }
@@ -27149,6 +27613,71 @@ root.addEventListener("input", function(e) {
     if (actionInput === "image-position-x") updatedImgPos.x = parseInt(el.value, 10);
     else updatedImgPos.y = parseInt(el.value, 10);
     state.productDraft.imagePositions[imgPosIdx] = updatedImgPos;
+    render();
+    return;
+  }
+  if (actionInput === "admin-sellers-search") {
+    state.adminSellersSearch = el.value;
+    render();
+    return;
+  }
+  if (actionInput === "admin-parcels-search") {
+    state.adminParcelsSearch = el.value;
+    render();
+    return;
+  }
+  if (actionInput === "admin-vipads-search") {
+    state.adminVipAdsSearch = el.value;
+    render();
+    return;
+  }
+  if (actionInput === "admin-boosts-search") {
+    state.adminBoostsSearch = el.value;
+    render();
+    return;
+  }
+  if (actionInput === "admin-messagerie-search") {
+    state.adminMessagerieSearch = el.value;
+    render();
+    return;
+  }
+  if (actionInput === "admin-quartiers-search") {
+    state.adminQuartiersSearch = el.value;
+    render();
+    return;
+  }
+  if (actionInput === "admin-livreurs-search") {
+    state.adminLivreursSearch = el.value;
+    render();
+    return;
+  }
+  if (actionInput === "admin-pointsvente-search") {
+    state.adminPointsVenteSearch = el.value;
+    render();
+    return;
+  }
+  if (actionInput === "admin-disputes-search") {
+    state.adminDisputesSearch = el.value;
+    render();
+    return;
+  }
+  if (actionInput === "admin-filature-search") {
+    state.adminFilatureSearch = el.value;
+    render();
+    return;
+  }
+  if (actionInput === "admin-national-search") {
+    state.adminNationalSearch = el.value;
+    render();
+    return;
+  }
+  if (actionInput === "admin-orders-search") {
+    state.adminOrdersSearch = el.value;
+    render();
+    return;
+  }
+  if (actionInput === "admin-reviews-search") {
+    state.adminReviewsSearch = el.value;
     render();
     return;
   }
