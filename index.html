@@ -5153,7 +5153,14 @@ function saveDeliveryFeesConfig(zones) {
 // eux-mêmes en INR. Converti en FCFA au moment de l'affichage/paiement via
 // getInrToXofRate(), jamais stocké en dur en FCFA (le taux de change bouge).
 function defaultInternationalShippingConfig() {
-  return { maritimePerKg: 150, aerienPerKg: 450, minCostInr: 500 };
+  // Deux planchers séparés (pas un seul commun) : sans ça, un article
+  // léger ou sans poids/volume renseigné tombait sur le MÊME minimum
+  // quel que soit le mode choisi — Maritime et Aérien affichaient alors
+  // exactement le même total, ce qui rendait le choix incompréhensible.
+  // Le plancher Aérien est volontairement plus élevé, comme dans le vrai
+  // fret (un envoi minimal par avion coûte plus cher qu'un envoi minimal
+  // par bateau).
+  return { maritimePerKg: 150, aerienPerKg: 450, minCostInrMaritime: 500, minCostInrAerien: 1200 };
 }
 
 function getInternationalShippingConfig() {
@@ -5203,7 +5210,8 @@ function computeInternationalShippingCostInr(mode) {
   var cfg = getInternationalShippingConfig();
   var billableKg = checkoutInternationalBillableWeight();
   var perKg = mode === "aerien" ? cfg.aerienPerKg : cfg.maritimePerKg;
-  return Math.max(cfg.minCostInr, Math.round(billableKg * perKg));
+  var minCost = mode === "aerien" ? cfg.minCostInrAerien : cfg.minCostInrMaritime;
+  return Math.max(minCost, Math.round(billableKg * perKg));
 }
 
 // true seulement si TOUT le panier est international — le mélange est déjà
@@ -22934,7 +22942,8 @@ function renderInternationalCheckout() {
   var rate = getInrToXofRate();
   var totalXof = Math.round(totalInr * rate);
 
-  var html = '<div class="section-title" style="margin-bottom:4px;"><i class="fa-solid fa-earth-asia"></i> ' + t("intlco_title") + '</div>';
+  var html = '<button class="link-btn" style="margin-bottom:14px" data-action="go-to-market-home"><i class="fa-solid fa-arrow-left"></i> ' + t("relais_apply_back") + '</button>';
+  html += '<div class="section-title" style="margin-bottom:4px;"><i class="fa-solid fa-earth-asia"></i> ' + t("intlco_title") + '</div>';
   html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:16px;">' + t("intlco_explainer") + '</div>';
 
   for (var i = 0; i < items.length; i++) {
@@ -22945,9 +22954,13 @@ function renderInternationalCheckout() {
 
   if (availableModes.length > 1) {
     html += '<label class="field-label" style="margin-top:0;">' + t("intlco_shipping_mode") + '</label>';
-    html += '<div style="display:flex;gap:8px;margin-bottom:10px;">';
-    html += '<button type="button" class="chip ' + (mode === 'maritime' ? 'active' : '') + '" data-action="set-international-shipping-mode" data-value="maritime"><i class="fa-solid fa-ship"></i> ' + t("opt_transport_maritime") + '</button>';
-    html += '<button type="button" class="chip ' + (mode === 'aerien' ? 'active' : '') + '" data-action="set-international-shipping-mode" data-value="aerien"><i class="fa-solid fa-plane"></i> ' + t("opt_transport_aerien") + '</button>';
+    // flex-wrap + le texte du bouton autorisé à revenir à la ligne : sans
+    // ça, "Aérien (plus rapide, plus cher)" ne rentrait jamais à côté de
+    // "Maritime..." et étirait toute la page horizontalement au lieu de
+    // simplement passer en dessous.
+    html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">';
+    html += '<button type="button" class="chip ' + (mode === 'maritime' ? 'active' : '') + '" style="white-space:normal;flex:1 1 140px;text-align:center;" data-action="set-international-shipping-mode" data-value="maritime"><i class="fa-solid fa-ship"></i> ' + t("opt_transport_maritime") + '</button>';
+    html += '<button type="button" class="chip ' + (mode === 'aerien' ? 'active' : '') + '" style="white-space:normal;flex:1 1 140px;text-align:center;" data-action="set-international-shipping-mode" data-value="aerien"><i class="fa-solid fa-plane"></i> ' + t("opt_transport_aerien") + '</button>';
     html += '</div>';
   }
 
