@@ -3678,6 +3678,14 @@ html.has-bg-pattern .notif-panel {
   100% { opacity: 0; transform: rotate(360deg); }
 }
 
+/* Hors écran (voir observeVisibilityAnimations) : ces deux animations
+   n'ont aucune raison de continuer à tourner pendant qu'on ne les voit
+   plus, plus bas dans le défilement du marché. */
+.reco-circles-grid:not(.in-view) .reco-circle-img,
+.reco-circles-grid:not(.in-view) .reco-circle-glow {
+  animation-play-state: paused;
+}
+
 .reco-circle-name {
   font-size: 11px;
   font-weight: 600;
@@ -18926,6 +18934,7 @@ function render() {
     }
     applyEmployeeRestrictions();
     renderPendingQRCodes();
+    observeVisibilityAnimations();
     renderPendingStorageReport();
     if (state.showScannerModal && !window._scannerActive) {
       window._scannerActive = true;
@@ -29864,9 +29873,36 @@ function paintFrameEditor(configId) {
 // ancien verrouillage par case a été retiré : mesuré au mauvais moment, il
 // figeait parfois une hauteur anormalement grande sur une carte, ce qui
 // étirait toute la rangée et créait un vide sous "À la une").
+// ---------- ANIMATIONS EN PAUSE HORS ÉCRAN ----------
+// "Recommandé pour vous" et "À la une" ne tournent désormais que pendant
+// qu'on les regarde vraiment — dès qu'on défile plus bas et qu'elles
+// sortent de l'écran, elles s'arrêtent (le rendu ne se voyait de toute
+// façon plus), économisant du travail pour rien pendant qu'on continue à
+// défiler le reste du marché — c'est justement ce travail en arrière-plan
+// qui pouvait donner une sensation de "tirage" pendant le défilement. Un
+// seul observateur, réutilisé et réappliqué après chaque rendu.
+var visibilityAnimObserver = null;
+function observeVisibilityAnimations() {
+  if (!('IntersectionObserver' in window)) return; // navigateur très ancien : tout reste actif comme avant, par sécurité
+  if (!visibilityAnimObserver) {
+    visibilityAnimObserver = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        entry.target.classList.toggle('in-view', entry.isIntersecting);
+      });
+    }, { threshold: 0.1 });
+  }
+  document.querySelectorAll('.na-shuffle-grid, .reco-circles-grid').forEach(function(el) {
+    if (!el.dataset.visObserved) {
+      el.dataset.visObserved = "1";
+      visibilityAnimObserver.observe(el);
+    }
+  });
+}
+
 (function() {
   setInterval(function() {
     document.querySelectorAll(".na-shuffle-grid").forEach(function(grid) {
+      if (!grid.classList.contains("in-view")) return; // hors écran : on ne fait rien du tout, même pas le tirage au sort
       // Environ 1 case sur 3 tente un changement à chaque tick (~900ms) —
       // ça donne, en moyenne, une case qui change toutes les 2-3 secondes,
       // sans jamais synchroniser deux cases entre elles.
@@ -34641,25 +34677,31 @@ setInterval(function() {
   }
 }, 1000);
 
-setInterval(function() {
-  var rows = document.querySelectorAll(".star-cats-row");
-  for (var i = 0; i < rows.length; i++) {
-    var row = rows[i];
-    if (starRowPaused[row.id] || starCycleRotating) continue;
-    var dir = parseInt(row.dataset.autoscrollDir || "1", 10);
-    var track = row.querySelector(".star-cats-track");
-    if (!track) continue;
-    var halfWidth = track.scrollWidth / 2; // le contenu est dupliqué x2
-    row.scrollLeft += dir * 0.6;
-    if (dir > 0 && row.scrollLeft >= halfWidth) row.scrollLeft -= halfWidth;
-    if (dir < 0 && row.scrollLeft <= 0) row.scrollLeft += halfWidth;
-  }
-}, 30);
+// Défilement automatique des catégories — DÉSACTIVÉ (demande explicite) :
+// cette minuterie tournait en continu, 33 fois par seconde, même quand la
+// section n'était pas à l'écran ou que l'app faisait autre chose, ce qui
+// pouvait grignoter en fluidité sur un téléphone d'entrée de gamme. Le
+// défilement manuel au doigt reste inchangé — seule la rotation
+// automatique est coupée.
+// setInterval(function() {
+//   var rows = document.querySelectorAll(".star-cats-row");
+//   for (var i = 0; i < rows.length; i++) {
+//     var row = rows[i];
+//     if (starRowPaused[row.id] || starCycleRotating) continue;
+//     var dir = parseInt(row.dataset.autoscrollDir || "1", 10);
+//     var track = row.querySelector(".star-cats-track");
+//     if (!track) continue;
+//     var halfWidth = track.scrollWidth / 2; // le contenu est dupliqué x2
+//     row.scrollLeft += dir * 0.6;
+//     if (dir > 0 && row.scrollLeft >= halfWidth) row.scrollLeft -= halfWidth;
+//     if (dir < 0 && row.scrollLeft <= 0) row.scrollLeft += halfWidth;
+//   }
+// }, 30);
 
 // Alternance "tourne sur lui-même" (2,6s) puis "défile" (1s), en boucle —
-// pilotée en JS pour rester fluide même après un nouvel affichage complet
-// de la page (la classe est réappliquée sur les nouveaux éléments plutôt
-// que reposer sur une animation CSS qui redémarrerait sans arrêt).
+// DÉSACTIVÉE (demande explicite, même raison que le défilement automatique
+// ci-dessus) : cette boucle se relançait elle-même indéfiniment, pour
+// toujours, même hors de la section concernée.
 var starCycleRotating = true;
 function runStarCycle() {
   var shapes = document.querySelectorAll(".star-cat-shape");
@@ -34671,7 +34713,7 @@ function runStarCycle() {
     setTimeout(function() { starCycleRotating = true; runStarCycle(); }, 1000);
   }
 }
-runStarCycle();
+// runStarCycle();
 
 window.addEventListener("popstate", function(e) {
   if (suppressHistoryPush) {
