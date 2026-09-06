@@ -4039,9 +4039,16 @@ html.has-bg-pattern .notif-panel {
 }
 
 /* Texte compact : cartes 3 par rangée, beaucoup plus étroites que sur le
-   marché — le nom et le prix restent lisibles mais prennent peu de place. */
+   marché — le nom et le prix restent lisibles mais prennent peu de place.
+   Hauteur FIXE (pas mesurée en JS) : garantit des rangées parfaitement
+   stables quel que soit le contenu ou la langue (le hindi, par exemple,
+   rend certains badges un peu plus hauts) — tout surplus est proprement
+   coupé plutôt que de faire varier la hauteur de la carte. */
 .new-arrivals-scroll .product-body {
   padding: 5px 6px 6px;
+  height: 72px;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .na-line1 {
@@ -4198,6 +4205,13 @@ html.has-bg-pattern .notif-panel {
   flex-shrink: 0;
 }
 
+.vip-ad-sponsored-tag {
+  font-size: 9px;
+  flex-shrink: 0;
+  opacity: 0.55;
+  margin-right: 1px;
+}
+
 .vip-ad-text {
   font-size: 12.5px;
   /* La couleur vient du style inline (réglable en Admin) — ne pas la
@@ -4206,6 +4220,8 @@ html.has-bg-pattern .notif-panel {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* ---------- Effets visuels de la pub VIP (réglables en Admin) ---------- */
@@ -4507,15 +4523,20 @@ html.has-bg-pattern .notif-panel {
     .mc-filter-chip{font-size:11.5px;font-weight:700;background:var(--mc-panel-2);border:1px solid var(--mc-line);color:var(--mc-dim);padding:7px 14px;border-radius:99px;cursor:pointer;}
     .mc-filter-chip.active{background:var(--mc-green-dim);border-color:var(--mc-green);color:var(--mc-green);}
 
-    /* ================= MODE ORDINATEUR ================= */
+    /* ================= MODE ORDINATEUR / TABLETTE / TÉLÉPHONE EN PAYSAGE ================= */
     /* Étape 1 du chantier bureau : la structure générale (menu, largeur,
        grilles principales). L'app reste construite mobile-first — cette
        section ne fait que RÉAJUSTER cette même mise en page pour un grand
        écran, sans dupliquer le HTML. Les écrans qui n'ont pas encore leur
        propre réglage ici gardent leur largeur mobile centrée par défaut :
        ce n'est pas cassé, juste pas encore élargi — à compléter dans les
-       prochaines étapes de ce chantier. */
-    @media (min-width: 900px) {
+       prochaines étapes de ce chantier.
+       Seuil abaissé à 640px (au lieu de 900px) pour couvrir aussi l'iPad en
+       portrait (~768-834px) ET un téléphone tourné en paysage (~640-930px
+       selon les modèles) — sous 640px, aucun téléphone courant en paysage
+       ne descend, et aucun téléphone en portrait ne l'atteint (max ~480px),
+       donc les deux cas restent bien séparés. */
+    @media (min-width: 640px) {
       #root {
         max-width: 1100px;
         padding-left: 230px;
@@ -4574,14 +4595,28 @@ html.has-bg-pattern .notif-panel {
         text-align: center;
       }
 
-      /* Grilles principales : plus de colonnes avec l'espace disponible. */
+      /* Grilles principales : plus de colonnes avec l'espace disponible —
+         3 colonnes dès 640px (iPad portrait, téléphone en paysage), 4 à
+         partir de 900px (tablette large/ordinateur), pour ne pas tasser
+         des cartes minuscules sur un écran encore modeste. */
       .product-grid {
-        grid-template-columns: repeat(4, 1fr);
-        gap: 14px;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
       }
 
       .admin-stats-grid {
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(3, 1fr);
+      }
+
+      @media (min-width: 900px) {
+        .product-grid {
+          grid-template-columns: repeat(4, 1fr);
+          gap: 14px;
+        }
+
+        .admin-stats-grid {
+          grid-template-columns: repeat(4, 1fr);
+        }
       }
 
       /* Fiche produit : image et achat côte à côte, au lieu d'empilés.
@@ -4727,7 +4762,7 @@ const SHARED_KEYS = [
   "relaisEditRequests", "externalParcels", "webhookPartners", "dashboardPartners",
   "apiPartners", "platformCommissions", "externalParcelChangeRequests",
   "verificationRequests", "wallets", "cagnottes", "filatureLogs",
-  "passwordRecoveryRequests", "nationalAdmins", "internationalCities", "pushSubscriptions", "pendingPayments", "fcmTokens", "group2GlobalWhitelist"
+  "passwordRecoveryRequests", "nationalAdmins", "internationalCities", "pushSubscriptions", "pendingPayments", "fcmTokens", "group2GlobalWhitelist", "sourcingAgentWhitelist"
 ];
 
 // Enregistre UN SEUL document (ex: saveDoc("products", p)). C'est la
@@ -5824,6 +5859,15 @@ function inAdminScope(item) {
 function isPhoneOnGroup2GlobalWhitelist(phone) {
   var norm = normalizeWalletPhone(phone);
   return (state.group2GlobalWhitelist || []).some(function(w) { return normalizeWalletPhone(w.phone) === norm; });
+}
+// --- Agent Sourcing (accès délégué) : même principe que le Groupe 2 —
+// liste blanche de numéros, sans mot de passe — mais dans sa PROPRE liste,
+// séparée du Groupe 2. Un numéro qui y figure bascule directement vers
+// l'espace Agent Sourcing (jamais vers l'Admin), en tapant sur le même
+// bouton "Administration" du menu Changer de rôle.
+function isPhoneOnSourcingAgentWhitelist(phone) {
+  var norm = normalizeWalletPhone(phone);
+  return (state.sourcingAgentWhitelist || []).some(function(w) { return normalizeWalletPhone(w.phone) === norm; });
 }
 function findNationalAdminByEmployeePhone(phone) {
   var norm = normalizeWalletPhone(phone);
@@ -7237,6 +7281,7 @@ function defaultState() {
     // par l'admin national concerné.
     nationalAdmins: [],
     group2GlobalWhitelist: [],
+    sourcingAgentWhitelist: [], // liste blanche par numéro, séparée du Groupe 2 — bascule directement vers Agent Sourcing
     // Villes hors Mali ajoutées par l'admin (point 5 — expansion internationale)
     internationalCities: [],
     pushSubscriptions: [],
@@ -9057,6 +9102,7 @@ const TRANSLATIONS = {
     toast_number_added_monitoring: "✅ Numéro ajouté à la surveillance.",
     toast_number_authorized_group2_country: "✅ Numéro autorisé pour le Groupe 2 de ce pays.",
     toast_number_authorized_group2: "✅ Numéro autorisé pour le Groupe 2.",
+    toast_number_authorized_sourcing: "✅ Numéro autorisé pour l'espace Agent Sourcing.",
     toast_photo_updated: "✅ Photo mise à jour.",
     toast_photo_deleted: "✅ Photo supprimée.",
     toast_pickup_approved: "✅ Point de Retrait approuvé et activé.",
@@ -10716,6 +10762,7 @@ const TRANSLATIONS = {
     toast_number_added_monitoring: "✅ Number added to monitoring.",
     toast_number_authorized_group2_country: "✅ Number authorized for Group 2 of this country.",
     toast_number_authorized_group2: "✅ Number authorized for Group 2.",
+    toast_number_authorized_sourcing: "✅ Number authorized for the Sourcing Agent space.",
     toast_photo_updated: "✅ Photo updated.",
     toast_photo_deleted: "✅ Photo deleted.",
     toast_pickup_approved: "✅ Pickup Point approved and activated.",
@@ -12375,6 +12422,7 @@ const TRANSLATIONS = {
     toast_number_added_monitoring: "✅ नंबर निगरानी में जोड़ा गया।",
     toast_number_authorized_group2_country: "✅ इस देश के समूह 2 के लिए नंबर अधिकृत।",
     toast_number_authorized_group2: "✅ समूह 2 के लिए नंबर अधिकृत।",
+    toast_number_authorized_sourcing: "✅ सोर्सिंग एजेंट स्थान के लिए नंबर अधिकृत।",
     toast_photo_updated: "✅ फ़ोटो अपडेट की गई।",
     toast_photo_deleted: "✅ फ़ोटो हटाई गई।",
     toast_pickup_approved: "✅ पिकअप पॉइंट स्वीकृत और सक्रिय।",
@@ -13820,6 +13868,12 @@ function switchRole(role) {
     // (globale ou celle d'un pays), l'accès s'ouvre directement, sans
     // jamais passer par la fenêtre de mot de passe ci-dessous.
     var myPhoneForG2 = state.profile ? state.profile.phone : null;
+    // Vérifiée EN PREMIER, avant le Groupe 2 : un numéro sur cette liste
+    // bascule directement vers Agent Sourcing, jamais vers l'Admin.
+    if (myPhoneForG2 && isPhoneOnSourcingAgentWhitelist(myPhoneForG2)) {
+      applyRoleSwitch("agent_sourcing");
+      return;
+    }
     if (myPhoneForG2 && isPhoneOnGroup2GlobalWhitelist(myPhoneForG2)) {
       state.adminUnlocked = true;
       state.adminIsOwner = false;
@@ -18666,7 +18720,6 @@ function render() {
     return;
   }
   
-  lockShuffleGridHeights();
 
   if (activeId) {
     var el = document.getElementById(activeId);
@@ -19595,6 +19648,14 @@ function renderRoleMenuModal() {
   html += '<div class="modal-sheet role-menu-sheet">';
   html += '<button class="modal-close" data-action="close-role-menu"><i class="fa-solid fa-xmark"></i></button>';
   html += '<div class="section-title" style="margin-bottom:14px;">' + t("role_menu_title") + '</div>';
+  // Porte d'entrée vers l'Administration : toujours visible (pas de risque
+  // à la montrer à tout le monde), car switchRole("admin") gère lui-même
+  // l'autorisation — mot de passe pour le Groupe 1, liste blanche silencieuse
+  // pour le Groupe 2, sinon ça ne mène simplement nulle part sans le bon accès.
+  // Style en dur (pas .role-menu-item, prévue pour l'ancien menu sombre et
+  // invisible ici, texte blanc sur ce fond clair) pour rester lisible dans
+  // cette fenêtre claire.
+  html += '<button type="button" class="glass-card" style="display:flex;align-items:center;gap:10px;padding:11px 12px;width:100%;text-align:left;margin-bottom:14px;color:var(--text-primary);font-weight:700;font-size:13.5px;" data-action="switch-role" data-value="admin"><i class="fa-solid fa-shield-halved" style="color:var(--accent);width:20px;text-align:center;"></i> ' + t("chat_administration") + '</button>';
   var linkedActivityAccount2 = findLinkedAccountWithActivity(state.profile);
   if (linkedActivityAccount2) {
     html += '<button type="button" class="glass-card" style="display:flex;align-items:center;gap:10px;padding:10px 12px;width:100%;text-align:left;margin-bottom:14px;border:1.5px solid var(--danger);" data-action="switch-to-linked-account" data-value="' + linkedActivityAccount2.id + '">';
@@ -19876,9 +19937,6 @@ function renderProfileModal() {
   var hasFcmToken = isCapacitorApp && state.profile && (state.fcmTokens || []).some(function(t) { return t.accountId === state.profile.id; });
   var pushIsOn = isCapacitorApp ? hasFcmToken : (typeof Notification !== "undefined" && Notification.permission === "granted");
   html += '<button class="vendor-hub-card" data-action="' + (pushIsOn ? 'disable-push-notifications' : 'request-push-permission') + '" style="background:var(--bg-body);"><i class="fa-solid fa-bell"></i><div><div class="vh-title">' + (pushIsOn ? t("profile_notifications_on") : t("profile_notifications_off")) + '</div><div class="vh-sub">' + (pushIsOn ? t("profile_notifications_on_sub") : t("profile_notifications_off_sub")) + '</div></div><div class="dark-mode-switch' + (pushIsOn ? ' on' : '') + '"><div class="dark-mode-knob"></div></div></button>';
-  if (pushIsOn && !isCapacitorApp) {
-    html += '<button class="vendor-hub-card" data-action="test-local-notification" style="background:var(--bg-body);"><i class="fa-solid fa-vial"></i><div><div class="vh-title">Test rapide (sans passer par le serveur)</div><div class="vh-sub">Vérifie si ce téléphone affiche des notifications de ce site, tout court</div></div></button>';
-  }
   html += '<button class="vendor-hub-card" data-action="open-privacy-modal" style="background:var(--bg-body);"><i class="fa-solid fa-shield-halved"></i><div><div class="vh-title">' + t("profile_privacy_policy") + '</div><div class="vh-sub">Comment nous protégeons vos données</div></div><i class="fa-solid fa-chevron-right"></i></button>';
   html += '</div>';
 
@@ -21853,16 +21911,22 @@ function renderVipAdItem(vipAd) {
   var out = '<div class="vip-ad-banner' + effectClass + '" style="' + itemStyle + '"' + (vipAd.link ? ' data-action="open-vip-ad-link" data-value="' + esc(vipAd.link) + '"' : '') + '>';
   if (vipAd.imageUrl) {
     out += '<img loading="lazy" class="vip-ad-image" src="' + esc(vipAd.imageUrl) + '" alt="" />';
-  } else {
-    out += '<span class="vip-ad-badge">VIP</span><span class="vip-ad-emoji">' + esc(vipAd.emoji || '⭐') + '</span>';
   }
+  // L'étoile ⭐ par défaut (quand aucune image n'est fournie) a été retirée :
+  // elle ne servait à rien de concret et prenait de la place au détriment
+  // du message publicitaire, comme le badge "VIP" retiré plus haut.
   out += '<span class="vip-ad-text">';
   // Rien ne distinguait cet encart d'une barre de recherche quand il a une
   // image — même forme, même fond blanc, même position en haut de l'écran.
   // Cette étiquette est donc désormais toujours présente, avec ou sans
   // image, pour qu'on comprenne au premier coup d'œil qu'il s'agit d'une
-  // publicité et non d'un champ à remplir.
-  out += '<span class="vip-ad-sponsored-tag">Publicité</span>';
+  // publicité et non d'un champ à remplir. Le badge "VIP" séparé (nom
+  // interne de cet espace, sans intérêt pour le visiteur) a été retiré :
+  // il prenait de la place sans rien apporter, au détriment du vrai
+  // message publicitaire (ex : "Malitel -10%...") qui se retrouvait coupé.
+  // Réduite ici à une petite icône (📢) au lieu du mot "Publicité" en
+  // toutes lettres — garde la transparence sans manger la place du message.
+  out += '<span class="vip-ad-sponsored-tag" title="Publicité">📢</span>';
   out += '<strong>' + esc(vipAd.title) + '</strong>' + (vipAd.description ? ' — ' + esc(vipAd.description) : '');
   out += '</span>';
   out += '</div>';
@@ -27347,6 +27411,28 @@ function renderAdminSecurity() {
   }
   html += '</div>';
 
+  html += '<div class="glass-card" style="padding:14px;margin-top:16px;">';
+  html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-magnifying-glass-dollar"></i> Agent Sourcing — par numéro, sans mot de passe</div>';
+  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:12px;">Section séparée du Groupe 2 : un numéro ajouté ici bascule directement vers l\'espace Agent Sourcing (jamais vers l\'Admin) via le même bouton "Administration".</div>';
+  html += '<div style="display:flex;gap:8px;margin-bottom:10px;">';
+  html += '<input class="input" id="sourcing-agent-phone" placeholder="Numéro (ex : 70 00 00 00)" data-format="phone" style="flex:1;" />';
+  html += '<button class="btn-primary" style="flex:0;padding:0 16px;" data-action="add-sourcing-agent-whitelist"><i class="fa-solid fa-plus"></i></button>';
+  html += '</div>';
+  var saList = state.sourcingAgentWhitelist || [];
+  if (saList.length === 0) {
+    html += '<div style="font-size:11.5px;color:var(--text-dim);">Aucun numéro autorisé pour l\'instant.</div>';
+  } else {
+    for (var sai = 0; sai < saList.length; sai++) {
+      var saw = saList[sai];
+      var saAcc = findAccountByPhone(saw.phone);
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--border-color);">';
+      html += '<div><div style="font-weight:700;font-size:12.5px;">' + esc(saAcc ? saAcc.name : (saw.name || "Compte")) + '</div><div style="font-size:11px;color:var(--text-dim);">' + esc(saw.phone) + '</div></div>';
+      html += '<button class="link-btn" style="color:var(--danger);" data-action="remove-sourcing-agent-whitelist" data-value="' + esc(saw.id) + '"><i class="fa-solid fa-trash"></i></button>';
+      html += '</div>';
+    }
+  }
+  html += '</div>';
+
   // ---- Admins nationaux (expansion internationale) — réservé au Groupe 1
   // global uniquement, jamais visible par un admin national lui-même. ----
   if (state.adminIsOwner && !state.adminCountryScope) {
@@ -29397,20 +29483,12 @@ function paintFrameEditor(configId) {
 // arrive, sa hauteur naturelle n'a plus aucune influence sur la mise en
 // page. Ré-appliqué après chaque rendu de l'app (voir render()), car un
 // rendu régénère le HTML de la grille et effacerait sinon ce verrouillage.
-function lockShuffleGridHeights() {
-  document.querySelectorAll(".na-shuffle-grid").forEach(function(grid) {
-    var slots = grid.querySelectorAll(".na-shuffle-slot");
-    if (slots.length === 0) return;
-    // Remise à zéro pour mesurer la vraie taille naturelle de chaque
-    // carte, puis chaque carte se verrouille sur SA PROPRE hauteur —
-    // jamais sur celle d'une autre carte, même dans la grille. Verrouiller
-    // toutes les cases sur la plus haute de l'ensemble créait un grand
-    // vide dès qu'une seule carte, ailleurs dans la grille, était un peu
-    // plus haute que les autres.
-    slots.forEach(function(s) { s.style.minHeight = ""; });
-    slots.forEach(function(s) { s.style.minHeight = s.offsetHeight + "px"; });
-  });
-}
+// "À la une" — l'ancien verrouillage de hauteur par case (lockShuffleGridHeights)
+// a été retiré : le contenu de chaque carte est déjà homogène par CSS (voir
+// plus bas), ce qui garantit des rangées stables sans dépendre d'un
+// minutage JS — c'est cette dépendance au minutage qui créait parfois un
+// grand vide sous la section (une case mesurée trop tôt figeait une
+// hauteur anormalement grande, qui étirait toute sa rangée).
 
 // "À la une" — rotation aléatoire et asynchrone, case par case : chaque
 // image change pour son propre compte, à son propre rythme (~2-3s en
@@ -29418,8 +29496,12 @@ function lockShuffleGridHeights() {
 // (pas de re-rendu de l'app) pour rester fluide. Le contenu de chaque
 // carte est volontairement homogène (titre sur une ligne, date sur une
 // ligne, badges variables masqués — voir le CSS de .new-arrivals-scroll)
-// pour que toutes les cases fassent naturellement la même hauteur, sans
-// avoir besoin de la forcer en JS.
+// pour que toutes les cases fassent naturellement la même hauteur — c'est
+// CETTE homogénéité CSS, et elle seule, qui garantit des rangées stables :
+// aucun verrouillage de hauteur en JS n'est fait ni nécessaire ici (un
+// ancien verrouillage par case a été retiré : mesuré au mauvais moment, il
+// figeait parfois une hauteur anormalement grande sur une carte, ce qui
+// étirait toute la rangée et créait un vide sous "À la une").
 (function() {
   setInterval(function() {
     document.querySelectorAll(".na-shuffle-grid").forEach(function(grid) {
@@ -29443,11 +29525,6 @@ function lockShuffleGridHeights() {
         slot.innerHTML = productCard(product, true, true);
         slot.dataset.productId = product.id;
         slot.classList.remove("na-fade-out");
-        // Cette carte précise se reverrouille sur sa propre nouvelle
-        // hauteur — pas besoin de toucher aux autres cartes, qui restent
-        // sur leur propre verrouillage déjà en place.
-        slot.style.minHeight = "";
-        slot.style.minHeight = slot.offsetHeight + "px";
       }, 500);
     });
   }, 900);
@@ -32439,6 +32516,34 @@ root.addEventListener("click", function(e) {
       state.group2GlobalWhitelist = (state.group2GlobalWhitelist || []).filter(function(w) { return w.id !== value; });
       save();
       deleteRemoteDoc("group2GlobalWhitelist", value);
+      showToast(t("toast_access_removed"));
+      render();
+      break;
+    }
+    case "add-sourcing-agent-whitelist": {
+      var saPhoneEl = document.getElementById('sourcing-agent-phone');
+      var saPhoneVal = saPhoneEl ? saPhoneEl.value.trim() : "";
+      if (saPhoneVal.replace(/\D/g, "").length < 8) { showToast(t("toast_enter_valid_number")); break; }
+      var saResolvedPhone = saPhoneVal;
+      var saMatchedAcc = findAccountByPhone(saPhoneVal);
+      if (saMatchedAcc) saResolvedPhone = saMatchedAcc.phone;
+      if (!state.sourcingAgentWhitelist) state.sourcingAgentWhitelist = [];
+      if (state.sourcingAgentWhitelist.some(function(w) { return normalizeWalletPhone(w.phone) === normalizeWalletPhone(saResolvedPhone); })) {
+        showToast(t("toast_number_already_authorized"));
+        break;
+      }
+      var saEntry = { id: uid(), phone: saResolvedPhone, name: saMatchedAcc ? saMatchedAcc.name : "" };
+      state.sourcingAgentWhitelist.push(saEntry);
+      save();
+      saveDoc("sourcingAgentWhitelist", saEntry);
+      showToast(t("toast_number_authorized_sourcing"));
+      render();
+      break;
+    }
+    case "remove-sourcing-agent-whitelist": {
+      state.sourcingAgentWhitelist = (state.sourcingAgentWhitelist || []).filter(function(w) { return w.id !== value; });
+      save();
+      deleteRemoteDoc("sourcingAgentWhitelist", value);
       showToast(t("toast_access_removed"));
       render();
       break;
