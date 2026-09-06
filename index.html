@@ -5303,6 +5303,66 @@ function refreshAutoExchangeRateIfNeeded() {
     });
 }
 
+// ---------- TRADUCTION AUTOMATIQUE DES ARTICLES (nom + description) ----------
+// Le nom et la description d'un article sont tapés librement par chaque
+// vendeur — jamais dans le dictionnaire de traduction de l'app (contrairement
+// aux menus/boutons, eux préparés à l'avance dans les 3 langues). On les
+// fait traduire une seule fois, à la publication, via un service gratuit
+// (même principe que le taux de change ci-dessus : un simple fetch, sans
+// clé ni compte) — puis on garde le résultat sur la fiche produit, jamais
+// retraduit à chaque fois qu'un acheteur la consulte.
+function translateText(text, targetLang) {
+  if (!text || !text.trim()) return Promise.resolve("");
+  var url = "https://api.mymemory.translated.net/get?q=" + encodeURIComponent(text) + "&langpair=fr|" + targetLang;
+  return fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var translated = data && data.responseData && data.responseData.translatedText;
+      return (translated && typeof translated === "string") ? translated : "";
+    })
+    .catch(function() { return ""; }); // échec silencieux — l'article reste affiché en français en attendant
+}
+
+// Traduit le nom et la description d'UN produit fraîchement publié/modifié,
+// en anglais et en hindi — sans jamais bloquer la publication elle-même
+// (déjà faite avant cet appel, voir finalizeProductSave). Le résultat
+// n'arrive qu'une fois le réseau disponible ; si le service est en panne,
+// l'article reste simplement affiché dans sa langue d'origine, sans
+// jamais empêcher qui que ce soit de le voir ou de l'acheter.
+function translateProductAsync(productId) {
+  var product = null;
+  for (var i = 0; i < state.products.length; i++) { if (state.products[i].id === productId) { product = state.products[i]; break; } }
+  if (!product) return;
+  Promise.all([
+    translateText(product.name, "en"),
+    translateText(product.name, "hi"),
+    translateText(product.description, "en"),
+    translateText(product.description, "hi")
+  ]).then(function(results) {
+    var idx = -1;
+    for (var j = 0; j < state.products.length; j++) { if (state.products[j].id === productId) { idx = j; break; } }
+    if (idx === -1) return; // supprimé entre-temps
+    var p = state.products[idx];
+    p.nameByLang = { en: results[0] || p.name, hi: results[1] || p.name };
+    p.descriptionByLang = { en: results[2] || p.description, hi: results[3] || p.description };
+    save();
+    saveDoc("products", p);
+    if (state.detailProductId === productId) render(); // pour voir le résultat tout de suite si on est encore sur la fiche
+  });
+}
+
+// Nom/description à afficher pour la langue active de CET acheteur —
+// retombe sur la version d'origine (française) si pas encore traduit, ou
+// si le service a échoué, ou si l'app est en français.
+function productDisplayName(p) {
+  if (state.language !== "fr" && p.nameByLang && p.nameByLang[state.language]) return p.nameByLang[state.language];
+  return p.name;
+}
+function productDisplayDescription(p) {
+  if (state.language !== "fr" && p.descriptionByLang && p.descriptionByLang[state.language]) return p.descriptionByLang[state.language];
+  return p.description || "";
+}
+
 function getRelaisCommissionRate() {
   if (state.settings) {
     for (var i = 0; i < state.settings.length; i++) {
@@ -21785,7 +21845,8 @@ function renderRecommendationsCircles(items) {
   html += '<div class="reco-circles-grid">';
   for (var i = 0; i < items.length && i < 9; i++) {
     var p = items[i];
-    var shortName = p.name.length > 26 ? p.name.slice(0, 26) + '…' : p.name;
+    var displayNameForShort = productDisplayName(p);
+    var shortName = displayNameForShort.length > 26 ? displayNameForShort.slice(0, 26) + '…' : displayNameForShort;
     html += '<div class="reco-circle-item" data-action="open-product" data-value="' + p.id + '">';
     html += '<div class="reco-circle-img" style="animation-delay:' + (i * 0.3) + 's;border-color:' + recoCfg.shapeColor + ';">';
     html += '<div class="reco-circle-glow" style="animation-delay:' + (i * 0.7) + 's;background:' + recoCfg.shapeColor + ';"></div>';
@@ -21841,7 +21902,7 @@ function renderInlineRecommendationCarousel(items, title) {
     }
     html += '</div>';
     html += '<button class="inline-reco-fav ' + (fav ? 'active' : '') + '" data-action="toggle-favorite" data-value="' + p.id + '"><i class="fa-' + (fav ? 'solid' : 'regular') + ' fa-heart"></i></button>';
-    html += '<div class="inline-reco-title" data-action="open-product" data-value="' + p.id + '">' + esc(p.name) + '</div>';
+    html += '<div class="inline-reco-title" data-action="open-product" data-value="' + p.id + '">' + esc(productDisplayName(p)) + '</div>';
     html += '<div class="inline-reco-bottom">';
     html += '<span class="inline-reco-price">' + money(p.price, p.country, state.profile ? state.profile.country : null) + '</span>';
     html += '<button class="inline-reco-cart-btn" data-action="quick-add-cart" data-value="' + p.id + '" title="Ajouter au panier" ' + (p.stock <= 0 ? 'disabled' : '') + '><i class="fa-solid fa-cart-plus"></i></button>';
@@ -22785,7 +22846,7 @@ function productCard(p, disableImageSwipe, compactBadgeLine, marketBadges) {
     if (p.oldPrice) html += '<span class="price-old">' + money(p.oldPrice, p.country, state.profile ? state.profile.country : null) + '</span>';
   }
   html += '</div>';
-  html += '<div class="product-title">' + esc(p.name) + (marketBadges && sellerVerified ? ' <i class="fa-solid fa-circle-check" style="color:#2e9e4f;font-size:10px;" title="Compte vérifié"></i>' : '') + '</div>';
+  html += '<div class="product-title">' + esc(productDisplayName(p)) + (marketBadges && sellerVerified ? ' <i class="fa-solid fa-circle-check" style="color:#2e9e4f;font-size:10px;" title="Compte vérifié"></i>' : '') + '</div>';
   if (compactBadgeLine) html += '</div>';
   if (compactBadgeLine) {
     // Deuxième ligne compacte, EN DESSOUS de la photo — jamais par-dessus,
@@ -28351,7 +28412,7 @@ function renderProductModal() {
   if (sellerRep.totalOrders >= 3) {
     html += '<div class="reputation-badge"><i class="fa-solid fa-shield-heart"></i> ' + sellerRep.label + ' — ' + sellerRep.stars.toFixed(1) + '/5</div>';
   }
-  html += '<div style="font-size:21px;font-weight:800;margin-bottom:4px;">' + esc(p.name) + '</div>';
+  html += '<div style="font-size:21px;font-weight:800;margin-bottom:4px;">' + esc(productDisplayName(p)) + '</div>';
   if (p.sku) {
     html += '<div style="font-size:11px;color:var(--text-dim);font-family:monospace;margin-bottom:8px;">Réf. ' + esc(p.sku) + '</div>';
   }
@@ -28384,7 +28445,7 @@ function renderProductModal() {
   html += '<button type="button" class="btn-secondary" style="padding:7px 12px;font-size:12px;flex:1;min-width:0;white-space:nowrap;' + (pdMyLike ? 'border-color:#2e9e4f;color:#2e9e4f;' : '') + '" data-action="vote-like-product" data-value="' + p.id + '"><i class="fa-solid fa-thumbs-up"></i> ' + t("pd_like") + (pdLikes > 0 ? ' (' + pdLikes + ')' : '') + '</button>';
   html += '<button type="button" class="btn-secondary" style="padding:7px 12px;font-size:12px;flex:1;min-width:0;white-space:nowrap;' + (pdMyDislike ? 'border-color:var(--danger);color:var(--danger);' : '') + '" data-action="vote-dislike-product" data-value="' + p.id + '"><i class="fa-solid fa-thumbs-down"></i> ' + t("pd_dislike") + (pdDislikes > 0 ? ' (' + pdDislikes + ')' : '') + '</button>';
   html += '</div>';
-  html += '<p style="color:var(--text-secondary);font-size:14px;line-height:1.5;margin-top:10px;">' + esc(p.description) + '</p>';
+  html += '<p style="color:var(--text-secondary);font-size:14px;line-height:1.5;margin-top:10px;">' + esc(productDisplayDescription(p)) + '</p>';
   html += renderProductSectorDetails(p);
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0;">';
   html += '<span style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">';
@@ -29432,6 +29493,10 @@ function finalizeProductSave(product, editing) {
     state.detailProductId = product.id;
     state.activeImageIndex = 0;
     render();
+    // Traduction automatique (anglais/hindi) du nom et de la description,
+    // en arrière-plan — n'empêche jamais la publication elle-même, qui
+    // vient déjà d'avoir lieu ci-dessus.
+    translateProductAsync(product.id);
   } catch (err) {
     console.error("Erreur finalizeProductSave :", err);
     showToast("Une erreur est survenue pendant la publication : " + (err && err.message ? err.message : "erreur inconnue") + ". Réessayez.");
