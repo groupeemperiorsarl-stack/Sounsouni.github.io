@@ -40,6 +40,31 @@
   .back-btn:active {
     background: rgba(255,255,255,0.3);
   }
+  .lang-switch {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    display: inline-flex;
+    gap: 4px;
+    background: rgba(255,255,255,0.18);
+    border-radius: 999px;
+    padding: 3px;
+  }
+  .lang-btn {
+    background: transparent;
+    color: white;
+    border: none;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .lang-btn.active {
+    background: white;
+    color: #2e7d32;
+  }
   header h1 {
     margin: 0 0 6px 0;
     font-size: 26px;
@@ -94,85 +119,266 @@
 <body>
 
 <header>
-  <button class="back-btn" onclick="if (window.history.length > 1) { window.history.back(); } else { window.close(); }">← Retour</button>
+  <button class="back-btn" onclick="if (window.history.length > 1) { window.history.back(); } else { window.close(); }">← <span data-i18n="back">Retour</span></button>
+  <div class="lang-switch">
+    <button class="lang-btn" data-lang-btn="fr" onclick="setLang('fr')">FR</button>
+    <button class="lang-btn" data-lang-btn="en" onclick="setLang('en')">EN</button>
+    <button class="lang-btn" data-lang-btn="hi" onclick="setLang('hi')">HI</button>
+  </div>
   <h1>🧺 Sounsouni</h1>
-  <p>Politique de confidentialité</p>
+  <p data-i18n="subtitle">Politique de confidentialité</p>
 </header>
 
 <main>
-  <p class="updated">Dernière mise à jour : 23 août 2026</p>
+  <p class="updated"><span data-i18n="updated_label">Dernière mise à jour</span> : <span data-i18n="updated_date">23 août 2026</span></p>
 
-  <p>Sounsouni ("nous", "notre application") est un marché digital malien et africain qui met en relation acheteurs, vendeurs, livreurs et points de retrait. Cette politique explique quelles données nous collectons, pourquoi, et comment elles sont utilisées et protégées.</p>
+  <p data-i18n="intro"></p>
 
-  <h2>1. Données que nous collectons</h2>
+  <h2 data-i18n="s1_title"></h2>
   <div class="box">
-    <ul>
-      <li><strong>Informations de compte :</strong> nom, numéro de téléphone, adresse e-mail, mot de passe (chiffré), adresses de livraison.</li>
-      <li><strong>Photo de profil</strong> (optionnelle), si vous choisissez d'en ajouter une.</li>
-      <li><strong>Activité sur l'application :</strong> produits consultés, favoris, historique d'achats et de ventes, messages échangés avec d'autres utilisateurs.</li>
-      <li><strong>Données de paiement et portefeuille :</strong> solde du Portefeuille Sounsouni, historique des transactions, cagnottes, cartes cadeaux. Nous ne stockons pas les numéros complets de cartes bancaires ou de mobile money ; ces paiements sont traités par nos partenaires de paiement.</li>
-      <li><strong>Localisation :</strong> si vous l'autorisez, nous utilisons votre position pour vous proposer des points de retrait proches et faciliter la livraison. Vous pouvez refuser cet accès à tout moment depuis les paramètres de votre téléphone ; certaines fonctionnalités de localisation seront alors indisponibles.</li>
-      <li><strong>Caméra :</strong> utilisée uniquement lorsque vous scannez un code-barres pour rechercher un produit, ou lorsque vous ajoutez une photo (profil, produit, avis). Les images ne sont jamais capturées sans votre action explicite.</li>
-      <li><strong>Notifications :</strong> avec votre autorisation, nous vous envoyons des notifications (nouvelles commandes, messages, mises à jour de livraison), y compris lorsque l'application est fermée.</li>
-    </ul>
+    <ul id="s1-list"></ul>
   </div>
 
-  <h2>2. Pourquoi nous collectons ces données</h2>
+  <h2 data-i18n="s2_title"></h2>
   <div class="box">
-    <ul>
-      <li>Créer et sécuriser votre compte</li>
-      <li>Permettre les achats, ventes et paiements au sein de la plateforme</li>
-      <li>Faciliter la livraison et le retrait de vos commandes</li>
-      <li>Vous envoyer des notifications pertinentes sur vos commandes et messages</li>
-      <li>Améliorer la sécurité de la plateforme et prévenir la fraude</li>
-      <li>Vous permettre de scanner des codes-barres pour retrouver des produits plus rapidement</li>
-    </ul>
+    <ul id="s2-list"></ul>
   </div>
 
-  <h2>3. Partage des données</h2>
+  <h2 data-i18n="s3_title"></h2>
   <div class="box">
-    <p>Nous ne vendons jamais vos données personnelles. Elles peuvent être partagées uniquement dans les cas suivants :</p>
-    <ul>
-      <li>Avec le vendeur ou l'acheteur concerné, dans la mesure nécessaire à la transaction (nom, adresse de livraison, numéro de téléphone)</li>
-      <li>Avec nos prestataires techniques (hébergement de la base de données, envoi de notifications) qui n'utilisent ces données que pour faire fonctionner l'application</li>
-      <li>Si la loi malienne l'exige, ou pour protéger nos utilisateurs contre une fraude ou un usage abusif</li>
-    </ul>
+    <p data-i18n="s3_intro"></p>
+    <ul id="s3-list"></ul>
   </div>
 
-  <h2>4. Conservation et sécurité des données</h2>
+  <h2 data-i18n="s4_title"></h2>
   <div class="box">
-    <p>Vos données sont stockées de façon sécurisée sur des serveurs protégés par chiffrement et contrôle d'accès. Nous conservons vos données tant que votre compte est actif, ou aussi longtemps que nécessaire pour respecter nos obligations légales (comptabilité, litiges).</p>
+    <p data-i18n="s4_text"></p>
   </div>
 
-  <h2>5. Vos droits</h2>
+  <h2 data-i18n="s5_title"></h2>
   <div class="box">
-    <ul>
-      <li>Consulter et modifier vos informations personnelles depuis votre profil dans l'application</li>
-      <li>Demander la suppression de votre compte et de vos données</li>
-      <li>Retirer votre autorisation pour la localisation, la caméra ou les notifications à tout moment, depuis les paramètres de votre téléphone</li>
-    </ul>
-    <p>Pour exercer ces droits, contactez-nous à l'adresse ci-dessous.</p>
+    <ul id="s5-list"></ul>
+    <p data-i18n="s5_contact"></p>
   </div>
 
-  <h2>6. Enfants</h2>
+  <h2 data-i18n="s6_title"></h2>
   <div class="box">
-    <p>Sounsouni n'est pas destiné aux personnes de moins de 18 ans. Nous ne collectons pas sciemment de données concernant des mineurs.</p>
+    <p data-i18n="s6_text"></p>
   </div>
 
-  <h2>7. Modifications de cette politique</h2>
+  <h2 data-i18n="s7_title"></h2>
   <div class="box">
-    <p>Nous pouvons mettre à jour cette politique de confidentialité de temps à autre. Toute modification importante vous sera signalée dans l'application.</p>
+    <p data-i18n="s7_text"></p>
   </div>
 
-  <h2>8. Nous contacter</h2>
+  <h2 data-i18n="s8_title"></h2>
   <div class="box">
-    <p>Pour toute question concernant cette politique de confidentialité ou vos données personnelles, contactez-nous via la section "Administration" dans l'application Sounsouni.</p>
+    <p data-i18n="s8_text"></p>
   </div>
 </main>
 
 <footer>
-  © 2026 Sounsouni — Toutes l'Afrique à un clic !
+  © 2026 Sounsouni — <span data-i18n="footer_tag">Toutes l'Afrique à un clic !</span>
 </footer>
+
+<script>
+var TRANSLATIONS = {
+  fr: {
+    back: "Retour",
+    subtitle: "Politique de confidentialité",
+    updated_label: "Dernière mise à jour",
+    updated_date: "23 août 2026",
+    intro: "Sounsouni (\"nous\", \"notre application\") est un marché digital malien et africain qui met en relation acheteurs, vendeurs, livreurs et points de retrait. Cette politique explique quelles données nous collectons, pourquoi, et comment elles sont utilisées et protégées.",
+    s1_title: "1. Données que nous collectons",
+    s1_list: [
+      "Informations de compte : nom, numéro de téléphone, adresse e-mail, mot de passe (chiffré), adresses de livraison.",
+      "Photo de profil (optionnelle), si vous choisissez d'en ajouter une.",
+      "Activité sur l'application : produits consultés, favoris, historique d'achats et de ventes, messages échangés avec d'autres utilisateurs.",
+      "Données de paiement et portefeuille : solde du Portefeuille Sounsouni, historique des transactions, cagnottes, cartes cadeaux. Nous ne stockons pas les numéros complets de cartes bancaires ou de mobile money ; ces paiements sont traités par nos partenaires de paiement.",
+      "Localisation : si vous l'autorisez, nous utilisons votre position pour vous proposer des points de retrait proches et faciliter la livraison. Vous pouvez refuser cet accès à tout moment depuis les paramètres de votre téléphone ; certaines fonctionnalités de localisation seront alors indisponibles.",
+      "Caméra : utilisée uniquement lorsque vous scannez un code-barres pour rechercher un produit, ou lorsque vous ajoutez une photo (profil, produit, avis). Les images ne sont jamais capturées sans votre action explicite.",
+      "Microphone : utilisé uniquement lorsque vous enregistrez un message vocal dans la messagerie. Nous utilisons une reconnaissance vocale automatique pour détecter si un numéro de téléphone est mentionné dans le message, afin de protéger les utilisateurs contre les tentatives de contournement de la plateforme ; l'enregistrement lui-même n'est pas analysé ni conservé au-delà de son envoi normal dans la conversation.",
+      "Notifications : avec votre autorisation, nous vous envoyons des notifications (nouvelles commandes, messages, mises à jour de livraison), y compris lorsque l'application est fermée."
+    ],
+    s2_title: "2. Pourquoi nous collectons ces données",
+    s2_list: [
+      "Créer et sécuriser votre compte",
+      "Permettre les achats, ventes et paiements au sein de la plateforme",
+      "Faciliter la livraison et le retrait de vos commandes",
+      "Vous envoyer des notifications pertinentes sur vos commandes et messages",
+      "Améliorer la sécurité de la plateforme et prévenir la fraude",
+      "Vous permettre de scanner des codes-barres pour retrouver des produits plus rapidement"
+    ],
+    s3_title: "3. Partage des données",
+    s3_intro: "Nous ne vendons jamais vos données personnelles. Elles peuvent être partagées uniquement dans les cas suivants :",
+    s3_list: [
+      "Avec le vendeur ou l'acheteur concerné, dans la mesure nécessaire à la transaction (nom, adresse de livraison, numéro de téléphone)",
+      "Avec nos prestataires techniques (hébergement de la base de données, envoi de notifications) qui n'utilisent ces données que pour faire fonctionner l'application",
+      "Si la loi malienne l'exige, ou pour protéger nos utilisateurs contre une fraude ou un usage abusif"
+    ],
+    s4_title: "4. Conservation et sécurité des données",
+    s4_text: "Vos données sont stockées de façon sécurisée sur des serveurs protégés par chiffrement et contrôle d'accès. Nous conservons vos données tant que votre compte est actif, ou aussi longtemps que nécessaire pour respecter nos obligations légales (comptabilité, litiges).",
+    s5_title: "5. Vos droits",
+    s5_list: [
+      "Consulter et modifier vos informations personnelles depuis votre profil dans l'application",
+      "Demander la suppression de votre compte et de vos données",
+      "Retirer votre autorisation pour la localisation, la caméra, le microphone ou les notifications à tout moment, depuis les paramètres de votre téléphone"
+    ],
+    s5_contact: "Pour exercer ces droits, contactez-nous à l'adresse ci-dessous.",
+    s6_title: "6. Enfants",
+    s6_text: "Sounsouni n'est pas destiné aux personnes de moins de 18 ans. Nous ne collectons pas sciemment de données concernant des mineurs.",
+    s7_title: "7. Modifications de cette politique",
+    s7_text: "Nous pouvons mettre à jour cette politique de confidentialité de temps à autre. Toute modification importante vous sera signalée dans l'application.",
+    s8_title: "8. Nous contacter",
+    s8_text: "Pour toute question concernant cette politique de confidentialité ou vos données personnelles, contactez-nous via la section \"Administration\" dans l'application Sounsouni.",
+    footer_tag: "Toutes l'Afrique à un clic !"
+  },
+  en: {
+    back: "Back",
+    subtitle: "Privacy Policy",
+    updated_label: "Last updated",
+    updated_date: "August 23, 2026",
+    intro: "Sounsouni (\"we\", \"our app\") is a Malian and African digital marketplace connecting buyers, sellers, delivery agents and pickup points. This policy explains what data we collect, why, and how it is used and protected.",
+    s1_title: "1. Data we collect",
+    s1_list: [
+      "Account information: name, phone number, email address, password (encrypted), delivery addresses.",
+      "Profile picture (optional), if you choose to add one.",
+      "App activity: products viewed, favorites, purchase and sales history, messages exchanged with other users.",
+      "Payment and wallet data: Sounsouni Wallet balance, transaction history, group funds, gift cards. We do not store full bank card or mobile money numbers; these payments are processed by our payment partners.",
+      "Location: if you allow it, we use your position to suggest nearby pickup points and facilitate delivery. You can revoke this access at any time from your phone settings; some location features will then be unavailable.",
+      "Camera: used only when you scan a barcode to search for a product, or when you add a photo (profile, product, review). Images are never captured without your explicit action.",
+      "Microphone: used only when you record a voice message in chat. We use automatic speech recognition to detect if a phone number is mentioned in the message, to protect users against attempts to bypass the platform; the recording itself is not analyzed or kept beyond its normal delivery in the conversation.",
+      "Notifications: with your permission, we send you notifications (new orders, messages, delivery updates), including when the app is closed."
+    ],
+    s2_title: "2. Why we collect this data",
+    s2_list: [
+      "Create and secure your account",
+      "Enable purchases, sales and payments within the platform",
+      "Facilitate delivery and pickup of your orders",
+      "Send you relevant notifications about your orders and messages",
+      "Improve platform security and prevent fraud",
+      "Let you scan barcodes to find products faster"
+    ],
+    s3_title: "3. Data sharing",
+    s3_intro: "We never sell your personal data. It may only be shared in the following cases:",
+    s3_list: [
+      "With the relevant seller or buyer, to the extent necessary for the transaction (name, delivery address, phone number)",
+      "With our technical service providers (database hosting, sending notifications) who only use this data to operate the app",
+      "If required by Malian law, or to protect our users against fraud or misuse"
+    ],
+    s4_title: "4. Data retention and security",
+    s4_text: "Your data is stored securely on servers protected by encryption and access controls. We keep your data as long as your account is active, or as long as necessary to comply with our legal obligations (accounting, disputes).",
+    s5_title: "5. Your rights",
+    s5_list: [
+      "View and edit your personal information from your profile in the app",
+      "Request deletion of your account and your data",
+      "Withdraw your permission for location, camera, microphone or notifications at any time, from your phone settings"
+    ],
+    s5_contact: "To exercise these rights, contact us at the address below.",
+    s6_title: "6. Children",
+    s6_text: "Sounsouni is not intended for people under 18. We do not knowingly collect data about minors.",
+    s7_title: "7. Changes to this policy",
+    s7_text: "We may update this privacy policy from time to time. Any significant change will be notified to you in the app.",
+    s8_title: "8. Contact us",
+    s8_text: "For any question about this privacy policy or your personal data, contact us via the \"Administration\" section in the Sounsouni app.",
+    footer_tag: "All of Africa at your fingertips!"
+  },
+  hi: {
+    back: "वापस",
+    subtitle: "गोपनीयता नीति",
+    updated_label: "अंतिम अपडेट",
+    updated_date: "23 अगस्त 2026",
+    intro: "Sounsouni (\"हम\", \"हमारा ऐप\") एक मालियाई और अफ्रीकी डिजिटल बाज़ार है जो खरीदारों, विक्रेताओं, डिलीवरी एजेंटों और पिकअप पॉइंट्स को जोड़ता है। यह नीति बताती है कि हम कौन सा डेटा एकत्र करते हैं, क्यों, और इसका उपयोग व सुरक्षा कैसे की जाती है।",
+    s1_title: "1. हम जो डेटा एकत्र करते हैं",
+    s1_list: [
+      "खाता जानकारी: नाम, फ़ोन नंबर, ईमेल पता, पासवर्ड (एन्क्रिप्टेड), डिलीवरी पते।",
+      "प्रोफ़ाइल फ़ोटो (वैकल्पिक), यदि आप जोड़ना चुनते हैं।",
+      "ऐप गतिविधि: देखे गए उत्पाद, पसंदीदा, खरीद और बिक्री इतिहास, अन्य उपयोगकर्ताओं के साथ आदान-प्रदान किए गए संदेश।",
+      "भुगतान और वॉलेट डेटा: Sounsouni वॉलेट बैलेंस, लेनदेन इतिहास, ग्रुप फंड, गिफ्ट कार्ड। हम पूर्ण बैंक कार्ड या मोबाइल मनी नंबर संग्रहीत नहीं करते; ये भुगतान हमारे भुगतान साझेदारों द्वारा संसाधित किए जाते हैं।",
+      "स्थान: यदि आप अनुमति देते हैं, तो हम आपके स्थान का उपयोग नज़दीकी पिकअप पॉइंट सुझाने और डिलीवरी सुविधाजनक बनाने के लिए करते हैं। आप इसे अपने फ़ोन की सेटिंग्स से कभी भी अस्वीकार कर सकते हैं; तब कुछ स्थान सुविधाएं अनुपलब्ध हो जाएंगी।",
+      "कैमरा: केवल तब उपयोग किया जाता है जब आप किसी उत्पाद की खोज के लिए बारकोड स्कैन करते हैं, या जब आप कोई फ़ोटो जोड़ते हैं (प्रोफ़ाइल, उत्पाद, समीक्षा)। आपकी स्पष्ट कार्रवाई के बिना कभी भी छवियां कैप्चर नहीं की जातीं।",
+      "माइक्रोफ़ोन: केवल तब उपयोग किया जाता है जब आप मैसेजिंग में वॉइस मैसेज रिकॉर्ड करते हैं। हम स्वचालित वाक् पहचान का उपयोग यह पता लगाने के लिए करते हैं कि क्या संदेश में फ़ोन नंबर का उल्लेख है, ताकि उपयोगकर्ताओं को प्लेटफ़ॉर्म को दरकिनार करने के प्रयासों से बचाया जा सके; रिकॉर्डिंग का स्वयं विश्लेषण नहीं किया जाता और न ही बातचीत में सामान्य भेजने के अलावा इसे रखा जाता है।",
+      "सूचनाएं: आपकी अनुमति से, हम आपको सूचनाएं भेजते हैं (नए ऑर्डर, संदेश, डिलीवरी अपडेट), जिसमें ऐप बंद होने पर भी शामिल है।"
+    ],
+    s2_title: "2. हम यह डेटा क्यों एकत्र करते हैं",
+    s2_list: [
+      "आपका खाता बनाना और सुरक्षित करना",
+      "प्लेटफ़ॉर्म के भीतर खरीद, बिक्री और भुगतान सक्षम करना",
+      "आपके ऑर्डर की डिलीवरी और पिकअप को सुविधाजनक बनाना",
+      "आपके ऑर्डर और संदेशों के बारे में प्रासंगिक सूचनाएं भेजना",
+      "प्लेटफ़ॉर्म की सुरक्षा में सुधार करना और धोखाधड़ी को रोकना",
+      "उत्पादों को तेज़ी से खोजने के लिए बारकोड स्कैन करने देना"
+    ],
+    s3_title: "3. डेटा साझाकरण",
+    s3_intro: "हम आपका व्यक्तिगत डेटा कभी नहीं बेचते। इसे केवल निम्नलिखित मामलों में साझा किया जा सकता है:",
+    s3_list: [
+      "संबंधित विक्रेता या खरीदार के साथ, लेनदेन के लिए आवश्यक सीमा तक (नाम, डिलीवरी पता, फ़ोन नंबर)",
+      "हमारे तकनीकी सेवा प्रदाताओं के साथ (डेटाबेस होस्टिंग, सूचनाएं भेजना) जो इस डेटा का उपयोग केवल ऐप संचालित करने के लिए करते हैं",
+      "यदि मालियाई कानून द्वारा आवश्यक हो, या हमारे उपयोगकर्ताओं को धोखाधड़ी या दुरुपयोग से बचाने के लिए"
+    ],
+    s4_title: "4. डेटा प्रतिधारण और सुरक्षा",
+    s4_text: "आपका डेटा एन्क्रिप्शन और एक्सेस नियंत्रण द्वारा सुरक्षित सर्वरों पर सुरक्षित रूप से संग्रहीत किया जाता है। हम आपका डेटा तब तक रखते हैं जब तक आपका खाता सक्रिय है, या हमारे कानूनी दायित्वों (लेखांकन, विवाद) के अनुपालन के लिए जितना आवश्यक हो।",
+    s5_title: "5. आपके अधिकार",
+    s5_list: [
+      "ऐप में अपनी प्रोफ़ाइल से अपनी व्यक्तिगत जानकारी देखें और संपादित करें",
+      "अपने खाते और डेटा को हटाने का अनुरोध करें",
+      "किसी भी समय अपने फ़ोन की सेटिंग्स से स्थान, कैमरा, माइक्रोफ़ोन या सूचनाओं के लिए अपनी अनुमति वापस लें"
+    ],
+    s5_contact: "इन अधिकारों का प्रयोग करने के लिए, नीचे दिए गए पते पर हमसे संपर्क करें।",
+    s6_title: "6. बच्चे",
+    s6_text: "Sounsouni 18 वर्ष से कम आयु के लोगों के लिए नहीं है। हम जानबूझकर नाबालिगों के बारे में डेटा एकत्र नहीं करते।",
+    s7_title: "7. इस नीति में परिवर्तन",
+    s7_text: "हम समय-समय पर इस गोपनीयता नीति को अपडेट कर सकते हैं। किसी भी महत्वपूर्ण बदलाव की सूचना आपको ऐप में दी जाएगी।",
+    s8_title: "8. हमसे संपर्क करें",
+    s8_text: "इस गोपनीयता नीति या आपके व्यक्तिगत डेटा के बारे में किसी भी प्रश्न के लिए, Sounsouni ऐप में \"प्रशासन\" अनुभाग के माध्यम से हमसे संपर्क करें।",
+    footer_tag: "पूरा अफ़्रीका एक क्लिक में!"
+  }
+};
+
+function renderList(id, items) {
+  var el = document.getElementById(id);
+  el.innerHTML = "";
+  items.forEach(function(item) {
+    var li = document.createElement("li");
+    li.textContent = item;
+    el.appendChild(li);
+  });
+}
+
+function applyLang(lang) {
+  var dict = TRANSLATIONS[lang] || TRANSLATIONS.fr;
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach(function(el) {
+    var key = el.getAttribute("data-i18n");
+    if (dict[key] !== undefined) el.textContent = dict[key];
+  });
+  renderList("s1-list", dict.s1_list);
+  renderList("s2-list", dict.s2_list);
+  renderList("s3-list", dict.s3_list);
+  renderList("s5-list", dict.s5_list);
+  document.querySelectorAll("[data-lang-btn]").forEach(function(btn) {
+    btn.classList.toggle("active", btn.getAttribute("data-lang-btn") === lang);
+  });
+}
+
+function setLang(lang) {
+  applyLang(lang);
+  try { localStorage.setItem("sounsouni_privacy_lang", lang); } catch (e) {}
+  var url = new URL(window.location.href);
+  url.searchParams.set("lang", lang);
+  window.history.replaceState({}, "", url);
+}
+
+(function init() {
+  var params = new URLSearchParams(window.location.search);
+  var lang = params.get("lang");
+  if (!lang) {
+    try { lang = localStorage.getItem("sounsouni_privacy_lang"); } catch (e) {}
+  }
+  if (!lang || !TRANSLATIONS[lang]) lang = "fr";
+  applyLang(lang);
+})();
+</script>
 
 </body>
 </html>
