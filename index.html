@@ -7701,6 +7701,19 @@ function mergeWithDefaults(saved) {
   // Un message-éclair resté coincé d'une session précédente (avant ce
   // correctif) ne doit jamais resurgir au chargement.
   merged.toastMsg = null;
+  // Aucune fenêtre ("show...") ne doit rester ouverte au démarrage, même
+  // si c'était le cas au moment où la page a été quittée la dernière
+  // fois — sinon le tout premier écran affiché EST cette fenêtre, sans
+  // qu'aucune étape ne soit ajoutée à l'historique du navigateur pour
+  // elle (voir syncHistoryForNav : le tout premier rendu ne fait que
+  // "remplacer" l'étape actuelle, jamais en ajouter une). La fermer
+  // déclenchait alors un vrai retour en arrière du navigateur — donc on
+  // quittait carrément l'app au lieu de simplement fermer la fenêtre.
+  for (var _showKey in merged) {
+    if (_showKey.indexOf("show") === 0 && typeof merged[_showKey] === "boolean") {
+      merged[_showKey] = d[_showKey];
+    }
+  }
   merged.checkoutForm = { ...d.checkoutForm, ...(saved.checkoutForm || {}) };
   merged.marketFilters = { ...d.marketFilters, ...(saved.marketFilters || {}) };
   merged.onboardDraft = { ...d.onboardDraft, ...(saved.onboardDraft || {}) };
