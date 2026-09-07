@@ -7714,6 +7714,12 @@ function mergeWithDefaults(saved) {
       merged[_showKey] = d[_showKey];
     }
   }
+  // Même chose pour le suivi des articles déjà montrés dans le carrousel
+  // intercalé du marché — sans ce repli, cette liste ne faisait que
+  // grandir, session après session, jusqu'à finir par couvrir tout le
+  // catalogue et empêcher le carrousel de jamais réapparaître.
+  merged._inlineRecoShownIds = [];
+  merged._lastMarketSignature = null;
   merged.checkoutForm = { ...d.checkoutForm, ...(saved.checkoutForm || {}) };
   merged.marketFilters = { ...d.marketFilters, ...(saved.marketFilters || {}) };
   merged.onboardDraft = { ...d.onboardDraft, ...(saved.onboardDraft || {}) };
@@ -22713,6 +22719,14 @@ function renderMarket() {
       // le seuil REPEAT_EVERY tombe sur un index impair.
       var rowComplete = (k + 1) % 2 === 0;
       if (mcfg.showRecoCircles && !isLast && sinceLastInlineReco >= REPEAT_EVERY && rowComplete) {
+        // Recyclage : si la liste des articles déjà montrés a fini par
+        // couvrir tout (ou presque tout) le catalogue — plausible sur un
+        // catalogue encore petit avec beaucoup de défilement — on
+        // repart de zéro plutôt que de laisser le carrousel disparaître
+        // faute d'articles "neufs" à proposer.
+        if (state._inlineRecoShownIds.length >= state.products.length - 4) {
+          state._inlineRecoShownIds = [];
+        }
         var excludeIds = state._inlineRecoShownIds;
         var inlineBatch = getNextInlineRecoBatch(16, state.category, state.sectorFilter, excludeIds);
         if (inlineBatch.length > 0) {
