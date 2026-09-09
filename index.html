@@ -6917,7 +6917,7 @@ function sellerProfileComplete(profile) {
   // écrite à la main (toujours obligatoire) et le choix de l'agent sourcing
   // (obligatoire seulement si au moins un agent existe déjà dans le système).
   if (profile.sellerType === "international") {
-    var anyAgentExists = state.accounts.some(function(a) { return a.role === "agent_sourcing"; });
+    var anyAgentExists = state.accounts.some(function(a) { return a.isSourcingAgent; });
     var hasAddress = !!(profile.shopAddress && profile.shopAddress.trim());
     var hasAgent = !anyAgentExists || !!profile.sourcingAgentId;
     return hasAddress && hasAgent;
@@ -9910,6 +9910,15 @@ const TRANSLATIONS = {
     "status_En transit": "En transit",
     "status_Arrivé": "Arrivé",
     as_dashboard_title: "Espace Agent Sourcing",
+    as_seller_section: "Vendeur",
+    as_seller_unknown: "Vendeur introuvable (compte supprimé).",
+    as_buyer_section: "Acheteur",
+    as_order_section: "Détails de la commande",
+    as_history_section: "Historique",
+    as_inspection_section: "Inspection",
+    as_inspection_hint: "Vérifiez que les articles, quantités et l'adresse correspondent bien avant de valider.",
+    as_inspection_button: "Marquer comme inspecté",
+    as_inspection_done: "Inspection validée",
     as_pending_verification: "En attente de vérification",
     as_in_progress: "En cours d'acheminement",
     as_no_order: "Aucune commande pour l'instant",
@@ -9927,6 +9936,7 @@ const TRANSLATIONS = {
     intl_choose_agent_hint: "C'est cette personne qui vérifiera vos paiements et vous enverra l'argent — choisissez celui avec qui vous êtes déjà en contact.",
     intl_choose_agent_placeholder: "Choisir un agent…",
     intl_no_agent_yet: "Aucun agent sourcing n'est encore enregistré pour l'instant — contactez l'administration Sounsouni avant de continuer.",
+    toast_choose_agent_first: "⚠️ Choisissez d'abord un agent sourcing dans la liste pour continuer.",
     toast_choose_agent_required: "❌ Choisissez votre agent sourcing avant de continuer.",
     intl_shop_address_label: "Adresse complète de votre boutique",
     intl_shop_address_placeholder: "Ex : Shop 12, Sadar Bazaar Road, près de la gare, Delhi 110006",
@@ -11572,6 +11582,15 @@ const TRANSLATIONS = {
     "status_En transit": "In transit",
     "status_Arrivé": "Arrived",
     as_dashboard_title: "Sourcing Agent space",
+    as_seller_section: "Seller",
+    as_seller_unknown: "Seller not found (account deleted).",
+    as_buyer_section: "Buyer",
+    as_order_section: "Order details",
+    as_history_section: "History",
+    as_inspection_section: "Inspection",
+    as_inspection_hint: "Check that items, quantities and address all match before validating.",
+    as_inspection_button: "Mark as inspected",
+    as_inspection_done: "Inspection confirmed",
     as_pending_verification: "Awaiting verification",
     as_in_progress: "Shipping in progress",
     as_no_order: "No orders yet",
@@ -11589,6 +11608,7 @@ const TRANSLATIONS = {
     intl_choose_agent_hint: "This is the person who will verify your payments and send you the money — choose the one you're already in contact with.",
     intl_choose_agent_placeholder: "Choose an agent…",
     intl_no_agent_yet: "No sourcing agent is registered yet — contact Sounsouni administration before continuing.",
+    toast_choose_agent_first: "⚠️ Choose a sourcing agent from the list first to continue.",
     toast_choose_agent_required: "❌ Choose your sourcing agent before continuing.",
     intl_shop_address_label: "Full address of your shop",
     intl_shop_address_placeholder: "e.g. Shop 12, Sadar Bazaar Road, near the train station, Delhi 110006",
@@ -13234,6 +13254,15 @@ const TRANSLATIONS = {
     "status_En transit": "पारगमन में",
     "status_Arrivé": "पहुंच गया",
     as_dashboard_title: "सोर्सिंग एजेंट स्थान",
+    as_seller_section: "विक्रेता",
+    as_seller_unknown: "विक्रेता नहीं मिला (खाता हटाया गया)।",
+    as_buyer_section: "खरीदार",
+    as_order_section: "ऑर्डर विवरण",
+    as_history_section: "इतिहास",
+    as_inspection_section: "निरीक्षण",
+    as_inspection_hint: "मान्य करने से पहले जांचें कि वस्तुएं, मात्रा और पता सही हैं।",
+    as_inspection_button: "निरीक्षित के रूप में चिह्नित करें",
+    as_inspection_done: "निरीक्षण की पुष्टि हुई",
     as_pending_verification: "सत्यापन की प्रतीक्षा में",
     as_in_progress: "शिपिंग जारी है",
     as_no_order: "अभी तक कोई ऑर्डर नहीं",
@@ -13251,6 +13280,7 @@ const TRANSLATIONS = {
     intl_choose_agent_hint: "यही व्यक्ति आपके भुगतान की पुष्टि करेगा और आपको पैसे भेजेगा — जिसके साथ आप पहले से संपर्क में हैं उसे चुनें।",
     intl_choose_agent_placeholder: "एक एजेंट चुनें…",
     intl_no_agent_yet: "अभी तक कोई सोर्सिंग एजेंट पंजीकृत नहीं है — जारी रखने से पहले Sounsouni प्रशासन से संपर्क करें।",
+    toast_choose_agent_first: "⚠️ जारी रखने के लिए पहले सूची में से एक सोर्सिंग एजेंट चुनें।",
     toast_choose_agent_required: "❌ जारी रखने से पहले अपना सोर्सिंग एजेंट चुनें।",
     intl_shop_address_label: "आपकी दुकान का पूरा पता",
     intl_shop_address_placeholder: "उदा: Shop 12, Sadar Bazaar Road, रेलवे स्टेशन के पास, Delhi 110006",
@@ -13473,7 +13503,7 @@ function registerAccount() {
       showToast(t("toast_shop_address_required"));
       return;
     }
-    var agentsAtRegister = state.accounts.filter(function(a) { return a.role === "agent_sourcing"; });
+    var agentsAtRegister = state.accounts.filter(function(a) { return a.isSourcingAgent; });
     if (agentsAtRegister.length > 0 && !d.sourcingAgentId) {
       showToast(t("toast_choose_agent_required"));
       return;
@@ -13665,9 +13695,19 @@ function registerAccount() {
     state.activeTour = { tourKey: "decouvrir", index: 0, single: false };
   }
   
-  // 11. Notifications
-  if ('Notification' in window && Notification.permission === 'default') {
-    Notification.requestPermission();
+  // 11. Notifications — déclenchement automatique juste après la création
+  // du compte, pour un NOUVEAU compte uniquement (mergingIntoExisting
+  // false : quelqu'un qui ajoute juste une casquette à un compte déjà
+  // existant a déjà eu (ou refusé) cette demande avant). L'ancienne
+  // version ne faisait QUE demander la permission sans jamais compléter
+  // l'abonnement réel derrière — la personne acceptait, mais ne recevait
+  // quand même jamais rien. On utilise maintenant le même mécanisme
+  // complet que le bouton manuel du Profil (abonnement FCM natif sur
+  // l'app Android, sinon Web Push classique).
+  if (!mergingIntoExisting && 'Notification' in window && Notification.permission === 'default') {
+    if (!subscribeToFcmIfCapacitor()) {
+      requestPushPermissionAndSubscribe();
+    }
   }
   
   // 12. Sauvegarder et afficher
@@ -14053,6 +14093,19 @@ function logout() {
 }
 
 function switchRole(role) {
+  // Vérifiée tout en haut, INCONDITIONNELLEMENT, avant même de regarder si
+  // l'admin est déjà déverrouillé — sinon, un compte ayant déjà déverrouillé
+  // l'accès admin au moins une fois auparavant (drapeau qui reste vrai
+  // indéfiniment, jamais remis à zéro) sautait complètement cette
+  // vérification et atterrissait dans l'admin général au lieu de son
+  // espace Agent Sourcing dédié.
+  if (role === "admin") {
+    var myPhoneForSourcing = state.profile ? state.profile.phone : null;
+    if (myPhoneForSourcing && isPhoneOnSourcingAgentWhitelist(myPhoneForSourcing)) {
+      applyRoleSwitch("agent_sourcing");
+      return;
+    }
+  }
   var staleAdminSession = state.adminUnlocked && typeof state.adminIsOwner !== "boolean";
   if (RESTRICTED_ROLES.indexOf(role) !== -1 && (!state.adminUnlocked || staleAdminSession)) {
     // Groupe 2 (accès limité) n'a plus de mot de passe — juste une liste
@@ -14061,12 +14114,6 @@ function switchRole(role) {
     // (globale ou celle d'un pays), l'accès s'ouvre directement, sans
     // jamais passer par la fenêtre de mot de passe ci-dessous.
     var myPhoneForG2 = state.profile ? state.profile.phone : null;
-    // Vérifiée EN PREMIER, avant le Groupe 2 : un numéro sur cette liste
-    // bascule directement vers Agent Sourcing, jamais vers l'Admin.
-    if (myPhoneForG2 && isPhoneOnSourcingAgentWhitelist(myPhoneForG2)) {
-      applyRoleSwitch("agent_sourcing");
-      return;
-    }
     if (myPhoneForG2 && isPhoneOnGroup2GlobalWhitelist(myPhoneForG2)) {
       state.adminUnlocked = true;
       state.adminIsOwner = false;
@@ -14123,6 +14170,15 @@ function switchRole(role) {
 function applyRoleSwitch(role) {
   refreshProfileFromAccounts();
   state.profile.role = role;
+  // "isSourcingAgent" est un statut PERMANENT du compte, séparé du rôle
+  // actuel de navigation — sans cette distinction, un agent qui bascule
+  // ensuite en "Acheteur" pour parcourir le marché "perdait" son statut
+  // d'agent partout ailleurs (liste déroulante du vendeur international,
+  // vérification admin...), puisque ces endroits ne regardaient que le
+  // rôle courant, qui change à chaque navigation. Une fois activé, ce
+  // statut reste vrai indéfiniment (sauf retrait explicite par l'Admin
+  // de la liste blanche — voir "remove-sourcing-agent-whitelist").
+  if (role === "agent_sourcing") state.profile.isSourcingAgent = true;
   if (role === "vendeur" && !state.profile.shopName) {
     state.profile.shopName = "Boutique de " + state.profile.name;
     state.profile.sellerType = state.profile.sellerType || "particulier";
@@ -18630,6 +18686,7 @@ var OVERLAY_REGISTRY = [
   { key: "orderRelaisMap", isOpen: function () { return state.showOrderRelaisMap; }, close: function () { state.showOrderRelaisMap = false; } },
   { key: "repereGate", isOpen: function () { return state.showRepereGate; }, close: function () { state.showRepereGate = false; } },
   { key: "commissionConfirm", isOpen: function () { return state.showCommissionConfirm; }, close: function () { state.showCommissionConfirm = false; } },
+  { key: "agentOrderDetail", isOpen: function () { return !!state.detailAgentOrderId; }, close: function () { state.detailAgentOrderId = null; } },
   { key: "externalParcelForm", isOpen: function () { return state.showExternalParcelForm; }, close: function () { state.showExternalParcelForm = false; state.externalParcelDraft = null; } },
   { key: "affiliateProgram", isOpen: function () { return state.showAffiliateProgram; }, close: function () { state.showAffiliateProgram = false; state.showProfileScreen = true; } },
   { key: "sensitiveConfirm", isOpen: function () { return state.showSensitiveConfirm; }, close: function () { state.showSensitiveConfirm = false; state.pendingSensitiveKind = null; state.pendingSensitiveData = null; state.sensitiveConfirmLabel = null; } },
@@ -19156,6 +19213,7 @@ function buildHTML() {
   if (state.showForgotPassword) html += renderForgotPasswordModal(); else forgotPasswordWasOpen = false;
   if (state.showUnlockAccount) html += renderUnlockAccountModal(); else unlockAccountWasOpen = false;
   if (state.showCommissionConfirm) html += renderCommissionConfirmModal();
+  if (state.detailAgentOrderId) html += renderAgentOrderDetailModal();
   if (state.showRepereGate) html += renderRepereGateModal();
   if (state.showUserGuide) html += renderUserGuideModal();
   if (state.showWallet) html += renderWalletModal();
@@ -19549,9 +19607,21 @@ function renderFindAccountModal() {
 
 // ---------- \u00c9TAPE 2 (Vendeur) : TYPE DE VENDEUR ----------
 function renderOnboardStepVendorType(d) {
-  var html = '<button class="link-btn" style="margin-bottom:14px" data-action="onboard-back-step" data-value="identity"><i class="fa-solid fa-arrow-left"></i> ' + t("relais_apply_back") + '</button>';
-  html += '<div class="section-title" style="margin-bottom:4px;">' + t("vt_question") + '</div>';
-  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:16px;">' + t("vt_hint") + '</div>';
+  // Venant du menu "Changer de rôle" (compte déjà existant), revenir en
+  // arrière ne doit jamais ramener au formulaire d'inscription complet
+  // (il n'y a pas d'étape "identité" dans ce parcours) — mais directement
+  // là où la personne se trouvait avant, dans "Changer de rôle".
+  var vtBackAction = d.isSecondAccountFlow
+    ? ' data-action="cancel-onboard-to-role-menu"'
+    : ' data-action="onboard-back-step" data-value="identity"';
+  var html = '<button class="link-btn" style="margin-bottom:14px"' + vtBackAction + '><i class="fa-solid fa-arrow-left"></i> ' + t("relais_apply_back") + '</button>';
+  // Même fond blanc opaque que l'étape "Vendeur International" juste après
+  // — ce texte s'affichait directement sur la photo de fond de la carte
+  // d'inscription, illisible par endroits selon la photo choisie.
+  html += '<div style="background:rgba(255,255,255,0.94);border-radius:14px;padding:14px 16px;margin-bottom:10px;">';
+  html += '<div class="section-title" style="margin-bottom:4px;font-weight:800;">' + t("vt_question") + '</div>';
+  html += '<div style="font-size:11.5px;color:var(--text-primary);">' + t("vt_hint") + '</div>';
+  html += '</div>';
   html += '<div style="display:flex;flex-direction:column;gap:10px;">';
   var types = [
     ["particulier", "fa-user", t("vt_particulier"), t("vt_particulier_sub")],
@@ -19587,7 +19657,7 @@ function renderOnboardStepVendorType(d) {
 // volume se règlent article par article, au moment de la publication.
 function renderOnboardStepInternational(d) {
   var detectedCountry = countryForCode(d.countryCode || "+223");
-  var agents = state.accounts.filter(function(a) { return a.role === "agent_sourcing"; });
+  var agents = state.accounts.filter(function(a) { return a.isSourcingAgent; });
   // Un compte hors Afrique ne voit QUE cette option à l'étape précédente
   // (voir renderOnboardStepVendorType) — y revenir en arrière n'aurait
   // aucun intérêt (une seule carte à re-choisir) et prêterait à
@@ -19632,7 +19702,18 @@ function renderOnboardStepInternational(d) {
     html += '<div style="font-size:10.5px;color:var(--text-primary);margin-top:4px;">' + t("intl_choose_agent_hint") + '</div>';
   }
   html += '</div>';
-  html += '<button class="btn-primary" style="margin-top:22px" data-action="complete-onboarding">' + t("vo_create_account") + ' <i class="fa-solid fa-arrow-right"></i></button>';
+  // Le bouton reste désactivé tant qu'aucun agent valide n'est choisi —
+  // que ce soit parce qu'il n'en existe encore aucun (rien à choisir), ou
+  // parce qu'il y en a mais que le vendeur n'a pas encore cliqué dessus.
+  // Sans agent assigné, personne ne pourrait jamais vérifier ses
+  // paiements ni suivre sa commande une fois publiée.
+  var canCreateIntlAccount = agents.length > 0 && !!d.sourcingAgentId;
+  // Toujours cliquable (jamais "disabled" au sens HTML) même quand la
+  // condition n'est pas remplie — un bouton vraiment désactivé ne déclenche
+  // aucun clic du tout, donc aucun message ne peut s'afficher pour
+  // expliquer pourquoi. On simule juste l'apparence grisée, et le clic
+  // montre un message clair au lieu de ne rien faire.
+  html += '<button class="btn-primary" style="margin-top:22px;' + (canCreateIntlAccount ? '' : 'opacity:0.5;') + '" data-action="' + (canCreateIntlAccount ? 'complete-onboarding' : 'agent-required-hint') + '">' + t("vo_create_account") + ' <i class="fa-solid fa-arrow-right"></i></button>';
   return html;
 }
 
@@ -23675,7 +23756,7 @@ function renderSellerProfileSetup() {
   // champs (adresse écrite à la main, agent sourcing) sont indépendants —
   // seul celui qui manque vraiment s'affiche, jamais les deux par principe.
   if (p.sellerType === "international") {
-    var agentsForSetup = state.accounts.filter(function(a) { return a.role === "agent_sourcing"; });
+    var agentsForSetup = state.accounts.filter(function(a) { return a.isSourcingAgent; });
     var needsAddress = !(p.shopAddress && p.shopAddress.trim());
     var needsAgent = agentsForSetup.length > 0 && !p.sourcingAgentId;
 
@@ -24419,6 +24500,81 @@ function renderSellerOrders() {
 // propre frise (INTERNATIONAL_STATUS_FLOW) — jamais celle d'un livreur
 // classique. Une seule action générique "étape suivante" suffit : le
 // parcours est strictement linéaire, sans branche possible.
+// Fiche complète d'une commande internationale, ouverte en tapant sur une
+// carte du tableau de bord Agent Sourcing — vendeur (qui, où le trouver),
+// détails complets de la commande, et un bouton d'inspection pour que
+// l'agent valide explicitement que tout est conforme avant expédition.
+function renderAgentOrderDetailModal() {
+  var o = null;
+  for (var oi = 0; oi < state.orders.length; oi++) { if (state.orders[oi].id === state.detailAgentOrderId) { o = state.orders[oi]; break; } }
+  if (!o) { state.detailAgentOrderId = null; return ''; }
+  var sellerId = o.items && o.items[0] ? o.items[0].sellerId : null;
+  var sellerAcc = null;
+  for (var sa = 0; sa < state.accounts.length; sa++) { if (state.accounts[sa].id === sellerId) { sellerAcc = state.accounts[sa]; break; } }
+
+  var html = '<div class="modal-overlay" data-action="close-agent-order-detail">';
+  html += '<div class="modal-sheet" onclick="event.stopPropagation()">';
+  html += '<button class="link-btn" style="margin-bottom:10px;" data-action="close-agent-order-detail"><i class="fa-solid fa-arrow-left"></i> ' + t("as_back") + '</button>';
+  html += '<div class="section-title" style="margin-bottom:4px;">#' + o.id.slice(-5).toUpperCase() + ' <span class="status-pill">' + translateStatus(o.status) + '</span></div>';
+
+  // ---- Vendeur : qui, où le trouver ----
+  html += '<div style="font-weight:800;font-size:13px;margin-top:16px;margin-bottom:6px;"><i class="fa-solid fa-shop"></i> ' + t("as_seller_section") + '</div>';
+  html += '<div class="glass-card" style="padding:12px;">';
+  if (sellerAcc) {
+    html += '<div style="font-weight:700;font-size:13.5px;">' + esc(sellerAcc.shopName || sellerAcc.name) + '</div>';
+    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;">' + esc(sellerAcc.name) + ' · <a href="tel:' + esc(sellerAcc.phone) + '" style="color:var(--accent);">' + esc(sellerAcc.phone) + '</a></div>';
+    if (sellerAcc.shopAddress) {
+      html += '<div style="font-size:12px;margin-top:8px;"><i class="fa-solid fa-location-dot" style="color:var(--accent);"></i> ' + esc(sellerAcc.shopAddress) + '</div>';
+    }
+    if (sellerAcc.country) {
+      html += '<div style="font-size:11px;color:var(--text-dim);margin-top:4px;">' + esc(sellerAcc.country) + '</div>';
+    }
+  } else {
+    html += '<div style="font-size:12px;color:var(--text-dim);">' + t("as_seller_unknown") + '</div>';
+  }
+  html += '</div>';
+
+  // ---- Acheteur ----
+  html += '<div style="font-weight:800;font-size:13px;margin-top:16px;margin-bottom:6px;"><i class="fa-solid fa-user"></i> ' + t("as_buyer_section") + '</div>';
+  html += '<div class="glass-card" style="padding:12px;">';
+  html += '<div style="font-weight:700;font-size:13.5px;">' + esc(o.buyerName) + '</div>';
+  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;"><a href="tel:' + esc(o.buyerPhone) + '" style="color:var(--accent);">' + esc(o.buyerPhone) + '</a></div>';
+  html += '</div>';
+
+  // ---- Détails de la commande ----
+  html += '<div style="font-weight:800;font-size:13px;margin-top:16px;margin-bottom:6px;"><i class="fa-solid fa-box"></i> ' + t("as_order_section") + '</div>';
+  html += '<div class="glass-card" style="padding:12px;">';
+  for (var i = 0; i < o.items.length; i++) {
+    html += '<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;border-bottom:1px solid var(--border-color);"><span>' + o.items[i].qty + '× ' + esc(o.items[i].name) + '</span></div>';
+  }
+  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:8px;">' + t("as_shipping_mode_label") + ' : ' + (o.shippingMode === "aerien" ? t("opt_transport_aerien") : t("opt_transport_maritime")) + '</div>';
+  if (o.specialInstructions) {
+    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:4px;"><i class="fa-solid fa-note-sticky"></i> ' + esc(o.specialInstructions) + '</div>';
+  }
+  html += '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:13.5px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-color);"><span>₹' + Number(o.totalInr || 0).toLocaleString("en-IN") + '</span><span style="color:var(--accent);">' + money(o.total) + '</span></div>';
+  html += '</div>';
+
+  // ---- Historique des statuts ----
+  html += '<div style="font-weight:800;font-size:13px;margin-top:16px;margin-bottom:6px;"><i class="fa-solid fa-clock-rotate-left"></i> ' + t("as_history_section") + '</div>';
+  html += renderOrderStatusHistory(o);
+
+  // ---- Inspection : validation explicite par l'agent que tout est
+  // conforme avant de poursuivre — distinct de "vérifier le paiement",
+  // qui reste géré par le bouton d'avancement de statut existant.
+  html += '<div style="font-weight:800;font-size:13px;margin-top:16px;margin-bottom:6px;"><i class="fa-solid fa-magnifying-glass"></i> ' + t("as_inspection_section") + '</div>';
+  if (o.agentInspected) {
+    html += '<div class="glass-card" style="padding:12px;color:var(--success);font-size:12.5px;font-weight:700;"><i class="fa-solid fa-circle-check"></i> ' + t("as_inspection_done") + (o.agentInspectedAt ? ' — ' + new Date(o.agentInspectedAt).toLocaleDateString("fr-FR") : '') + '</div>';
+  } else {
+    html += '<div class="glass-card" style="padding:12px;">';
+    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;">' + t("as_inspection_hint") + '</div>';
+    html += '<button class="btn-primary" style="width:100%;" data-action="agent-inspect-order" data-value="' + o.id + '"><i class="fa-solid fa-clipboard-check"></i> ' + t("as_inspection_button") + '</button>';
+    html += '</div>';
+  }
+
+  html += '</div></div>';
+  return html;
+}
+
 function renderAgentSourcing() {
   // Ne montre à CET agent que les commandes de SES vendeurs — jamais
   // celles gérées par un autre agent, même dans le même pays (voir
@@ -24446,7 +24602,10 @@ function renderAgentSourcing() {
     var currentIdx = INTERNATIONAL_STATUS_FLOW.indexOf(o.status);
     var nextStatus = currentIdx >= 0 && currentIdx < INTERNATIONAL_STATUS_FLOW.length - 1 ? INTERNATIONAL_STATUS_FLOW[currentIdx + 1] : null;
     var cardHtml = '<div class="glass-card" style="padding:14px;margin-bottom:12px;">';
-    cardHtml += '<div style="display:flex;justify-content:space-between;font-weight:800;font-size:13.5px;margin-bottom:6px;"><span>#' + o.id.slice(-5).toUpperCase() + '</span><span class="status-pill">' + translateStatus(o.status) + '</span></div>';
+    // En-tête cliquable — ouvre la fiche complète (vendeur, localisation,
+    // détails de la commande, inspection) sans gêner les boutons d'action
+    // rapide plus bas dans la carte, qui restent indépendants.
+    cardHtml += '<button type="button" style="all:unset;cursor:pointer;display:flex;justify-content:space-between;align-items:center;width:100%;font-weight:800;font-size:13.5px;margin-bottom:6px;" data-action="open-agent-order-detail" data-value="' + o.id + '"><span>#' + o.id.slice(-5).toUpperCase() + ' <i class="fa-solid fa-chevron-right" style="font-size:10px;color:var(--text-dim);"></i></span><span class="status-pill">' + translateStatus(o.status) + '</span></button>';
     cardHtml += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:8px;">' + t("as_buyer") + ' : ' + esc(o.buyerName) + ' · <a href="tel:' + esc(o.buyerPhone) + '" style="color:var(--accent);">' + esc(o.buyerPhone) + '</a></div>';
     for (var i = 0; i < o.items.length; i++) {
       cardHtml += '<div style="font-size:12px;padding:2px 0;">' + o.items[i].qty + '× ' + esc(o.items[i].name) + '</div>';
@@ -27384,8 +27543,8 @@ function renderAdminAccountDetail(accountId) {
   if (state.adminIsOwner) {
     html += '<div class="glass-card" style="padding:14px;margin-top:10px;">';
     html += '<div style="font-weight:800;font-size:13.5px;margin-bottom:8px;"><i class="fa-solid fa-earth-asia"></i> Agent Sourcing</div>';
-    if (a.role === "agent_sourcing") {
-      html += '<div style="font-size:12px;color:var(--success);margin-bottom:10px;"><i class="fa-solid fa-circle-check"></i> Ce compte est actuellement Agent Sourcing.</div>';
+    if (a.isSourcingAgent) {
+      html += '<div style="font-size:12px;color:var(--success);margin-bottom:10px;"><i class="fa-solid fa-circle-check"></i> Ce compte est Agent Sourcing (statut permanent, indépendant du rôle affiché en ce moment).</div>';
       html += '<button class="btn-secondary" style="color:var(--danger);border-color:var(--danger);" data-action="admin-remove-agent-role" data-value="' + a.id + '"><i class="fa-solid fa-xmark"></i> Retirer ce rôle</button>';
     } else {
       html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;">Fait de ce compte un Agent Sourcing — il pourra vérifier les paiements et suivre les commandes des vendeurs internationaux qui le choisissent à leur inscription.</div>';
@@ -30231,6 +30390,7 @@ root.addEventListener("click", function(e) {
       for (var atp = 0; atp < state.accounts.length; atp++) { if (state.accounts[atp].id === value) { accToPromote = state.accounts[atp]; break; } }
       if (accToPromote) {
         accToPromote.role = "agent_sourcing";
+        accToPromote.isSourcingAgent = true;
         save();
         saveDoc("accounts", accToPromote);
         showToast("✅ " + accToPromote.name + " est maintenant Agent Sourcing.");
@@ -30243,9 +30403,30 @@ root.addEventListener("click", function(e) {
       for (var atd = 0; atd < state.accounts.length; atd++) { if (state.accounts[atd].id === value) { accToDemote = state.accounts[atd]; break; } }
       if (accToDemote) {
         accToDemote.role = "acheteur";
+        accToDemote.isSourcingAgent = false;
         save();
         saveDoc("accounts", accToDemote);
         showToast("✅ Rôle Agent Sourcing retiré.");
+        render();
+      }
+      break;
+    }
+    case "agent-required-hint": {
+      var agentsNowCount = state.accounts.filter(function(a) { return a.isSourcingAgent; }).length;
+      showToast(agentsNowCount === 0 ? t("intl_no_agent_yet") : t("toast_choose_agent_first"));
+      break;
+    }
+    case "open-agent-order-detail": state.detailAgentOrderId = value; render(); break;
+    case "close-agent-order-detail": state.detailAgentOrderId = null; render(); break;
+    case "agent-inspect-order": {
+      var orderToInspect = null;
+      for (var oti = 0; oti < state.orders.length; oti++) { if (state.orders[oti].id === value) { orderToInspect = state.orders[oti]; break; } }
+      if (orderToInspect) {
+        orderToInspect.agentInspected = true;
+        orderToInspect.agentInspectedAt = Date.now();
+        save();
+        saveDoc("orders", orderToInspect);
+        showToast(t("as_inspection_done"));
         render();
       }
       break;
@@ -30508,7 +30689,7 @@ root.addEventListener("click", function(e) {
       var sp = state.profile;
       sp.shopPhone = sp.phone; // même numéro que l'inscription — plus besoin de le redemander
       if (sp.sellerType === "international") {
-        var anyAgentExistsNow = state.accounts.some(function(a) { return a.role === "agent_sourcing"; });
+        var anyAgentExistsNow = state.accounts.some(function(a) { return a.isSourcingAgent; });
         if (!sp.shopAddress || !sp.shopAddress.trim()) { showToast(t("toast_shop_address_required")); break; }
         if (anyAgentExistsNow && !sp.sourcingAgentId) { showToast(t("toast_choose_agent_required")); break; }
       } else {
@@ -32983,6 +33164,15 @@ root.addEventListener("click", function(e) {
       state.sourcingAgentWhitelist = (state.sourcingAgentWhitelist || []).filter(function(w) { return w.id !== value; });
       save();
       deleteRemoteDoc("sourcingAgentWhitelist", value);
+      // Retire aussi le statut permanent du compte correspondant, s'il en
+      // a déjà un — sinon il resterait listé comme agent partout ailleurs
+      // malgré son retrait de la liste blanche.
+      for (var rwAcc = 0; rwAcc < state.accounts.length; rwAcc++) {
+        if (state.accounts[rwAcc].isSourcingAgent && !isPhoneOnSourcingAgentWhitelist(state.accounts[rwAcc].phone)) {
+          state.accounts[rwAcc].isSourcingAgent = false;
+          saveDoc("accounts", state.accounts[rwAcc]);
+        }
+      }
       showToast(t("toast_access_removed"));
       render();
       break;
