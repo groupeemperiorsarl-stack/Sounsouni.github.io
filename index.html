@@ -28,6 +28,10 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" defer></script>
+    <!-- jsPDF pour générer un vrai fichier PDF téléchargeable (politiques
+         d'utilisation) — chargé en arrière-plan, jamais utilisé avant
+         qu'une personne demande le téléchargement. -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js" defer onerror="
       // Le premier lien a échoué (chemin CDN capricieux constaté) — on
       // retente avec deux autres sources avant d'abandonner, pour ne
@@ -8752,8 +8756,8 @@ const TRANSLATIONS = {
     relais_apply_gps_required: "Obligatoire — appuyez sur ce bouton depuis la boutique elle-même.",
     relais_apply_photo_label: "Photo de vous *",
     relais_apply_photo_upload: "Téléverser votre photo",
-    relais_apply_docs_label: "Pièces justificatives *",
-    relais_apply_docs_hint: "Sert uniquement à vérifier votre identité avant validation par l'administration.",
+    relais_apply_docs_label: "Pièce d'identité *",
+    relais_apply_docs_hint: "Carte d'identité, carte biométrique ou passeport — sert uniquement à vérifier votre identité avant validation par l'administration.",
     relais_apply_add_doc: "Ajouter un document",
     relais_apply_add_another_doc: "Ajouter un autre document",
     relais_apply_submit: "Envoyer ma demande",
@@ -10431,8 +10435,8 @@ const TRANSLATIONS = {
     relais_apply_gps_required: "Required — tap this button from the shop itself.",
     relais_apply_photo_label: "Photo of yourself *",
     relais_apply_photo_upload: "Upload your photo",
-    relais_apply_docs_label: "Supporting documents *",
-    relais_apply_docs_hint: "Only used to verify your identity before approval by administration.",
+    relais_apply_docs_label: "ID document *",
+    relais_apply_docs_hint: "National ID card, biometric ID card, or passport — only used to verify your identity before approval by administration.",
     relais_apply_add_doc: "Add a document",
     relais_apply_add_another_doc: "Add another document",
     relais_apply_submit: "Send my application",
@@ -12110,8 +12114,8 @@ const TRANSLATIONS = {
     relais_apply_gps_required: "आवश्यक — इस बटन को दुकान से ही दबाएं।",
     relais_apply_photo_label: "अपनी फ़ोटो *",
     relais_apply_photo_upload: "अपनी फ़ोटो अपलोड करें",
-    relais_apply_docs_label: "सहायक दस्तावेज़ *",
-    relais_apply_docs_hint: "केवल प्रशासन द्वारा अनुमोदन से पहले आपकी पहचान सत्यापित करने के लिए उपयोग किया जाता है।",
+    relais_apply_docs_label: "पहचान पत्र *",
+    relais_apply_docs_hint: "पहचान पत्र, बायोमेट्रिक पहचान पत्र, या पासपोर्ट — केवल प्रशासन द्वारा अनुमोदन से पहले आपकी पहचान सत्यापित करने के लिए उपयोग किया जाता है।",
     relais_apply_add_doc: "एक दस्तावेज़ जोड़ें",
     relais_apply_add_another_doc: "एक और दस्तावेज़ जोड़ें",
     relais_apply_submit: "मेरा आवेदन भेजें",
@@ -13400,6 +13404,40 @@ function getTieredPrice(product, qty) {
 // ============================================================
 
 // ---------- ONBOARDING ----------
+// Validation des champs obligatoires propres à un type de vendeur (hors
+// Particulier) — sortie de registerAccount() pour pouvoir être appelée
+// PLUS TÔT, avant même d'afficher la politique d'utilisation. Sans ça,
+// on découvrait un champ manquant seulement après avoir lu tout le
+// document et cliqué "J'accepte", obligeant à repartir en arrière.
+function validateVendorDetailsFields(d) {
+  if (d.role === "vendeur" && d.sellerType !== "particulier" && d.sellerType !== "international") {
+    if (!d.commune) {
+      showToast(t("toast_commune_required_seller_type"));
+      return false;
+    }
+    if (!d.quartier) {
+      showToast(t("toast_neighborhood_required_seller_type"));
+      return false;
+    }
+    if (d.shopLat == null || d.shopLng == null) {
+      showToast("❌ Position GPS obligatoire — appuyez sur \"Localiser mon activité\" avant de créer le compte.");
+      return false;
+    }
+  }
+  if (d.role === "vendeur" && d.sellerType === "international") {
+    if (!d.shopAddress || !d.shopAddress.trim()) {
+      showToast(t("toast_shop_address_required"));
+      return false;
+    }
+    var agentsAtRegister2 = state.accounts.filter(function(a) { return a.isSourcingAgent; });
+    if (agentsAtRegister2.length > 0 && !d.sourcingAgentId) {
+      showToast(t("toast_choose_agent_required"));
+      return false;
+    }
+  }
+  return true;
+}
+
 function registerAccount() {
   console.log("=== DEBUT registerAccount ===");
   
@@ -13497,39 +13535,11 @@ function registerAccount() {
     }
   }
 
-  // 4ter. Vendeur autre que Particulier : adresse, GPS obligatoires (le
-  // téléphone pro reprend automatiquement celui déjà donné à l'étape 1)
-  // — sauf le vendeur international, qui n'a pas de présence physique au
-  // Mali et n'a donc pas de commune/quartier/position à donner ici.
-  if (d.role === "vendeur" && d.sellerType !== "particulier" && d.sellerType !== "international") {
-    if (!d.commune) {
-      showToast(t("toast_commune_required_seller_type"));
-      return;
-    }
-    if (!d.quartier) {
-      showToast(t("toast_neighborhood_required_seller_type"));
-      return;
-    }
-    if (d.shopLat == null || d.shopLng == null) {
-      showToast("❌ Position GPS obligatoire — appuyez sur \"Localiser mon activité\" avant de créer le compte.");
-      return;
-    }
-  }
-  // 4quater. Vendeur international : l'adresse écrite à la main est
-  // toujours obligatoire (l'agent en a besoin pour le trouver), et le
-  // choix de l'agent sourcing l'est dès qu'au moins un agent existe —
-  // deux exigences indépendantes l'une de l'autre.
-  if (d.role === "vendeur" && d.sellerType === "international") {
-    if (!d.shopAddress || !d.shopAddress.trim()) {
-      showToast(t("toast_shop_address_required"));
-      return;
-    }
-    var agentsAtRegister = state.accounts.filter(function(a) { return a.isSourcingAgent; });
-    if (agentsAtRegister.length > 0 && !d.sourcingAgentId) {
-      showToast(t("toast_choose_agent_required"));
-      return;
-    }
-  }
+  // 4ter/4quater. Vendeur autre que Particulier : mêmes règles que celles
+  // déjà vérifiées plus tôt, avant la politique d'utilisation (voir
+  // "complete-onboarding") — revérifiées ici aussi par sécurité, au cas
+  // où ce point serait atteint par un autre chemin.
+  if (!validateVendorDetailsFields(d)) return;
   
   // 5. Numéro complet
   var fullPhone = countryCode + phoneDigits;
@@ -15738,6 +15748,28 @@ function trackSellerRefusal(sellerId) {
 }
 
 
+// Regroupe ce qui est commun entre un refus explicite du client au retrait
+// (voir refuseRelaisProduct juste en dessous) et un colis jamais venu
+// chercher après le délai automatique (voir checkStalePickupOrders) :
+// dans les deux cas, retour au vendeur, aucune commission pour personne.
+function markOrderReturnedUnclaimed(order, disputeReason, disputeNote, sellerMessage) {
+  logOrderStatusChange(order, "Refusée au retrait");
+  order.returnStatus = "en_attente_retour";
+  order.refusedAt = Date.now();
+  order.commissionAmount = 0; // aucune commission, ni boutique ni Sounsouni
+  save();
+  saveDoc("orders", order);
+  createDispute(order.id, disputeReason, disputeNote, true);
+  var notifiedSellers = {};
+  for (var si = 0; si < order.items.length; si++) {
+    var sid = order.items[si].sellerId;
+    if (sid && !notifiedSellers[sid]) {
+      notifiedSellers[sid] = true;
+      addNotification("whatsapp", sellerMessage, sid, "seller-orders");
+    }
+  }
+}
+
 function refuseRelaisProduct(orderId) {
   var order = null;
   for (var i = 0; i < state.orders.length; i++) {
@@ -15750,27 +15782,78 @@ function refuseRelaisProduct(orderId) {
   }
   if (!confirm("Confirmer le refus du produit par le client ? Le colis repartira avec le prochain passage du livreur, sans commission.")) return false;
 
-  logOrderStatusChange(order, "Refusée au retrait");
-  order.returnStatus = "en_attente_retour";
-  order.refusedAt = Date.now();
-  order.commissionAmount = 0; // aucune commission, ni boutique ni GEMS
-  save();
-  saveDoc("orders", order);
-
-  createDispute(orderId, "produit_refuse", "Produit refusé par le client au point de retrait lors de la vérification.", true);
-
-  var notifiedSellers = {};
-  for (var si = 0; si < order.items.length; si++) {
-    var sid = order.items[si].sellerId;
-    if (sid && !notifiedSellers[sid]) {
-      notifiedSellers[sid] = true;
-      addNotification("whatsapp", "⚠️ Commande #" + orderId.slice(-5).toUpperCase() + " refusée par le client au point de retrait — retour prévu chez vous.", sid, "seller-orders");
-    }
-  }
+  markOrderReturnedUnclaimed(order, "produit_refuse", "Produit refusé par le client au point de retrait lors de la vérification.",
+    "⚠️ Commande #" + orderId.slice(-5).toUpperCase() + " refusée par le client au point de retrait — retour prévu chez vous.");
   render();
   showToast(t("toast_product_refused_return"));
   return true;
 }
+
+// Un jour complet = 24h, pour calculer depuis combien de temps un colis
+// attend au point de retrait.
+const PICKUP_DAY_MS = 24 * 60 * 60 * 1000;
+
+// Vérifie TOUS les colis "En boutique" de TOUTE l'app (pas seulement ceux
+// de la personne qui a ouvert l'app) et envoie les rappels ou déclenche le
+// retour automatique selon le calendrier convenu :
+// Jour 1 et 2 : rappel ("venez avant le [date = jour 4]").
+// Jour 3 : rappel plus insistant.
+// Jour 4 : dernier rappel, très insistant.
+// Jour 5 : plus personne n'attend — retour automatique chez le vendeur,
+// et on note ce refus sur le compte de l'acheteur pour repérer les
+// comportements répétés (voir "unclaimedParcelCount").
+// Se déclenche à CHAQUE ouverture de l'app, par N'IMPORTE QUEL compte —
+// c'est justement ce qui le rend fiable : avec beaucoup d'utilisateurs,
+// il y a presque toujours quelqu'un en train d'ouvrir l'app à un moment
+// donné, donc cette vérification tourne très régulièrement sans jamais
+// dépendre d'une seule personne précise.
+function checkStalePickupOrders() {
+  if (!state.orders || !state.orders.length) return;
+  var now = Date.now();
+  var anyChange = false;
+  state.orders.forEach(function(order) {
+    if (order.status !== "En boutique" || !order.depotConfirmedAt) return;
+    var elapsedDays = Math.floor((now - order.depotConfirmedAt) / PICKUP_DAY_MS);
+    var orderCode = "#" + order.id.slice(-5).toUpperCase();
+    var shopName = order.relaisShopName || "votre point de retrait";
+
+    if (elapsedDays >= 4) {
+      // Jour 5 : personne n'est venu dans les 4 jours accordés.
+      markOrderReturnedUnclaimed(order, "colis_non_retire",
+        "Colis non récupéré par le client dans les 4 jours suivant son arrivée au point de retrait — retour automatique.",
+        "⚠️ Commande " + orderCode + " n'a pas été récupérée par le client dans les délais — retour prévu chez vous.");
+      var buyerAcc = null;
+      for (var bi = 0; bi < state.accounts.length; bi++) { if (state.accounts[bi].id === order.buyerId) { buyerAcc = state.accounts[bi]; break; } }
+      if (buyerAcc) {
+        // Une fois, ça peut arriver à tout le monde — mais un compteur
+        // permet à l'administration de repérer un comportement répété.
+        buyerAcc.unclaimedParcelCount = (buyerAcc.unclaimedParcelCount || 0) + 1;
+        saveDoc("accounts", buyerAcc);
+      }
+      anyChange = true;
+      return;
+    }
+
+    var targetStage = elapsedDays + 1; // Jour 1 -> palier 1, Jour 2 -> palier 2, etc.
+    if (targetStage <= (order.pickupReminderStage || 0)) return; // déjà envoyé pour ce jour-là
+    var deadlineLabel = new Date(order.depotConfirmedAt + 4 * PICKUP_DAY_MS).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+    var message;
+    if (targetStage <= 2) {
+      message = "📦 Votre colis " + orderCode + " vous attend chez " + shopName + ". Venez le chercher avant le " + deadlineLabel + ".";
+    } else if (targetStage === 3) {
+      message = "⚠️ Attention : votre colis " + orderCode + " vous attend toujours chez " + shopName + ". Il ne vous reste que jusqu'au " + deadlineLabel + " pour venir le chercher.";
+    } else {
+      message = "🚨 DERNIER JOUR ! Allez chercher votre colis " + orderCode + " AUJOURD'HUI chez " + shopName + ". Si vous ne venez pas, il repart chez le vendeur et vous ne pourrez plus l'avoir.";
+    }
+    addNotification("whatsapp", message, order.buyerId, "orders");
+    order.pickupReminderStage = targetStage;
+    saveDoc("orders", order);
+    anyChange = true;
+  });
+  if (anyChange) save();
+}
+
+
 
 // Le livreur confirme avoir récupéré le produit refusé pour le ramener au vendeur.
 function confirmProductReturn(orderId) {
@@ -19215,6 +19298,9 @@ function buildHTML() {
     else if (state.view === "externalParcels") mainHtml += renderExternalParcelsScreen();
     else if (state.view === "relaisEditInfo") mainHtml += renderRelaisEditInfo();
     else if (state.view === "shopCustomize") mainHtml += renderShopCustomize();
+    else if (state.view === "relaisPolicy") mainHtml += renderRelaisPolicy();
+    else if (state.view === "relaisPolicyView") mainHtml += renderRelaisPolicyStandalone();
+    else if (state.view === "sellerPolicyView") mainHtml += renderSellerPolicyStandalone();
     else if (state.view === "becomeRelais") mainHtml += renderBecomeRelais();
     else if (state.view === "admin") mainHtml += renderAdmin();
     state._lastMainHTML = mainHtml;
@@ -19671,6 +19757,11 @@ function renderOnboardStepVendorType(d) {
   // International" reste pertinent pour un numéro hors Afrique.
   if (!isAfricanCountryCode(d.countryCode)) {
     types = types.filter(function(vt) { return vt[0] === "international"; });
+  } else {
+    // Inverse : un compte africain (Mali, Sénégal, etc.) n'a aucune
+    // raison de voir "Vendeur International" — ce parcours (agent de
+    // sourcing, MOQ, groupage) ne concerne que les comptes hors Afrique.
+    types = types.filter(function(vt) { return vt[0] !== "international"; });
   }
   for (var vi = 0; vi < types.length; vi++) {
     var vt = types[vi];
@@ -19879,6 +19970,190 @@ function renderVendorContactFields(d) {
 // Même fiche que celle de l'inscription, mais accessible depuis le menu de
 // rôle pour un compte déjà créé — avec le champ email proposé ici s'il
 // manquait encore (il est optionnel à l'inscription Acheteur).
+// Document de politique d'utilisation, affiché AVANT le formulaire de
+// candidature — la boutique doit explicitement accepter pour pouvoir
+// continuer (voir "accept-relais-policy"). Texte uniquement en français :
+// ce rôle ne concerne que des boutiques locales au Mali, jamais un
+// compte international.
+// Le bouton "J'accepte" d'un document de politique reste visuellement
+// atténué tant qu'on n'a pas fait défiler jusqu'en bas — pas un vrai
+// "disabled" HTML (qui bloquerait le clic sans jamais rien expliquer),
+// juste une apparence pour inviter à lire ; le clic lui-même reste actif
+// et vérifie la même chose au moment où on appuie (voir les handlers
+// "accept-relais-policy" / "accept-commission-consent").
+function onPolicyScroll(el, btnId) {
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 20) {
+    var b = document.getElementById(btnId);
+    if (b) b.style.opacity = '1';
+  }
+}
+
+function isPolicyBoxScrolledToBottom(boxId) {
+  var el = document.getElementById(boxId);
+  if (!el) return true; // par sécurité, ne jamais bloquer si l'élément est introuvable
+  return el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
+}
+
+// Contenu du document, extrait pour être réutilisé à 3 endroits : ici
+// (avant candidature), un écran "relire" depuis le tableau de bord, et le
+// fichier téléchargeable — jamais dupliqué à plusieurs endroits.
+// Génère un vrai fichier PDF téléchargeable à partir du contenu HTML
+// d'une politique (voir relaisPolicyBodyHtml / sellerPolicyBodyHtml) —
+// converti en texte brut avant l'écriture, puisque jsPDF n'écrit que du
+// texte simple, pas du HTML. Une fois sur le téléphone, la personne peut
+// l'imprimer ou le partager comme n'importe quel autre PDF — ça ne
+// dépend plus de l'application à partir de ce moment-là.
+function downloadPolicyAsPdf(title, bodyHtml, filename) {
+  if (typeof window.jspdf === "undefined") {
+    showToast("❌ Le générateur de PDF n'a pas encore fini de charger — réessayez dans quelques secondes.");
+    return;
+  }
+  var tempDiv = document.createElement("div");
+  tempDiv.innerHTML = bodyHtml;
+  var plainText = tempDiv.innerText || tempDiv.textContent || "";
+
+  var jsPDF = window.jspdf.jsPDF;
+  var doc = new jsPDF({ unit: "pt", format: "a4" });
+  var margin = 42;
+  var pageWidth = doc.internal.pageSize.getWidth();
+  var pageHeight = doc.internal.pageSize.getHeight();
+  var maxWidth = pageWidth - margin * 2;
+  var y = margin;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  var titleLines = doc.splitTextToSize(title, maxWidth);
+  doc.text(titleLines, margin, y);
+  y += titleLines.length * 20 + 14;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10.5);
+  var paragraphs = plainText.split("\n").map(function(p) { return p.trim(); }).filter(function(p) { return p.length > 0; });
+  paragraphs.forEach(function(p) {
+    var lines = doc.splitTextToSize(p, maxWidth);
+    lines.forEach(function(line) {
+      if (y > pageHeight - margin) { doc.addPage(); y = margin; }
+      doc.text(line, margin, y);
+      y += 14;
+    });
+    y += 7; // petit espace entre paragraphes
+  });
+
+  doc.setFontSize(8.5);
+  doc.setTextColor(140, 140, 140);
+  var footerLine = "Document généré depuis l'application Sounsouni — le contenu peut évoluer, téléchargez une version à jour à tout moment.";
+  var footerLines = doc.splitTextToSize(footerLine, maxWidth);
+  if (y + footerLines.length * 12 > pageHeight - margin) { doc.addPage(); y = margin; }
+  doc.text(footerLines, margin, y + 10);
+
+  doc.save(filename);
+  showToast("✅ Document téléchargé.");
+}
+
+function relaisPolicyBodyHtml() {
+  var html = '';
+  html += '<p style="margin-bottom:12px;">Ce document explique ce qu\'une boutique doit savoir avant de devenir <strong>Point de Retrait</strong> pour Sounsouni. En envoyant votre demande, vous montrez que vous avez lu et accepté tout ce qui est écrit ici.</p>';
+
+  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">1. Votre rôle, en clair</p>';
+  html += '<p style="margin-bottom:6px;">Un Point de Retrait, c\'est l\'endroit où les clients viennent récupérer leurs colis. Voici ce que vous devez faire :</p>';
+  html += '<ul style="margin:0 0 12px 18px;padding:0;">';
+  html += '<li style="margin-bottom:4px;"><strong>Recevoir les colis</strong> apportés par les livreurs, et confirmer chaque réception avec le code donné dans l\'application.</li>';
+  html += '<li style="margin-bottom:4px;"><strong>Garder les colis en bon état</strong>, en sécurité, jusqu\'à ce que le client vienne les chercher.</li>';
+  html += '<li style="margin-bottom:4px;"><strong>Vérifier le client avant de lui donner son colis</strong> : il doit vous montrer son code de retrait. Sans ce code, vous ne remettez jamais le colis.</li>';
+  html += '<li style="margin-bottom:4px;"><strong>Faire pareil pour les colis internationaux</strong> (ceux qui viennent de l\'étranger, via nos partenaires de sourcing) : même règle, un code à chaque étape.</li>';
+  html += '<li>Prévenir tout de suite si un colis arrive abîmé, s\'il y a un gros retard, ou si quelque chose vous semble louche.</li>';
+  html += '</ul>';
+
+  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">2. L\'argent — comment ça marche</p>';
+  html += '<p style="margin-bottom:6px;">Quand un client paie en espèces à la livraison, chez vous, dans votre boutique, <strong>vous encaissez la totalité</strong> (le prix de la marchandise + le prix de la livraison).</p>';
+  html += '<p style="margin-bottom:6px;"><strong>Chaque soir, en fin de journée</strong>, vous devez envoyer <strong>tout l\'argent encaissé ce jour-là</strong> vers le numéro Wave ou Orange Money de Sounsouni (un numéro officiel de l\'application, pas le vôtre). C\'est obligatoire et quotidien, car cet argent appartient à Sounsouni — c\'est avec lui que les vendeurs sont payés.</p>';
+  html += '<p style="margin-bottom:6px;"><strong>De son côté, Sounsouni vous reverse ensuite votre part : les 20% du prix de la livraison qui vous reviennent</strong>, selon le rythme que vous choisissez vous-même : chaque semaine, ou chaque mois.</p>';
+  html += '<p style="margin-bottom:6px;">Vous pouvez voir à tout moment, dans votre espace, combien Sounsouni vous doit et ce qui a déjà été versé.</p>';
+  html += '<p>Si Sounsouni doit un jour changer ce taux de 20%, ça ne se fera jamais du jour au lendemain : vous serez prévenu <strong>à l\'avance</strong>, et <strong>votre accord sera demandé</strong> avant que le changement s\'applique à vous.</p>';
+
+  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">3. Si le client ne vient jamais chercher son colis</p>';
+  html += '<p style="margin-bottom:6px;">Voici ce qui se passe, jour par jour, une fois qu\'un colis arrive chez vous :</p>';
+  html += '<ul style="margin:0 0 10px 18px;padding:0;">';
+  html += '<li style="margin-bottom:4px;"><strong>Jour 1 et Jour 2</strong> : l\'application envoie automatiquement un message au client pour lui dire de venir chercher son colis.</li>';
+  html += '<li style="margin-bottom:4px;"><strong>Jour 3</strong> : un deuxième message, plus insistant.</li>';
+  html += '<li style="margin-bottom:4px;"><strong>Jour 4</strong> : dernier message, très insistant — c\'est le dernier jour.</li>';
+  html += '<li><strong>Jour 5</strong> : si le client n\'est toujours pas venu, le colis repart automatiquement vers le vendeur.</li>';
+  html += '</ul>';
+  html += '<p style="margin-bottom:6px;">Vous n\'avez rien à faire pendant ces 4 jours — l\'application envoie les messages toute seule.</p>';
+  html += '<p><strong>Important : si le colis n\'est jamais récupéré, cette vente n\'a tout simplement pas eu lieu.</strong> Ni vous, ni Sounsouni ne touchez d\'argent sur cette livraison précise — pas de commission pour personne, puisqu\'il n\'y a rien eu à livrer réellement.</p>';
+
+  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">4. Ce que vous pouvez voir sur le client</p>';
+  html += '<ul style="margin:0 0 12px 18px;padding:0;">';
+  html += '<li style="margin-bottom:4px;">Son nom : toujours visible.</li>';
+  html += '<li style="margin-bottom:4px;">Son numéro de téléphone : visible jusqu\'à 24h après qu\'il ait récupéré son colis, puis il disparaît tout seul.</li>';
+  html += '<li><strong>Vous ne voyez jamais</strong> le numéro ni l\'adresse du vendeur. Ça doit rester ainsi.</li>';
+  html += '</ul>';
+
+  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">5. Pour devenir Point de Retrait, il faut fournir — tout se fait à travers l\'application</p>';
+  html += '<ul style="margin:0 0 12px 18px;padding:0;">';
+  html += '<li style="margin-bottom:4px;">Le nom de votre boutique et son emplacement exact (commune, quartier, un repère facile à trouver, et votre position GPS).</li>';
+  html += '<li style="margin-bottom:4px;">Une photo de vous (comme un selfie), pour qu\'on sache à qui on a affaire.</li>';
+  html += '<li><strong>Une pièce d\'identité valide : carte d\'identité, carte biométrique, ou passeport.</strong></li>';
+  html += '</ul>';
+  html += '<p style="margin-bottom:6px;">Tout ça se remplit et s\'envoie <strong>directement depuis l\'application</strong>, sans avoir besoin de vous déplacer ou d\'envoyer quoi que ce soit par un autre moyen.</p>';
+  html += '<p><strong>Pourquoi on vous demande ça :</strong> cette photo et cette pièce d\'identité servent uniquement à vérifier que vous êtes bien la personne responsable de la boutique, et à préparer le contrat papier dont on parle au point suivant. Elles ne sont utilisées à rien d\'autre.</p>';
+
+  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">6. Après l\'envoi de votre demande</p>';
+  html += '<ol style="margin:0 0 12px 18px;padding:0;">';
+  html += '<li style="margin-bottom:4px;">L\'administration Sounsouni examine votre demande.</li>';
+  html += '<li style="margin-bottom:4px;">Si elle est acceptée, <strong>un agent de Sounsouni se déplace directement dans votre boutique</strong>, avec un contrat papier.</li>';
+  html += '<li style="margin-bottom:4px;">Vous lisez ce contrat tranquillement. Si vous êtes d\'accord, vous le signez.</li>';
+  html += '<li>Ce contrat signé est ce qui rend l\'accord officiel entre vous et Sounsouni — c\'est une étape normale et importante, pas juste une formalité dans l\'application.</li>';
+  html += '</ol>';
+
+  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">7. Ce que vous devez respecter</p>';
+  html += '<ul style="margin:0 0 12px 18px;padding:0;">';
+  html += '<li style="margin-bottom:4px;">Un colis vous est confié : vous en êtes responsable jusqu\'à ce qu\'il soit remis à la bonne personne.</li>';
+  html += '<li style="margin-bottom:4px;">Si un colis est perdu, cassé, ou donné à la mauvaise personne par votre faute, vous pouvez avoir à en payer les conséquences.</li>';
+  html += '<li>Ne jamais faire une fausse confirmation (dire qu\'un colis est reçu ou remis alors que ce n\'est pas vrai).</li>';
+  html += '</ul>';
+
+  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">8. Dans quels cas Sounsouni peut arrêter le partenariat</p>';
+  html += '<ul style="margin:0 0 4px 18px;padding:0;">';
+  html += '<li style="margin-bottom:4px;">Fausse déclaration ou tricherie,</li>';
+  html += '<li style="margin-bottom:4px;">Non-respect répété des règles ci-dessus,</li>';
+  html += '<li style="margin-bottom:4px;">Retard important et répété dans le versement journalier sur le compte Orange Money / Wave de Sounsouni,</li>';
+  html += '<li>Une plainte sérieuse et confirmée d\'un client ou d\'un vendeur.</li>';
+  html += '</ul>';
+  return html;
+}
+
+function renderRelaisPolicy() {
+  var html = '<button class="link-btn" style="margin-bottom:14px" data-action="close-become-relais"><i class="fa-solid fa-arrow-left"></i> ' + t("relais_apply_back") + '</button>';
+  html += '<div class="section-title" style="margin-bottom:14px;">📋 Politique d\'utilisation — Point de Retrait</div>';
+  html += '<div class="glass-card" id="relaisPolicyBox" style="padding:16px;font-size:13px;line-height:1.6;max-height:55vh;overflow-y:auto;" onscroll="onPolicyScroll(this,\'relaisAcceptBtn\')">';
+  html += relaisPolicyBodyHtml();
+  html += '</div>'; // fin glass-card scrollable
+
+  html += '<p style="font-size:12px;color:var(--text-primary);background:rgba(255,255,255,0.94);border-radius:10px;padding:10px 12px;margin:14px 0;">En appuyant sur "J\'accepte", vous confirmez avoir compris ce document, et votre demande partira vers l\'administration Sounsouni pour être examinée.</p>';
+
+  html += '<div style="font-size:11px;color:var(--text-primary);font-weight:700;text-align:center;background:rgba(255,255,255,0.94);border-radius:10px;padding:6px;margin-bottom:6px;"><i class="fa-solid fa-arrow-down"></i> Faites défiler le document jusqu\'en bas</div>';
+  html += '<button class="btn-primary" id="relaisAcceptBtn" style="width:100%;margin-bottom:10px;opacity:0.55;" data-action="accept-relais-policy"><i class="fa-solid fa-check"></i> J\'accepte</button>';
+  html += '<button class="btn-secondary" style="width:100%;" data-action="close-become-relais">Je n\'accepte pas</button>';
+
+  return html;
+}
+
+// Écran de lecture seule, accessible depuis le tableau de bord Point de
+// Retrait à tout moment — même contenu que ci-dessus, sans les boutons
+// d'acceptation (déjà acceptée une fois, inutile de la refaire).
+function renderRelaisPolicyStandalone() {
+  var html = '<button class="link-btn" style="margin-bottom:14px" data-action="close-relais-policy-view"><i class="fa-solid fa-arrow-left"></i> ' + t("relais_apply_back") + '</button>';
+  html += '<div class="section-title" style="margin-bottom:14px;">📋 Politique d\'utilisation — Point de Retrait</div>';
+  html += '<div class="glass-card" style="padding:16px;font-size:13px;line-height:1.6;">';
+  html += relaisPolicyBodyHtml();
+  html += '</div>';
+  html += '<button class="btn-secondary" style="width:100%;margin-top:14px;" data-action="download-relais-policy"><i class="fa-solid fa-file-pdf"></i> Télécharger ce document (PDF)</button>';
+  return html;
+}
+
+
+
 function renderBecomeRelais() {
   var d = state.relaisApplyDraft;
   var gpsOk = d.shopLat != null && d.shopLng != null;
@@ -19939,26 +20214,88 @@ function renderRelaisApplyDocsFields(docs) {
 }
 
 // ---------- ÉTAPE FINALE (Vendeur) : ACCORD SUR LA COMMISSION ----------
-function renderOnboardStepCommissionConsent(d) {
+// Contenu extrait, réutilisé pour l'écran "relire" et le téléchargement.
+function sellerPolicyBodyHtml() {
   var cfg = getCommissionConfig();
   var totalPct = (cfg.totalCommissionRate * 100).toFixed(0);
   var keepPct = (100 - cfg.totalCommissionRate * 100).toFixed(0);
+  var html = '';
+  html += '<p style="margin-bottom:12px;">Ce document explique ce qu\'un vendeur doit savoir avant de publier des articles sur Sounsouni. En créant votre compte vendeur, vous montrez que vous avez lu et accepté tout ce qui est écrit ici.</p>';
+
+  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">1. C\'est gratuit</p>';
+  html += '<p style="margin-bottom:12px;">S\'inscrire comme vendeur et publier vos articles ne coûte rien, quel que soit le nombre d\'articles. Sounsouni ne gagne de l\'argent que lorsque vous vendez réellement quelque chose.</p>';
+
+  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">2. La commission — comment ça marche</p>';
+  html += '<p style="margin-bottom:6px;">Sounsouni prend <strong>' + totalPct + '% sur chaque vente</strong>. Exemple simple : vous vendez un article à 10 000 FCFA, Sounsouni garde ' + Math.round(cfg.totalCommissionRate * 10000) + ' FCFA, et <strong>vous recevez ' + Math.round((1 - cfg.totalCommissionRate) * 10000) + ' FCFA</strong> (' + keepPct + '%).</p>';
+  html += '<p>Si Sounsouni doit un jour changer ce taux, vous serez prévenu <strong>à l\'avance</strong>, et <strong>votre accord sera demandé</strong> avant que le changement s\'applique à vous.</p>';
+
+  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">3. Votre rôle quand une commande arrive</p>';
+  html += '<ul style="margin:0 0 12px 18px;padding:0;">';
+  html += '<li style="margin-bottom:4px;">Dès qu\'un client commande et que le paiement est confirmé, vous devez <strong>préparer l\'article</strong> et confirmer dans l\'application que c\'est prêt à partir.</li>';
+  html += '<li style="margin-bottom:4px;">Si vous ne pouvez vraiment pas honorer une commande, signalez-le tout de suite dans l\'application, avec la raison.</li>';
+  html += '<li style="margin-bottom:4px;">Un code (OTP) sert à vérifier que l\'article est bien remis à la bonne personne.</li>';
+  html += '<li><strong>Le client a le droit de refuser l\'article</strong> à la livraison, s\'il constate que ça ne lui convient pas en le voyant. Dans ce cas, l\'article vous est retourné.</li>';
+  html += '</ul>';
+
+  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">4. Comment et quand vous recevez votre argent</p>';
+  html += '<p style="margin-bottom:6px;">Il y a deux étapes séparées. La deuxième ne commence que si la première s\'est bien terminée — et ça se passe différemment selon le mode de livraison choisi par le client.</p>';
+  html += '<p style="margin-bottom:4px;"><strong>Étape 1 : le client doit recevoir son colis et payer</strong></p>';
+  html += '<ul style="margin:0 0 10px 18px;padding:0;">';
+  html += '<li style="margin-bottom:4px;"><strong>Livraison Express</strong> (directement chez le client) : dès que le livreur remet le colis et que le client paie, c\'est terminé — pas d\'attente.</li>';
+  html += '<li><strong>Point de Retrait</strong> : le client a <strong>4 jours</strong> pour venir chercher son colis et payer. Jour 1 et 2 : rappel automatique envoyé au client. Jour 3 : rappel plus insistant. Jour 4 : dernier rappel, très insistant. Jour 5 : si personne n\'est venu, le colis <strong>repart automatiquement vers vous</strong> — et il n\'y a alors <strong>aucun paiement</strong>, puisque la vente n\'a jamais eu lieu. Vous n\'avez rien à faire pendant ces 4 jours, l\'application gère ça toute seule.</li>';
+  html += '</ul>';
+  html += '<p style="margin-bottom:6px;"><strong>Étape 2 : dès que le client a payé, votre argent est en route</strong></p>';
+  html += '<p style="margin-bottom:6px;">C\'est seulement à partir de ce moment précis — tout de suite (Express) ou après quelques jours (Point de Retrait) — que le compte à rebours de VOTRE paiement démarre. <strong>Vous choisissez vous-même</strong> le rythme : tous les 2 jours (le plus rapide possible), chaque semaine, ou chaque mois.</p>';
+  html += '<p>Pourquoi 2 jours et pas instantané ? Simplement parce que Sounsouni peut recevoir beaucoup de commandes en même temps, et a besoin d\'un peu de temps pour traiter et envoyer correctement tous les paiements. Vous pouvez suivre à tout moment, dans votre espace "Gains", ce qui vous a déjà été versé et ce qui est encore en attente.</p>';
+
+  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">5. Ce que vous devez respecter pour vos articles</p>';
+  html += '<ul style="margin:0 0 12px 18px;padding:0;">';
+  html += '<li style="margin-bottom:4px;"><strong>Les photos doivent être réelles</strong> — jamais une photo trouvée ailleurs ou empruntée à un autre vendeur.</li>';
+  html += '<li style="margin-bottom:4px;"><strong>La description et le prix doivent être exacts.</strong></li>';
+  html += '<li><strong>Le stock affiché doit être à jour.</strong></li>';
+  html += '</ul>';
+
+  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">6. Articles interdits</p>';
+  html += '<ul style="margin:0 0 12px 18px;padding:0;">';
+  html += '<li style="margin-bottom:4px;">Des contrefaçons ou copies non autorisées d\'une marque,</li>';
+  html += '<li style="margin-bottom:4px;">Des produits illégaux, dangereux, ou réglementés,</li>';
+  html += '<li>Tout article que vous ne pouvez pas réellement fournir.</li>';
+  html += '</ul>';
+
+  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">7. Dans quels cas Sounsouni peut suspendre votre compte vendeur</p>';
+  html += '<ul style="margin:0 0 4px 18px;padding:0;">';
+  html += '<li style="margin-bottom:4px;">Publication répétée d\'articles avec photos ou descriptions trompeuses,</li>';
+  html += '<li style="margin-bottom:4px;">Annulations répétées de commandes déjà confirmées,</li>';
+  html += '<li style="margin-bottom:4px;">Vente d\'un article interdit,</li>';
+  html += '<li>Une plainte sérieuse et confirmée d\'un acheteur.</li>';
+  html += '</ul>';
+  return html;
+}
+
+function renderOnboardStepCommissionConsent(d) {
   var backStep = d.commissionConsentReturnStep || "vendorType";
   var html = '<button class="link-btn" style="margin-bottom:14px" data-action="onboard-back-step" data-value="' + backStep + '"><i class="fa-solid fa-arrow-left"></i> Retour</button>';
-  html += '<div class="section-title" style="margin-bottom:6px;"><i class="fa-solid fa-hand-holding-dollar"></i> Avant de créer votre compte vendeur</div>';
-  html += '<div class="glass-card" style="padding:12px 14px;margin-bottom:12px;background:rgba(255,255,255,0.92);">';
-  html += '<div style="font-size:13px;line-height:1.6;color:var(--text-secondary);">';
-  html += 'L\'inscription et la publication d\'articles sont <strong>entièrement gratuites</strong> sur Sounsouni. Nous ne gagnons que si vous vendez.';
-  html += '</div></div>';
-  html += '<div class="glass-card" style="padding:14px;margin-bottom:12px;background:rgba(255,255,255,0.92);">';
-  html += '<div style="font-weight:800;font-size:14px;margin-bottom:8px;">Une commission de ' + totalPct + '% est prélevée sur chaque vente, pour soutenir la plateforme.</div>';
-  html += '<div style="font-size:13px;color:var(--success);font-weight:700;">Il vous revient donc ' + keepPct + '% du prix de vente.</div>';
-  html += '</div>';
-  html += '<div class="glass-card" style="padding:10px 14px;margin-bottom:20px;background:rgba(255,255,255,0.92);">';
-  html += '<div style="font-size:12px;color:var(--text-dim);">En appuyant sur "J\'accepte", vous confirmez avoir compris et accepté cette règle pour votre compte vendeur.</div>';
-  html += '</div>';
-  html += '<button class="btn-primary" style="margin-bottom:10px;" data-action="accept-commission-consent"><i class="fa-solid fa-check"></i> J\'accepte — Créer mon compte</button>';
+  html += '<div class="section-title" style="margin-bottom:14px;">📋 Politique d\'utilisation — Vendeur</div>';
+  html += '<div class="glass-card" id="sellerPolicyBox" style="padding:16px;font-size:13px;line-height:1.6;max-height:55vh;overflow-y:auto;background:rgba(255,255,255,0.92);" onscroll="onPolicyScroll(this,\'sellerAcceptBtn\')">';
+  html += sellerPolicyBodyHtml();
+  html += '</div>'; // fin glass-card scrollable
+
+  html += '<p style="font-size:12px;color:var(--text-primary);background:rgba(255,255,255,0.94);border-radius:10px;padding:10px 12px;margin:14px 0;">En appuyant sur "J\'accepte", vous confirmez avoir compris ce document et vous engagez à le respecter.</p>';
+
+  html += '<div style="font-size:11px;color:var(--text-primary);font-weight:700;text-align:center;background:rgba(255,255,255,0.94);border-radius:10px;padding:6px;margin-bottom:6px;"><i class="fa-solid fa-arrow-down"></i> Faites défiler le document jusqu\'en bas</div>';
+  html += '<button class="btn-primary" id="sellerAcceptBtn" style="margin-bottom:10px;opacity:0.55;" data-action="accept-commission-consent"><i class="fa-solid fa-check"></i> J\'accepte — Créer mon compte</button>';
   html += '<button class="btn-secondary" data-action="decline-commission-consent">' + t("consent_i_refuse") + '</button>';
+  return html;
+}
+
+// Écran de lecture seule, accessible depuis la boutique à tout moment.
+function renderSellerPolicyStandalone() {
+  var html = '<button class="link-btn" style="margin-bottom:14px" data-action="close-seller-policy-view"><i class="fa-solid fa-arrow-left"></i> Retour</button>';
+  html += '<div class="section-title" style="margin-bottom:14px;">📋 Politique d\'utilisation — Vendeur</div>';
+  html += '<div class="glass-card" style="padding:16px;font-size:13px;line-height:1.6;">';
+  html += sellerPolicyBodyHtml();
+  html += '</div>';
+  html += '<button class="btn-secondary" style="width:100%;margin-top:14px;" data-action="download-seller-policy"><i class="fa-solid fa-file-pdf"></i> Télécharger ce document (PDF)</button>';
   return html;
 }
 
@@ -23977,6 +24314,9 @@ function renderSeller() {
   html += '<button class="btn-secondary" style="margin-bottom:14px;' + (shopBoosted ? 'border-color:#f6c343;color:#a67c00;' : '') + '" data-action="open-boost-modal" data-target-type="shop" data-value="' + state.profile.id + '">';
   html += '<i class="fa-solid fa-rocket"></i> ' + (shopBoosted ? t("seller_boost_shop_active") : t("seller_boost_shop"));
   html += '</button>';
+  if (state.profile.sellerType !== "international") {
+    html += '<button class="link-btn" style="width:100%;text-align:center;margin-bottom:10px;" data-action="view-seller-policy"><i class="fa-solid fa-file-lines"></i> Relire la politique d\'utilisation</button>';
+  }
   html += '<div class="tab-row" style="flex-wrap:wrap;overflow-x:visible;">';
   html += '<button class="tab-btn ' + (state.sellerTab === "products" ? 'active' : '') + '" data-action="set-seller-tab" data-value="products"><i class="fa-solid fa-boxes-stacked"></i> ' + (isService ? t("seller_tab_services") : t("seller_tab_products")) + '</button>';
   html += '<button class="tab-btn ' + (state.sellerTab === "publish" ? 'active' : '') + '" data-action="set-seller-tab" data-value="publish"><i class="fa-solid fa-plus"></i> ' + t("seller_tab_publish") + '</button>';
@@ -25117,6 +25457,7 @@ function renderPointVente() {
   html += '<button class="link-btn" data-action="edit-relais-info"><i class="fa-solid fa-pen"></i> ' + t("pv_edit_info") + '</button>';
   html += '</div>';
   html += '<button class="btn-secondary" style="width:100%;margin:10px 0;" data-action="open-external-parcels"><i class="fa-solid fa-box-open"></i> ' + t("pv_external_parcels") + (state.externalParcels.filter(function(p){return p.relaisShopId===shopId && p.status!=="Retiré" && p.status!=="Retour à l\'expéditeur";}).length > 0 ? ' (' + state.externalParcels.filter(function(p){return p.relaisShopId===shopId && p.status!=="Retiré" && p.status!=="Retour à l\'expéditeur";}).length + ')' : '') + '</button>';
+  html += '<button class="link-btn" style="width:100%;text-align:center;margin-bottom:10px;" data-action="view-relais-policy"><i class="fa-solid fa-file-lines"></i> Relire la politique d\'utilisation</button>';
   html += '<div class="stats-row">';
   html += '<div class="stat-card"><div class="stat-value">' + (enRoute.length + enBoutique.length) + '</div><div class="stat-label">' + t("pv_parcels_ongoing") + '</div></div>';
   html += '<div class="stat-card"><div class="stat-value">' + money(totalEncaisse) + '</div><div class="stat-label">' + t("pv_total_collected") + '</div></div>';
@@ -27532,6 +27873,10 @@ function renderAdminAccountDetail(accountId) {
   html += '<div><span style="color:var(--text-dim);">Email</span><br><strong>' + esc(a.email || '—') + '</strong></div>';
   html += '<div><span style="color:var(--text-dim);">Compte créé le</span><br><strong>' + fmtDateTime(a.createdAt) + '</strong></div>';
   html += '<div><span style="color:var(--text-dim);">Dernière connexion</span><br><strong>' + fmtDateTime(a.loginHistory && a.loginHistory.length ? a.loginHistory[a.loginHistory.length - 1] : null) + '</strong></div>';
+  if ((a.unclaimedParcelCount || 0) > 0) {
+    var uc = a.unclaimedParcelCount;
+    html += '<div style="grid-column:1/-1;margin-top:2px;padding:8px 10px;border-radius:10px;font-size:12px;font-weight:700;background:' + (uc >= 2 ? 'rgba(255,85,102,0.12);color:var(--danger)' : 'rgba(255,193,7,0.12);color:#a15c00') + ';"><i class="fa-solid fa-triangle-exclamation"></i> ' + uc + ' colis jamais récupéré' + (uc > 1 ? 's' : '') + ' au point de retrait' + (uc >= 2 ? ' — comportement répété, à surveiller' : '') + '</div>';
+  }
   if (a.role === "vendeur") {
     var typeInfo = SELLER_TYPES[a.sellerType] || SELLER_TYPES.particulier;
     var repDetail = computeSellerReputation(a.id);
@@ -30781,6 +31126,10 @@ root.addEventListener("click", function(e) {
     }
     case "complete-onboarding": {
       var d0b = state.onboardDraft;
+      // Valider les champs obligatoires D'ABORD — sinon on lisait toute
+      // la politique d'utilisation pour se faire dire, seulement après
+      // avoir accepté, qu'il manque un champ resté vide plus haut.
+      if (!validateVendorDetailsFields(d0b)) break;
       // La commission automatique par vente ne s'applique pas à un vendeur
       // "international" — son côté financier est géré manuellement avec
       // son agent de sourcing (voir les échanges sur ce partenariat), pas
@@ -30798,6 +31147,12 @@ root.addEventListener("click", function(e) {
       break;
     }
     case "accept-commission-consent": {
+      if (!isPolicyBoxScrolledToBottom("sellerPolicyBox")) {
+        var sellerBox = document.getElementById("sellerPolicyBox");
+        if (sellerBox) sellerBox.scrollTo({ top: sellerBox.scrollHeight, behavior: "smooth" });
+        showToast("📖 Merci de lire le document jusqu'en bas avant de continuer.");
+        break;
+      }
       state.onboardDraft.commissionConsent = true;
       // Reprend directement la création du compte, sans repasser par
       // l'écran précédent — l'accord vient d'être donné à l'instant.
@@ -30805,7 +31160,23 @@ root.addEventListener("click", function(e) {
       break;
     }
     case "decline-commission-consent": {
-      showToast(t("toast_must_accept_commission"));
+      var d0c = state.onboardDraft;
+      if (d0c.isSecondAccountFlow) {
+        // Compte déjà existant (arrivé ici via "Changer de rôle") : on
+        // annule simplement, rien n'est créé, retour au marché avec le
+        // compte déjà en place, inchangé.
+        state.view = "market";
+        state.onboardDraft = null;
+        render();
+      } else {
+        // Toute nouvelle inscription : on ne perd pas ce qui a déjà été
+        // saisi (nom, téléphone, email) — le compte se crée quand même,
+        // simplement comme Acheteur plutôt que Vendeur, et atterrit sur
+        // le marché normalement.
+        d0c.role = "acheteur";
+        d0c.commissionConsent = false;
+        registerAccount();
+      }
       break;
     }
     case "login-account": {
@@ -30858,9 +31229,23 @@ root.addEventListener("click", function(e) {
     }
     case "apply-livreur": applyToBecomeLivreur(); break;
     case "open-become-relais": {
+      // Le document de politique s'affiche D'ABORD, avant même le
+      // formulaire — la personne doit explicitement accepter avant de
+      // pouvoir candidater (voir "accept-relais-policy" plus bas).
+      state.view = "relaisPolicy";
+      state.showRoleMenu = false;
+      render();
+      break;
+    }
+    case "accept-relais-policy": {
+      if (!isPolicyBoxScrolledToBottom("relaisPolicyBox")) {
+        var relaisBox = document.getElementById("relaisPolicyBox");
+        if (relaisBox) relaisBox.scrollTo({ top: relaisBox.scrollHeight, behavior: "smooth" });
+        showToast("📖 Merci de lire le document jusqu'en bas avant de continuer.");
+        break;
+      }
       state.relaisApplyDraft = { email: state.profile.email || "", shopName: "", commune: "", quartier: "", addressDetail: "", shopLat: null, shopLng: null, selfiePhotoUri: null, verificationDocs: [], useAutreQuartier: false, autreQuartierNom: "", autreQuartierLat: null, autreQuartierLng: null };
       state.view = "becomeRelais";
-      state.showRoleMenu = false;
       render();
       break;
     }
@@ -31387,6 +31772,18 @@ root.addEventListener("click", function(e) {
         var el = document.querySelector('[data-guide-item="' + value + '"]');
         if (el) el.scrollIntoView({ block: "center" });
       }, 0);
+      break;
+    }
+    case "view-relais-policy": state.view = "relaisPolicyView"; render(); break;
+    case "close-relais-policy-view": state.view = "pointvente"; render(); break;
+    case "view-seller-policy": state.view = "sellerPolicyView"; render(); break;
+    case "close-seller-policy-view": state.view = "seller"; render(); break;
+    case "download-relais-policy": {
+      downloadPolicyAsPdf("Politique d'utilisation — Point de Retrait", relaisPolicyBodyHtml(), "Politique-Point-de-Retrait-Sounsouni.pdf");
+      break;
+    }
+    case "download-seller-policy": {
+      downloadPolicyAsPdf("Politique d'utilisation — Vendeur", sellerPolicyBodyHtml(), "Politique-Vendeur-Sounsouni.pdf");
       break;
     }
     case "download-user-guide": {
@@ -35230,6 +35627,7 @@ function trySplashFinish() {
     }
     refreshExchangeRatesIfStale();
     seedDefaultInternationalCities();
+    checkStalePickupOrders();
     checkPaymentReturn();
     render();
   }
