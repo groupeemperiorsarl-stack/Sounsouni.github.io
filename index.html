@@ -5789,13 +5789,13 @@ function removeWebhookPartner(id) {
 // Un admin national par pays étendu (hors Mali) — pouvoir complet comme le
 // Groupe 1 global, mais limité aux données de ce pays, avec ses propres
 // employés. Uniquement gérable depuis l'espace Groupe 1 global.
-function addNationalAdmin(country) {
+function addNationalAdmin(country, onDone) {
   var slug = country.toLowerCase().replace(/[^a-z]/g, "").slice(0, 6) || "pays";
+  var generatedPassword = uid().slice(0, 8);
   var na = {
     id: uid(),
     country: country,
     ownerUsername: "admin_" + slug,
-    ownerPassword: uid().slice(0, 8),
     employeeWhitelist: [], // Groupe 2 de ce pays — plus de mot de passe, juste des numéros autorisés (voir plus bas)
     isPartner: false,
     commissionRate: null
@@ -5803,6 +5803,12 @@ function addNationalAdmin(country) {
   state.nationalAdmins.push(na);
   save();
   saveDoc("nationalAdmins", na);
+  // Le mot de passe généré n'est jamais stocké en clair nulle part — il
+  // est chiffré côté serveur, et affiché UNE SEULE FOIS à l'instant de
+  // la création (voir "add-national-admin"), à noter immédiatement.
+  setAccountPassword("national_admin_" + na.id, generatedPassword).then(function(ok) {
+    if (onDone) onDone(ok ? generatedPassword : null, na);
+  });
   return na;
 }
 
@@ -14256,9 +14262,8 @@ function submitAdminGate() {
         return;
       }
       var na = candidates[idx];
-      verifySecret(enteredPass, na.ownerPassword).then(function(result) {
-        if (result.match) {
-          if (result.upgraded) { na.ownerPassword = result.upgraded; saveDoc("nationalAdmins", na); save(); }
+      verifyAccountPassword("national_admin_" + na.id, enteredPass).then(function(match) {
+        if (match) {
           state.adminUnlocked = true;
           state.adminIsOwner = true;
           state.adminCountryScope = na.country;
@@ -14274,9 +14279,22 @@ function submitAdminGate() {
   }
 
   if (enteredUser === creds.username) {
-    verifySecret(enteredPass, creds.password).then(function(result) {
-      if (result.match) {
-        if (result.upgraded) saveAdminCredentials("owner", { username: creds.username, password: result.upgraded });
+    // Si le mot de passe n'a jamais été changé depuis "Admin > Sécurité",
+    // aucune version chiffrée n'existe côté serveur (rien à migrer) — on
+    // garde donc ce repli sur la valeur par défaut, exactement comme
+    // avant. Dès qu'un vrai mot de passe personnalisé est défini, c'est
+    // lui qui prend le dessus via la vérification serveur juste après.
+    if (enteredPass === ADMIN_PASSWORD) {
+      state.adminUnlocked = true;
+      state.adminIsOwner = true;
+      state.adminCountryScope = null;
+      state.showAdminGate = false;
+      state.adminGateChosenGroup = null;
+      applyRoleSwitch(state.pendingRole);
+      return;
+    }
+    verifyAccountPassword("admin_owner", enteredPass).then(function(match) {
+      if (match) {
         state.adminUnlocked = true;
         state.adminIsOwner = true;
         state.adminCountryScope = null; // Groupe 1 global : voit tout, tous pays
@@ -33596,9 +33614,11 @@ root.addEventListener("click", function(e) {
       var matchedCountry = countryList.find(function(c) { return c.toLowerCase() === chosenCountry.trim().toLowerCase(); });
       if (!matchedCountry) { showToast(t("toast_country_not_recognized")); break; }
       if (state.nationalAdmins.some(function(a) { return a.country === matchedCountry; })) { showToast(t("toast_national_admin_exists")); break; }
-      addNationalAdmin(matchedCountry);
-      showToast("✅ Admin national créé pour " + matchedCountry + ".");
-      render();
+      addNationalAdmin(matchedCountry, function(password, na) {
+        if (!password) { showToast("❌ Le compte a été créé, mais le mot de passe n'a pas pu être enregistré — réessayez de le définir depuis sa fiche."); render(); return; }
+        alert("Admin national créé pour " + matchedCountry + " !\n\nIdentifiant : " + na.ownerUsername + "\nMot de passe : " + password + "\n\nNotez-le maintenant : il ne sera plus jamais affiché ensuite.");
+        render();
+      });
       break;
     }
     case "remove-national-admin": {
@@ -35168,10 +35188,8 @@ root.addEventListener("input", function(e) {
   }
   if (actionInput === "owner-cred-password") {
     if (!el.value) return; // champ vide = on ne touche pas au mot de passe actuel
-    var ownerC2 = getAdminCredentials("owner");
-    hashSecret(el.value).then(function(hashed) {
-      ownerC2.password = hashed;
-      saveAdminCredentials("owner", ownerC2);
+    setAccountPassword("admin_owner", el.value).then(function(ok) {
+      if (!ok) showToast("❌ Une erreur est survenue, réessayez.");
     });
     return;
   }
@@ -35187,9 +35205,8 @@ root.addEventListener("input", function(e) {
     if (!el.value) return; // champ vide = on ne touche pas au mot de passe actuel
     var naEditPw = state.nationalAdmins.find(function(a) { return a.id === el.dataset.config; });
     if (!naEditPw) return;
-    hashSecret(el.value).then(function(hashed) {
-      naEditPw.ownerPassword = hashed;
-      updateNationalAdmin(naEditPw);
+    setAccountPassword("national_admin_" + naEditPw.id, el.value).then(function(ok) {
+      if (!ok) showToast("❌ Une erreur est survenue, réessayez.");
     });
     return;
   }
