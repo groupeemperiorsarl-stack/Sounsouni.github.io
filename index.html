@@ -14017,11 +14017,10 @@ function attemptFindAccount() {
     showToast(t("toast_no_account_name_number"));
     return;
   }
-  if (candidate.password) {
+  if (candidate.hasPassword) {
     if (!d.password) { showToast(t("toast_account_has_password_enter")); return; }
-    verifySecret(d.password, candidate.password).then(function(result) {
-      if (!result.match) { showToast(t("toast_incorrect_password")); return; }
-      if (result.upgraded) { candidate.password = result.upgraded; saveDoc("accounts", candidate); save(); }
+    verifyAccountPassword(candidate.id, d.password).then(function(match) {
+      if (!match) { showToast(t("toast_incorrect_password")); return; }
       state.showFindAccountModal = false;
       loginAccount(candidate.id);
       showToast(t("dt_welcome_back") + candidate.name + t("dt_exclaim"));
@@ -21148,7 +21147,7 @@ function renderEarningsModal() {
 }
 
 function renderDeleteAccountConfirmModal() {
-  var hasPw = state.profile && !!state.profile.password;
+  var hasPw = state.profile && !!state.profile.hasPassword;
   var html = '<div class="modal-overlay" id="delete-account-overlay" data-action="close-delete-account">';
   html += '<div class="modal-sheet">';
   html += '<button class="modal-close" data-action="close-delete-account"><i class="fa-solid fa-xmark"></i></button>';
@@ -21655,6 +21654,47 @@ function b64ToBuf(b64) {
   for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return bytes;
 }
+// Appelle une fonction serveur sécurisée (Edge Function) plutôt que de
+// vérifier/chiffrer un mot de passe directement sur le téléphone — voir
+// la migration de sécurité : ni le mot de passe de la personne, ni celui
+// de qui que ce soit d'autre, ne doit plus jamais transiter en clair ni
+// être comparé localement.
+function verifyAccountPassword(accountId, password) {
+  return fetch(supabaseConfig.url + "/functions/v1/verify-login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+    body: JSON.stringify({ accountId: accountId, password: password })
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(res) { return !!res.success; })
+    .catch(function() { return false; }); // panne réseau = refusé, jamais accepté par défaut
+}
+
+function verifyAccountRecoveryCode(accountId, recoveryCode) {
+  return fetch(supabaseConfig.url + "/functions/v1/verify-login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+    body: JSON.stringify({ accountId: accountId, recoveryCode: recoveryCode })
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(res) { return !!res.success; })
+    .catch(function() { return false; });
+}
+
+function setAccountPassword(accountId, newPassword, newRecoveryCode) {
+  var payload = { accountId: accountId };
+  if (newPassword) payload.newPassword = newPassword;
+  if (newRecoveryCode) payload.newRecoveryCode = newRecoveryCode;
+  return fetch(supabaseConfig.url + "/functions/v1/set-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+    body: JSON.stringify(payload)
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(res) { return !!res.success; })
+    .catch(function() { return false; });
+}
+
 function hashSecret(plainText) {
   var iterations = 100000;
   var salt = crypto.getRandomValues(new Uint8Array(16));
@@ -21858,7 +21898,7 @@ function runSensitiveAction(kind, data) {
 // c'est le parcours d'achat (requirePasswordSetup) qui se charge de le
 // créer, pas cette fenêtre-ci.
 function requireSensitiveConfirm(label, kind, data) {
-  if (!state.profile || !state.profile.password) {
+  if (!state.profile || !state.profile.hasPassword) {
     // Avant : l'action passait directement, sans jamais proposer de créer
     // un mot de passe — un envoi d'argent, un bon cadeau ou une clôture de
     // cagnotte pouvaient donc s'exécuter sur un compte qui n'a aucune
@@ -21880,7 +21920,7 @@ function requireSensitiveConfirm(label, kind, data) {
 // (email + date de naissance + mot de passe) ; ensuite, elle ne
 // réapparaît plus jamais pour ça.
 function requirePasswordSetup(kind, data) {
-  if (state.profile && state.profile.password) {
+  if (state.profile && state.profile.hasPassword) {
     runGatedPurchaseAction(kind, data);
     return;
   }
@@ -27932,8 +27972,8 @@ function renderAdminAccountDetail(accountId) {
   html += '<div style="font-weight:800;font-size:13.5px;margin-bottom:8px;"><i class="fa-solid fa-shield-halved"></i> Sécurité (réservé à l\'administration)</div>';
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12.5px;margin-bottom:12px;">';
   html += '<div><span style="color:var(--text-dim);">Date de naissance</span><br><strong>' + (a.birthDate ? esc(a.birthDate) : '— (pas encore définie)') + '</strong></div>';
-  html += '<div><span style="color:var(--text-dim);">Mot de passe</span><br><strong>' + (a.password ? '🔒 Défini (protégé, jamais affiché)' : '— (pas encore défini)') + '</strong></div>';
-  html += '<div style="grid-column:1/3;"><span style="color:var(--text-dim);">Code secret de récupération</span><br><strong>' + (a.recoveryCode ? '🔒 Défini (protégé, jamais affiché)' : '— (pas encore généré)') + '</strong></div>';
+  html += '<div><span style="color:var(--text-dim);">Mot de passe</span><br><strong>' + (a.hasPassword ? '🔒 Défini (protégé, jamais affiché)' : '— (pas encore défini)') + '</strong></div>';
+  html += '<div style="grid-column:1/3;"><span style="color:var(--text-dim);">Code secret de récupération</span><br><strong>' + (a.hasRecoveryCode ? '🔒 Défini (protégé, jamais affiché)' : '— (pas encore généré)') + '</strong></div>';
   html += '</div>';
   html += '<label class="field-label" style="margin-top:0;">Définir un nouveau mot de passe pour ce compte</label>';
   html += '<div style="display:flex;gap:8px;">';
@@ -31181,7 +31221,7 @@ root.addEventListener("click", function(e) {
     }
     case "login-account": {
       var targetAcc = state.accounts.find(function(a) { return a.id === value; });
-      if (targetAcc && targetAcc.password) {
+      if (targetAcc && targetAcc.hasPassword) {
         state.unlockAccountId = value;
         state.unlockAccountDraft = { name: "", password: "" };
         state.showUnlockAccount = true;
@@ -31509,10 +31549,10 @@ root.addEventListener("click", function(e) {
     }
     case "submit-delete-account": {
       if (!state.profile) break;
-      if (state.profile.password) {
+      if (state.profile.hasPassword) {
         if (!state.deleteAccountPasswordInput) { showToast(t("toast_enter_your_password")); break; }
-        verifySecret(state.deleteAccountPasswordInput, state.profile.password).then(function(result) {
-          if (!result.match) { showToast(t("toast_incorrect_password")); return; }
+        verifyAccountPassword(state.profile.id, state.deleteAccountPasswordInput).then(function(match) {
+          if (!match) { showToast(t("toast_incorrect_password")); return; }
           var idToDelete = state.profile.id;
           deleteAccountCompletely(idToDelete);
           state.showDeleteAccountConfirm = false;
@@ -31870,9 +31910,8 @@ root.addEventListener("click", function(e) {
       var sEnteredPw = sPwEl ? sPwEl.value : "";
       if (!sEnteredPw) { showToast(t("toast_enter_your_password")); break; }
       if (!state.profile) { showToast(t("toast_incorrect_password")); break; }
-      verifySecret(sEnteredPw, state.profile.password).then(function(result) {
-        if (!result.match) { showToast(t("toast_incorrect_password")); return; }
-        if (result.upgraded) { state.profile.password = result.upgraded; persistProfileToAccounts(); }
+      verifyAccountPassword(state.profile.id, sEnteredPw).then(function(match) {
+        if (!match) { showToast(t("toast_incorrect_password")); return; }
         var sKind = state.pendingSensitiveKind;
         var sData = state.pendingSensitiveData;
         runSensitiveAction(sKind, sData);
@@ -31901,11 +31940,12 @@ root.addEventListener("click", function(e) {
       if (!pd.password || pd.password.length < 4) { showToast(t("toast_password_min_4_chars")); break; }
       if (pd.password !== pd.password2) { showToast(t("toast_passwords_dont_match")); break; }
       var newRecoveryCodePlain = generateRecoveryCode();
-      Promise.all([hashSecret(pd.password), hashSecret(newRecoveryCodePlain)]).then(function(hashed) {
+      setAccountPassword(state.profile.id, pd.password, newRecoveryCodePlain).then(function(ok) {
+        if (!ok) { showToast("❌ Une erreur est survenue, réessayez."); return; }
         if (needsEmailNow) state.profile.email = pd.email.trim();
         state.profile.birthDate = pd.birthDate;
-        state.profile.password = hashed[0];
-        state.profile.recoveryCode = hashed[1];
+        state.profile.hasPassword = true;
+        state.profile.hasRecoveryCode = true;
         persistProfileToAccounts();
         addNotification("whatsapp", "🔐 Voici votre code secret de récupération, à conserver précieusement : " + newRecoveryCodePlain + ". Il vous permettra de récupérer votre compte en cas d'oubli.", state.profile.id, null);
         state.showCreatePasswordGate = false;
@@ -31959,9 +31999,8 @@ root.addEventListener("click", function(e) {
         showToast(t("toast_name_or_password_incorrect"));
         break;
       }
-      verifySecret(ud.password, uAcc.password).then(function(result) {
-        if (!result.match) { showToast(t("toast_name_or_password_incorrect")); return; }
-        if (result.upgraded) { uAcc.password = result.upgraded; saveDoc("accounts", uAcc); save(); }
+      verifyAccountPassword(uAcc.id, ud.password).then(function(match) {
+        if (!match) { showToast(t("toast_name_or_password_incorrect")); return; }
         var unlockedId = state.unlockAccountId;
         state.showUnlockAccount = false;
         state.unlockAccountId = null;
@@ -32001,12 +32040,11 @@ root.addEventListener("click", function(e) {
         showToast("❌ Aucune correspondance trouvée. Vérifiez chaque champ, ou utilisez \"J'ai perdu le code\".");
         break;
       }
-      verifySecret(fd.recoveryCode.trim().toUpperCase(), fMatch.recoveryCode).then(function(result) {
-        if (!result.match) {
+      verifyAccountRecoveryCode(fMatch.id, fd.recoveryCode.trim().toUpperCase()).then(function(match) {
+        if (!match) {
           showToast("❌ Aucune correspondance trouvée. Vérifiez chaque champ, ou utilisez \"J'ai perdu le code\".");
           return;
         }
-        if (result.upgraded) { fMatch.recoveryCode = result.upgraded; saveDoc("accounts", fMatch); save(); }
         state.showForgotPassword = false;
         state.forgotPasswordDraft = null;
         state.forgotPasswordResetAccountId = fMatch.id;
@@ -32026,11 +32064,11 @@ root.addEventListener("click", function(e) {
       if (!rd.password || rd.password.length < 4) { showToast(t("toast_password_min_4_chars")); break; }
       if (rd.password !== rd.password2) { showToast(t("toast_passwords_dont_match")); break; }
       var resetAccId = state.forgotPasswordResetAccountId;
-      hashSecret(rd.password).then(function(hashed) {
+      setAccountPassword(resetAccId, rd.password).then(function(ok) {
+        if (!ok) { showToast("❌ Une erreur est survenue, réessayez."); return; }
         for (var rai = 0; rai < state.accounts.length; rai++) {
           if (state.accounts[rai].id === resetAccId) {
-            state.accounts[rai].password = hashed;
-            saveDoc("accounts", state.accounts[rai]);
+            state.accounts[rai].hasPassword = true;
             break;
           }
         }
@@ -32080,11 +32118,11 @@ root.addEventListener("click", function(e) {
       var newPw = newPwEl ? newPwEl.value : "";
       if (!newPw || newPw.length < 4) { showToast(t("toast_password_min_4_chars")); break; }
       var targetAccId = value;
-      hashSecret(newPw).then(function(hashed) {
+      setAccountPassword(targetAccId, newPw).then(function(ok) {
+        if (!ok) { showToast("❌ Une erreur est survenue, réessayez."); return; }
         for (var apwi = 0; apwi < state.accounts.length; apwi++) {
           if (state.accounts[apwi].id === targetAccId) {
-            state.accounts[apwi].password = hashed;
-            saveDoc("accounts", state.accounts[apwi]);
+            state.accounts[apwi].hasPassword = true;
             break;
           }
         }
@@ -32725,12 +32763,12 @@ root.addEventListener("click", function(e) {
     case "toggle-show-all-executed": state.showAllExecuted = !state.showAllExecuted; render(); break;
     case "toggle-show-all-seller-orders": state.showAllSellerOrders = !state.showAllSellerOrders; render(); break;
     case "add-cart": {
-      if (state.profile && state.profile.password) flyToCart(btn);
+      if (state.profile && state.profile.hasPassword) flyToCart(btn);
       requirePasswordSetup("addCart", { productId: value, qty: state.selectedQty, color: state.selectedColor, size: state.selectedSize });
       break;
     }
     case "quick-add-cart": {
-      if (state.profile && state.profile.password) flyToCart(btn);
+      if (state.profile && state.profile.hasPassword) flyToCart(btn);
       requirePasswordSetup("addCart", { productId: value, qty: 1, color: null, size: null });
       break;
     }
