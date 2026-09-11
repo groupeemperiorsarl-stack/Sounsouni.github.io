@@ -21745,7 +21745,21 @@ function fetchVerificationDocument(docKey) {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
       body: JSON.stringify({ adminUsername: adminUsername, adminPassword: pwd, docKey: docKey })
-    }).then(function(r) { return r.json(); });
+    })
+      .then(function(r) { return r.json().then(function(j) { return { httpStatus: r.status, body: j }; }); })
+      .then(function(wrapped) {
+        if (!wrapped.body || wrapped.body.success !== true) {
+          console.error("get-verification-docs a échoué :", wrapped.httpStatus, wrapped.body);
+        }
+        return wrapped.body || { success: false, error: "empty_response" };
+      })
+      .catch(function(networkErr) {
+        // Sans ce filet, une vraie panne réseau restait invisible — le
+        // message "Vérification..." semblait alors bloqué pour toujours,
+        // sans jamais dire ce qui avait réellement échoué.
+        console.error("Erreur réseau vers get-verification-docs :", networkErr);
+        return { success: false, error: "network_error: " + (networkErr && networkErr.message ? networkErr.message : String(networkErr)) };
+      });
   }
   var cached = _adminSessionPasswordCache;
   var firstTry = cached ? tryFetch(cached) : Promise.resolve({ success: false, error: "unauthorized" });
@@ -33614,7 +33628,10 @@ root.addEventListener("click", function(e) {
       showToast("🔒 Vérification de votre accès Admin...");
       fetchVerificationDocument("relais_app_" + value).then(function(res) {
         if (!res.success) {
-          showToast(res.error === "cancelled" ? "Annulé." : "❌ Accès refusé — mot de passe Admin incorrect.");
+          if (res.error === "cancelled") { showToast("Annulé."); return; }
+          if (res.error === "unauthorized") { showToast("❌ Mot de passe Admin incorrect."); return; }
+          if (res.error === "not_found") { showToast("❌ Aucune photo trouvée pour cette candidature (peut-être pas encore migrée)."); return; }
+          showToast("❌ Erreur : " + (res.error || "inconnue") + " — vérifie que les 2 fonctions serveur sont bien déployées.");
           return;
         }
         var imgs = [];
