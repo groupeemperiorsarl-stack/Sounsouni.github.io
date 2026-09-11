@@ -6348,7 +6348,13 @@ function submitBecomeRelais() {
   // La vraie photo (selfie + pièce d'identité) ne transite jamais par
   // app_data — elle part directement vers la table protégée, jamais
   // visible que par un Admin qui confirme son mot de passe pour la voir.
-  submitVerificationDocuments("relais_app_" + application.id, d.selfiePhotoUri, d.verificationDocs);
+  submitVerificationDocuments("relais_app_" + application.id, d.selfiePhotoUri, d.verificationDocs).then(function(ok) {
+    if (!ok) {
+      application.hasVerificationDocs = false;
+      saveDoc("relaisApplications", application);
+      console.error("Échec de l'envoi sécurisé de la photo pour la candidature", application.id);
+    }
+  });
   state.view = "market";
   state.relaisApplyDraft = null;
   showToast(t("toast_request_sent_will_notify"));
@@ -13685,7 +13691,13 @@ function registerAccount() {
     saveDoc("relaisApplications", application);
     // La vraie photo ne transite jamais par app_data — voir
     // submitVerificationDocuments et get-verification-docs.
-    submitVerificationDocuments("relais_app_" + application.id, d.selfiePhotoUri, d.verificationDocs);
+    submitVerificationDocuments("relais_app_" + application.id, d.selfiePhotoUri, d.verificationDocs).then(function(ok) {
+      if (!ok) {
+        application.hasVerificationDocs = false;
+        saveDoc("relaisApplications", application);
+        console.error("Échec de l'envoi sécurisé de la photo pour la candidature", application.id);
+      }
+    });
 
     // Si le quartier saisi n'existe pas dans la liste, une demande séparée
     // part aussi pour que l'admin l'ajoute officiellement à la base.
