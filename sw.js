@@ -7,7 +7,10 @@
 // produits, comptes...) — ces informations doivent toujours venir du
 // réseau en direct, jamais d'une copie locale périmée.
 
-const CACHE_NAME = "sounsouni-shell-v1";
+// Le nom change à chaque correctif important (v1 -> v2) : ça force les
+// téléphones qui avaient déjà l'ancienne version à tout nettoyer et
+// repartir sur une base saine, une bonne fois pour toutes.
+const CACHE_NAME = "sounsouni-shell-v2";
 const SHELL_FILES = [
   "./index.html",
   "./manifest.json",
@@ -20,7 +23,15 @@ const SHELL_FILES = [
 self.addEventListener("install", function (event) {
   event.waitUntil(
     caches.open(CACHE_NAME).then(function (cache) {
-      return cache.addAll(SHELL_FILES);
+      // { cache: "reload" } force chaque fichier à être vraiment
+      // retéléchargé depuis le serveur au moment de la mise en cache,
+      // au lieu d'accepter une copie déjà gardée par le navigateur lui
+      // -même — sans ça, on pouvait mettre en cache une version déjà
+      // périmée sans jamais s'en rendre compte.
+      var requests = SHELL_FILES.map(function (f) { return new Request(f, { cache: "reload" }); });
+      return Promise.all(requests.map(function (req) {
+        return fetch(req).then(function (res) { return cache.put(req, res); });
+      }));
     })
   );
   self.skipWaiting();
@@ -49,11 +60,13 @@ self.addEventListener("fetch", function (event) {
   if (event.request.method !== "GET") return;
 
   // Seule la page principale (navigation) profite d'un vrai secours
-  // hors-ligne. Réseau en priorité — la copie en cache n'est utilisée
-  // que si la connexion échoue complètement.
+  // hors-ligne. Réseau en priorité, ET surtout sans jamais accepter une
+  // copie déjà gardée par le navigateur (cache: "no-store") — c'est ce
+  // détail précis qui manquait, et qui pouvait faire réafficher une
+  // ancienne version de l'app même après un nouveau déploiement.
   if (event.request.mode === "navigate") {
     event.respondWith(
-      fetch(event.request).catch(function () {
+      fetch(event.request, { cache: "no-store" }).catch(function () {
         return caches.match("./index.html");
       })
     );
