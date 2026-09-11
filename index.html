@@ -16176,6 +16176,35 @@ function getWallet(phone) {
   return { id: wid, phone: phone, balance: 0, transactions: [] };
 }
 
+// À partir d'ici, "wallets" et "earningsLedgers" ne peuvent plus être
+// écrits directement (voir migration 04) — seule cette fonction, qui
+// passe par le serveur, peut encore le faire. Le comportement pour le
+// reste de l'app ne change pas : ni bloquant, ni différent en cas de
+// coupure réseau (même file d'attente hors-ligne que saveDoc).
+function secureWalletSaveDoc(collectionName, docData) {
+  if (!FIREBASE_ENABLED) return;
+  if (navigator.onLine === false) {
+    queuePendingSync(collectionName, docData);
+    return;
+  }
+  fetch(supabaseConfig.url + "/functions/v1/wallet-write", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+    body: JSON.stringify({ collection: collectionName, docId: docData.id, data: docData })
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (!res.success) {
+        console.error("Erreur wallet-write (" + collectionName + ") :", res.error);
+        queuePendingSync(collectionName, docData);
+      }
+    })
+    .catch(function(err) {
+      console.error("Erreur réseau wallet-write (" + collectionName + ") :", err);
+      queuePendingSync(collectionName, docData);
+    });
+}
+
 function saveWallet(wallet) {
   var idx = -1;
   for (var i = 0; i < state.wallets.length; i++) {
@@ -16183,7 +16212,7 @@ function saveWallet(wallet) {
   }
   if (idx === -1) state.wallets.push(wallet); else state.wallets[idx] = wallet;
   save();
-  saveDoc("wallets", wallet);
+  secureWalletSaveDoc("wallets", wallet);
 }
 
 // credit/débit — chaque mouvement garde une trace complète (montant, motif,
@@ -16234,7 +16263,7 @@ function saveEarnings(ledger) {
   }
   if (idx === -1) state.earningsLedgers.push(ledger); else state.earningsLedgers[idx] = ledger;
   save();
-  saveDoc("earningsLedgers", ledger);
+  secureWalletSaveDoc("earningsLedgers", ledger);
 }
 
 function creditEarnings(phone, amount, reason, meta) {
@@ -29335,20 +29364,34 @@ function renderProductModal() {
 
 // ---------- RENDER LIGHTBOX ----------
 function renderLightbox() {
-  var p = null;
-  for (var i = 0; i < state.products.length; i++) {
-    if (state.products[i].id === state.detailProductId) {
-      p = state.products[i];
-      break;
+  // Deux usages différents partagent cette même visionneuse : les photos
+  // d'un article en vente (state.detailProductId + p.images), et les
+  // photos génériques ouvertes ailleurs dans l'app comme les pièces
+  // d'identité (state.lightboxImages) — ce deuxième cas n'était jusqu'ici
+  // jamais lu ici, ce qui faisait échouer silencieusement tout ce qui
+  // l'utilisait.
+  var images = null;
+  var altLabel = "";
+  if (state.lightboxImages && state.lightboxImages.length > 0) {
+    images = state.lightboxImages;
+  } else {
+    var p = null;
+    for (var i = 0; i < state.products.length; i++) {
+      if (state.products[i].id === state.detailProductId) {
+        p = state.products[i];
+        break;
+      }
     }
+    if (!p || !p.images || p.images.length === 0) return '';
+    images = p.images;
+    altLabel = p.name;
   }
-  if (!p || !p.images || p.images.length === 0) return '';
-  var images = p.images;
   var idx = state.lightboxIndex;
   var html = '<div class="lightbox-overlay" data-action="close-lightbox">';
   html += '<div class="lightbox-content">';
   html += '<button class="lightbox-close" data-action="close-lightbox"><i class="fa-solid fa-xmark"></i></button>';
-  html += '<img loading="lazy" src="' + images[idx] + '" alt="' + esc(p.name) + '" />';
+  html += '<button class="lightbox-close" style="right:56px;padding:6px;min-width:28px;min-height:28px;" data-action="download-lightbox-image" data-value="' + esc(images[idx]) + '" title="Télécharger cette photo"><i class="fa-solid fa-download"></i></button>';
+  html += '<img loading="lazy" src="' + images[idx] + '" alt="' + esc(altLabel) + '" />';
   if (images.length > 1) {
     html += '<button class="lightbox-nav prev" data-action="lightbox-prev"><i class="fa-solid fa-chevron-left"></i></button>';
     html += '<button class="lightbox-nav next" data-action="lightbox-next"><i class="fa-solid fa-chevron-right"></i></button>';
@@ -34443,7 +34486,29 @@ root.addEventListener("click", function(e) {
       }
       break;
     }
-    case "close-lightbox": state.lightboxOpen = false; render(); break;
+    case "close-lightbox": state.lightboxOpen = false; state.lightboxImages = null; render(); break;
+    case "download-lightbox-image": {
+      showToast("⬇️ Téléchargement...");
+      fetch(value)
+        .then(function(r) { return r.blob(); })
+        .then(function(blob) {
+          var blobUrl = URL.createObjectURL(blob);
+          var ext = (blob.type && blob.type.indexOf("png") !== -1) ? "png" : "jpg";
+          var link = document.createElement("a");
+          link.href = blobUrl;
+          link.download = "photo-" + Date.now() + "." + ext;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(function() { URL.revokeObjectURL(blobUrl); }, 2000);
+          showToast("✅ Photo téléchargée.");
+        })
+        .catch(function(e) {
+          console.error("Échec du téléchargement de la photo :", e);
+          showToast("❌ Le téléchargement a échoué, réessayez.");
+        });
+      break;
+    }
     case "close-doc-password-modal": {
       state.showDocPasswordModal = false;
       state.pendingDocKeyForPassword = null;
