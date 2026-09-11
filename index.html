@@ -21814,7 +21814,7 @@ function renderDocPasswordModal() {
   if (state.docPasswordError) {
     html += '<div style="background:rgba(255,85,102,0.1);color:var(--danger);border-radius:8px;padding:8px 10px;font-size:12.5px;margin-bottom:10px;">' + esc(state.docPasswordError) + '</div>';
   }
-  html += '<input type="password" class="input" id="doc-password-input" placeholder="Mot de passe Admin" value="' + esc(state.docPasswordDraft || "") + '" style="margin-bottom:14px;" autofocus />';
+  html += '<input type="password" class="input" id="doc-password-input" placeholder="Mot de passe Admin" value="' + esc(state.docPasswordDraft || "") + '" style="margin-bottom:14px;" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();document.querySelector(\'[data-action=submit-doc-password]\').click();}" autofocus />';
   html += '<button class="btn-primary" style="width:100%;margin-bottom:8px;" data-action="submit-doc-password"><i class="fa-solid fa-check"></i> Confirmer</button>';
   html += '<button class="btn-secondary" style="width:100%;" data-action="close-doc-password-modal">Annuler</button>';
   html += '</div></div>';
