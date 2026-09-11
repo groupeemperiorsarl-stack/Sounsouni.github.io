@@ -7480,6 +7480,10 @@ function defaultState() {
     adminStats: { period: "semaine", dateFrom: "", dateTo: "", sellerFilter: "", productFilter: "" },
     seasonalEffects: { enabled: false, effect: "none" },
     lightboxOpen: false,
+    showDocPasswordModal: false,
+    pendingDocKeyForPassword: null,
+    docPasswordDraft: "",
+    docPasswordError: null,
     lightboxImages: [],
     lightboxIndex: 0,
     conversations: [],
@@ -18818,6 +18822,7 @@ var OVERLAY_REGISTRY = [
   { key: "livreurRefuse", isOpen: function () { return state.showLivreurRefuseModal; }, close: function () { state.showLivreurRefuseModal = false; state.livreurRefuseOrderId = null; } },
   { key: "adminViewingConv", isOpen: function () { return !!state.adminViewingConversationId; }, close: function () { state.adminViewingConversationId = null; } },
   { key: "findAccount", isOpen: function () { return state.showFindAccountModal; }, close: function () { state.showFindAccountModal = false; } },
+  { key: "docPassword", isOpen: function () { return state.showDocPasswordModal; }, close: function () { state.showDocPasswordModal = false; state.pendingDocKeyForPassword = null; } },
   { key: "leavePublishConfirm", isOpen: function () { return state.showLeavePublishConfirm; }, close: function () { state.showLeavePublishConfirm = false; } },
   { key: "vendorConsentGate", isOpen: function () { return state.showVendorConsentGate; }, close: function () { state.showVendorConsentGate = false; } },
   { key: "addressModal", isOpen: function () { return state.showAddressModal; }, close: function () { state.showAddressModal = false; state.addressDraft = null; } },
@@ -19398,6 +19403,7 @@ function buildHTML() {
   if (state.activeTour) html += renderTourOverlay();
   if (state.toastMsg) html += '<div class="toast">' + esc(state.toastMsg) + '</div>';
   if (state.lightboxOpen) html += renderLightbox();
+  if (state.showDocPasswordModal) html += renderDocPasswordModal();
   if (state.chatOpen) html += renderChatWidget();
   html += renderChatToggle();
   return html;
@@ -21734,45 +21740,75 @@ function submitVerificationDocuments(docKey, selfiePhoto, verificationDocs) {
 // chaque photo consultée. Il repart à zéro à chaque rechargement de l'app.
 var _adminSessionPasswordCache = null;
 
-function fetchVerificationDocument(docKey) {
+// tryFetch séparée de la partie "demander le mot de passe" — cette
+// dernière passe maintenant par un vrai écran de l'app (voir
+// renderDocPasswordModal / "submit-doc-password"), plus fiable que la
+// fenêtre native "prompt()", qui peut être bloquée ou se comporter
+// bizarrement sur une app installée sur l'écran d'accueil.
+function tryFetchVerificationDocument(docKey, pwd) {
   var adminUsername = getAdminCredentials("owner").username;
   if (state.adminCountryScope) {
     var na = state.nationalAdmins.find(function(a) { return a.country === state.adminCountryScope; });
     if (na) adminUsername = na.ownerUsername;
   }
-  function tryFetch(pwd) {
-    return fetch(supabaseConfig.url + "/functions/v1/get-verification-docs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
-      body: JSON.stringify({ adminUsername: adminUsername, adminPassword: pwd, docKey: docKey })
+  return fetch(supabaseConfig.url + "/functions/v1/get-verification-docs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+    body: JSON.stringify({ adminUsername: adminUsername, adminPassword: pwd, docKey: docKey })
+  })
+    .then(function(r) { return r.json().then(function(j) { return { httpStatus: r.status, body: j }; }); })
+    .then(function(wrapped) {
+      if (!wrapped.body || wrapped.body.success !== true) {
+        console.error("get-verification-docs a échoué :", wrapped.httpStatus, wrapped.body);
+      }
+      return wrapped.body || { success: false, error: "empty_response" };
     })
-      .then(function(r) { return r.json().then(function(j) { return { httpStatus: r.status, body: j }; }); })
-      .then(function(wrapped) {
-        if (!wrapped.body || wrapped.body.success !== true) {
-          console.error("get-verification-docs a échoué :", wrapped.httpStatus, wrapped.body);
-        }
-        return wrapped.body || { success: false, error: "empty_response" };
-      })
-      .catch(function(networkErr) {
-        // Sans ce filet, une vraie panne réseau restait invisible — le
-        // message "Vérification..." semblait alors bloqué pour toujours,
-        // sans jamais dire ce qui avait réellement échoué.
-        console.error("Erreur réseau vers get-verification-docs :", networkErr);
-        return { success: false, error: "network_error: " + (networkErr && networkErr.message ? networkErr.message : String(networkErr)) };
-      });
-  }
-  var cached = _adminSessionPasswordCache;
-  var firstTry = cached ? tryFetch(cached) : Promise.resolve({ success: false, error: "unauthorized" });
-  return firstTry.then(function(res) {
-    if (res.success) return res;
-    var entered = prompt("Confirmez votre mot de passe Admin pour voir ce document :");
-    if (!entered) return { success: false, error: "cancelled" };
-    return tryFetch(entered).then(function(res2) {
-      if (res2.success) _adminSessionPasswordCache = entered;
-      return res2;
+    .catch(function(networkErr) {
+      console.error("Erreur réseau vers get-verification-docs :", networkErr);
+      return { success: false, error: "network_error: " + (networkErr && networkErr.message ? networkErr.message : String(networkErr)) };
     });
-  });
 }
+
+// Point d'entrée : essaie d'abord avec le mot de passe déjà en mémoire
+// pour cette session (s'il y en a un) ; sinon, ouvre l'écran de saisie.
+function fetchVerificationDocument(docKey) {
+  if (_adminSessionPasswordCache) {
+    return tryFetchVerificationDocument(docKey, _adminSessionPasswordCache).then(function(res) {
+      if (res.success) return res;
+      // Le mot de passe en mémoire ne marche plus (changé entre-temps) —
+      // on le jette et on redemande via l'écran normal.
+      _adminSessionPasswordCache = null;
+      state.pendingDocKeyForPassword = docKey;
+      state.docPasswordDraft = "";
+      state.docPasswordError = null;
+      state.showDocPasswordModal = true;
+      render();
+      return { success: false, error: "needs_prompt" };
+    });
+  }
+  state.pendingDocKeyForPassword = docKey;
+  state.docPasswordDraft = "";
+  state.docPasswordError = null;
+  state.showDocPasswordModal = true;
+  render();
+  return Promise.resolve({ success: false, error: "needs_prompt" });
+}
+
+function renderDocPasswordModal() {
+  var html = '<div class="modal-overlay" data-action="close-doc-password-modal">';
+  html += '<div class="modal-sheet">';
+  html += '<div class="section-title" style="margin-bottom:10px;"><i class="fa-solid fa-lock"></i> Confirmez votre accès Admin</div>';
+  html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;">Pour voir cette photo, retapez votre mot de passe Admin.</div>';
+  if (state.docPasswordError) {
+    html += '<div style="background:rgba(255,85,102,0.1);color:var(--danger);border-radius:8px;padding:8px 10px;font-size:12.5px;margin-bottom:10px;">' + esc(state.docPasswordError) + '</div>';
+  }
+  html += '<input type="password" class="input" id="doc-password-input" placeholder="Mot de passe Admin" value="' + esc(state.docPasswordDraft || "") + '" style="margin-bottom:14px;" autofocus />';
+  html += '<button class="btn-primary" style="width:100%;margin-bottom:8px;" data-action="submit-doc-password"><i class="fa-solid fa-check"></i> Confirmer</button>';
+  html += '<button class="btn-secondary" style="width:100%;" data-action="close-doc-password-modal">Annuler</button>';
+  html += '</div></div>';
+  return html;
+}
+
 
 function hashSecret(plainText) {
   var iterations = 100000;
@@ -33625,23 +33661,20 @@ root.addEventListener("click", function(e) {
     }
     case "reject-relais-application": rejectRelaisApplication(value); break;
     case "view-relais-docs-secure": {
-      showToast("🔒 Vérification de votre accès Admin...");
       fetchVerificationDocument("relais_app_" + value).then(function(res) {
-        if (!res.success) {
-          if (res.error === "cancelled") { showToast("Annulé."); return; }
-          if (res.error === "unauthorized") { showToast("❌ Mot de passe Admin incorrect."); return; }
-          if (res.error === "not_found") { showToast("❌ Aucune photo trouvée pour cette candidature (peut-être pas encore migrée)."); return; }
-          showToast("❌ Erreur : " + (res.error || "inconnue") + " — vérifie que les 2 fonctions serveur sont bien déployées.");
-          return;
+        if (res.success) {
+          var imgs = [];
+          if (res.selfiePhoto) imgs.push(res.selfiePhoto);
+          if (res.verificationDocs) imgs = imgs.concat(res.verificationDocs);
+          if (imgs.length === 0) { showToast("Aucune photo trouvée pour cette candidature."); return; }
+          state.lightboxImages = imgs;
+          state.lightboxIndex = 0;
+          state.lightboxOpen = true;
+          render();
         }
-        var imgs = [];
-        if (res.selfiePhoto) imgs.push(res.selfiePhoto);
-        if (res.verificationDocs) imgs = imgs.concat(res.verificationDocs);
-        if (imgs.length === 0) { showToast("Aucune photo trouvée pour cette candidature."); return; }
-        state.lightboxImages = imgs;
-        state.lightboxIndex = 0;
-        state.lightboxOpen = true;
-        render();
+        // Si "needs_prompt" : la fenêtre de mot de passe s'est déjà
+        // ouverte toute seule (voir fetchVerificationDocument) — rien
+        // d'autre à faire ici.
       });
       break;
     }
@@ -34399,6 +34432,43 @@ root.addEventListener("click", function(e) {
       break;
     }
     case "close-lightbox": state.lightboxOpen = false; render(); break;
+    case "close-doc-password-modal": {
+      state.showDocPasswordModal = false;
+      state.pendingDocKeyForPassword = null;
+      state.docPasswordDraft = "";
+      state.docPasswordError = null;
+      render();
+      break;
+    }
+    case "submit-doc-password": {
+      var dpEl = document.getElementById("doc-password-input");
+      var dpVal = dpEl ? dpEl.value : "";
+      if (!dpVal) { state.docPasswordError = "Entrez votre mot de passe."; render(); break; }
+      var dpKey = state.pendingDocKeyForPassword;
+      showToast("🔒 Vérification...");
+      tryFetchVerificationDocument(dpKey, dpVal).then(function(res) {
+        if (!res.success) {
+          state.docPasswordError = res.error === "unauthorized"
+            ? "❌ Mot de passe incorrect."
+            : "❌ Erreur : " + (res.error || "inconnue");
+          render();
+          return;
+        }
+        _adminSessionPasswordCache = dpVal;
+        state.showDocPasswordModal = false;
+        state.pendingDocKeyForPassword = null;
+        state.docPasswordError = null;
+        var imgs = [];
+        if (res.selfiePhoto) imgs.push(res.selfiePhoto);
+        if (res.verificationDocs) imgs = imgs.concat(res.verificationDocs);
+        if (imgs.length === 0) { showToast("Aucune photo trouvée pour cette candidature."); render(); return; }
+        state.lightboxImages = imgs;
+        state.lightboxIndex = 0;
+        state.lightboxOpen = true;
+        render();
+      });
+      break;
+    }
     case "lightbox-prev": state.lightboxIndex = (state.lightboxIndex - 1 + state.lightboxImages.length) % state.lightboxImages.length; render(); break;
     case "lightbox-next": state.lightboxIndex = (state.lightboxIndex + 1) % state.lightboxImages.length; render(); break;
     case "toggle-seasonal": toggleSeasonalEffects(); break;
