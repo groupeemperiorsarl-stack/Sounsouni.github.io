@@ -34466,14 +34466,26 @@ root.addEventListener("click", function(e) {
           render();
           return;
         }
+        var imgs = [];
+        if (res.selfiePhoto) imgs.push(res.selfiePhoto);
+        if (res.verificationDocs) imgs = imgs.concat(res.verificationDocs);
+        if (imgs.length === 0) {
+          // Mot de passe correct, mais aucune photo trouvée pour cette
+          // candidature précise (le cas typique : une ancienne
+          // candidature de test dont l'envoi de la photo avait échoué
+          // avant qu'on corrige ce point). On garde la fenêtre ouverte
+          // avec un message clair, plutôt qu'un simple toast qui
+          // disparaît en quelques secondes et donne l'impression que
+          // rien ne s'est passé.
+          _adminSessionPasswordCache = dpVal;
+          state.docPasswordError = "⚠️ Mot de passe correct, mais aucune photo n'est enregistrée pour cette candidature précise (probablement une ancienne candidature de test).";
+          render();
+          return;
+        }
         _adminSessionPasswordCache = dpVal;
         state.showDocPasswordModal = false;
         state.pendingDocKeyForPassword = null;
         state.docPasswordError = null;
-        var imgs = [];
-        if (res.selfiePhoto) imgs.push(res.selfiePhoto);
-        if (res.verificationDocs) imgs = imgs.concat(res.verificationDocs);
-        if (imgs.length === 0) { showToast("Aucune photo trouvée pour cette candidature."); render(); return; }
         state.lightboxImages = imgs;
         state.lightboxIndex = 0;
         state.lightboxOpen = true;
