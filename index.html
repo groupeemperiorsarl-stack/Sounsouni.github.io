@@ -7737,6 +7737,17 @@ function mergeWithDefaults(saved) {
       merged[_showKey] = d[_showKey];
     }
   }
+  // Même chose pour la visionneuse de photo (lightbox) et la demande de
+  // mot de passe Admin pour les documents sensibles — leurs noms ne
+  // commencent pas par "show", donc elles échappaient au filet ci-dessus
+  // et pouvaient rester "ouvertes" au tout premier écran après un
+  // rechargement, avec exactement le même souci de retour en arrière.
+  merged.lightboxOpen = false;
+  merged.lightboxImages = [];
+  merged.showDocPasswordModal = false;
+  merged.pendingDocKeyForPassword = null;
+  merged.docPasswordDraft = "";
+  merged.docPasswordError = null;
   // Même chose pour le suivi des articles déjà montrés dans le carrousel
   // intercalé du marché — sans ce repli, cette liste ne faisait que
   // grandir, session après session, jusqu'à finir par couvrir tout le
@@ -7788,6 +7799,15 @@ function save() {
     // resurgit au prochain chargement si save() tombe juste avant qu'il
     // ne s'efface tout seul.
     if (k === "toastMsg") continue;
+    // Même chose pour les fenêtres/visionneuses ouvertes à l'instant T :
+    // une photo ou une demande de mot de passe restée ouverte ne doit
+    // jamais "revenir" toute seule à la prochaine ouverture de l'app —
+    // sans ça, fermer cette fenêtre fantôme n'a plus rien à faire en
+    // interne, et le téléphone retombe sur un retour en arrière classique
+    // du navigateur (vers la dernière vraie page visitée avant l'app).
+    if (k === "lightboxOpen" || k === "lightboxImages" || k === "lightboxIndex" ||
+        k === "showDocPasswordModal" || k === "pendingDocKeyForPassword" ||
+        k === "docPasswordDraft" || k === "docPasswordError") continue;
     localCopy[k] = state[k];
   }
   // IndexedDB stocke l'objet directement (pas besoin de JSON.stringify) et
@@ -13917,7 +13937,7 @@ function mergeAccountsByPhone(primaryId) {
         if (isDup(it.sellerId)) { it.sellerId = primaryId; it.sellerName = primary.name; it.sellerPhone = primary.phone; changed = true; }
       });
     }
-    if (changed) saveDoc("orders", o);
+    if (changed) secureOrderSaveDoc(o);
   });
 
   state.bookings.forEach(function(b) {
@@ -15101,7 +15121,7 @@ function finalizeOrder(order, opts) {
   }
   
   save();
-  saveDoc("orders", order);
+  secureOrderSaveDoc(order);
   affectedProducts.forEach(function(p) { saveDoc("products", p); });
   render();
   // Une commande internationale n'a ni code de retrait ni code OTP (ces
@@ -15232,7 +15252,7 @@ function setOrderStatus(orderId, status) {
     }
   }
   save();
-  saveDoc("orders", order);
+  secureOrderSaveDoc(order);
   render();
 }
 
@@ -15301,7 +15321,7 @@ function sellerConfirmReady(orderId) {
     addNotification("whatsapp", "✅ " + esc(myShopName || "Une boutique") + " a préparé sa part de la commande #" + orderId.slice(-5).toUpperCase() + " — en attente des autres boutiques.", order.buyerId, "orders");
   }
   save();
-  saveDoc("orders", order);
+  secureOrderSaveDoc(order);
   render();
 }
 
@@ -15397,7 +15417,7 @@ function sellerRefuseItems(orderId, reason) {
     }
   }
   save();
-  saveDoc("orders", order);
+  secureOrderSaveDoc(order);
   createDispute(orderId, "produit_endommage", "Le vendeur " + (myShopName || "") + " a signalé que sa part de la commande ne peut pas être livrée : " + reason, true);
   state.showNonLivrableModal = false;
   state.nonLivrableOrderId = null;
@@ -15420,7 +15440,7 @@ function verifyDeliveryOTP(orderId, inputOTP) {
     order.deliveredAt = Date.now();
     creditSellersForOrder(order);
     save();
-    saveDoc("orders", order);
+    secureOrderSaveDoc(order);
     render();
     showToast(t("toast_delivery_confirmed"));
     return true;
@@ -15447,7 +15467,7 @@ function confirmRelaisDepot(orderId, inputCode) {
     order.depotConfirmedAt = Date.now();
     addNotification("whatsapp", "📦 Votre commande #" + orderId.slice(-5).toUpperCase() + " est arrivée chez " + order.relaisShopName + " — vous pouvez venir la récupérer.", order.buyerId, "orders");
     save();
-    saveDoc("orders", order);
+    secureOrderSaveDoc(order);
     render();
     showToast(t("toast_deposit_confirmed_awaiting"));
     return true;
@@ -15475,7 +15495,7 @@ function confirmRelaisRetrait(orderId, inputCode) {
     order.deliveredAt = Date.now();
     creditSellersForOrder(order);
     save();
-    saveDoc("orders", order);
+    secureOrderSaveDoc(order);
     render();
     showToast(t("dt_parcel_delivered_paid") + money(order.total, order.country) + t("dt_close_paren_excl"));
     return true;
@@ -15764,7 +15784,7 @@ function livreurRefuseVendorItems(orderId, sellerId, reason) {
   createDispute(orderId, "refus_livreur", "Le livreur a refusé de récupérer le produit chez " + (shopName || "un vendeur") + ". Motif donné par le livreur : " + reason, true);
 
   save();
-  saveDoc("orders", order);
+  secureOrderSaveDoc(order);
   render();
   return true;
 }
@@ -15796,7 +15816,7 @@ function markOrderReturnedUnclaimed(order, disputeReason, disputeNote, sellerMes
   order.refusedAt = Date.now();
   order.commissionAmount = 0; // aucune commission, ni boutique ni Sounsouni
   save();
-  saveDoc("orders", order);
+  secureOrderSaveDoc(order);
   createDispute(order.id, disputeReason, disputeNote, true);
   var notifiedSellers = {};
   for (var si = 0; si < order.items.length; si++) {
@@ -15885,7 +15905,7 @@ function checkStalePickupOrders() {
     }
     addNotification("whatsapp", message, order.buyerId, "orders");
     order.pickupReminderStage = targetStage;
-    saveDoc("orders", order);
+    secureOrderSaveDoc(order);
     anyChange = true;
   });
   if (anyChange) save();
@@ -15903,7 +15923,7 @@ function confirmProductReturn(orderId) {
   order.returnStatus = "retourne";
   order.returnedAt = Date.now();
   save();
-  saveDoc("orders", order);
+  secureOrderSaveDoc(order);
   render();
   showToast(t("toast_seller_return_confirmed"));
 }
@@ -15999,7 +16019,7 @@ function cancelOrder(orderId) {
   logOrderStatusChange(order, "Annulée");
   order.cancelledAt = Date.now();
   save();
-  saveDoc("orders", order);
+  secureOrderSaveDoc(order);
   render();
   showToast(t("toast_order_cancelled"));
 }
@@ -16181,6 +16201,33 @@ function getWallet(phone) {
 // passe par le serveur, peut encore le faire. Le comportement pour le
 // reste de l'app ne change pas : ni bloquant, ni différent en cas de
 // coupure réseau (même file d'attente hors-ligne que saveDoc).
+// Même principe que secureWalletSaveDoc, pour les commandes — voir
+// migration 05. Un seul point d'entrée, réutilisé partout où une
+// commande est créée ou modifiée (il y en avait 18, dispersés).
+function secureOrderSaveDoc(order) {
+  if (!FIREBASE_ENABLED) return;
+  if (navigator.onLine === false) {
+    queuePendingSync("orders", order);
+    return;
+  }
+  fetch(supabaseConfig.url + "/functions/v1/order-write", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+    body: JSON.stringify({ docId: order.id, data: order })
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (!res.success) {
+        console.error("Erreur order-write :", res.error);
+        queuePendingSync("orders", order);
+      }
+    })
+    .catch(function(err) {
+      console.error("Erreur réseau order-write :", err);
+      queuePendingSync("orders", order);
+    });
+}
+
 function secureWalletSaveDoc(collectionName, docData) {
   if (!FIREBASE_ENABLED) return;
   if (navigator.onLine === false) {
@@ -31033,7 +31080,7 @@ root.addEventListener("click", function(e) {
         orderToInspect.agentInspected = true;
         orderToInspect.agentInspectedAt = Date.now();
         save();
-        saveDoc("orders", orderToInspect);
+        secureOrderSaveDoc(orderToInspect);
         showToast(t("as_inspection_done"));
         render();
       }
@@ -31054,7 +31101,7 @@ root.addEventListener("click", function(e) {
       intlOrder.statusHistory = intlOrder.statusHistory || [];
       intlOrder.statusHistory.push({ status: newStatus, at: Date.now(), note: null });
       save();
-      saveDoc("orders", intlOrder);
+      secureOrderSaveDoc(intlOrder);
       addNotification("sms", "🌍 Commande #" + intlOrder.id.slice(-5).toUpperCase() + " : " + translateStatus(newStatus) + ".", intlOrder.buyerId, "orders");
       render();
       break;
@@ -33432,7 +33479,7 @@ root.addEventListener("click", function(e) {
       if (orderToChange && newStatus) {
         logOrderStatusChange(orderToChange, newStatus, "Modifié manuellement par l'administration");
         save();
-        saveDoc("orders", orderToChange);
+        secureOrderSaveDoc(orderToChange);
         showToast(t("toast_status_updated"));
         render();
       }
@@ -34211,7 +34258,7 @@ root.addEventListener("click", function(e) {
         if (ord.deliveryMode === "relais" && ord.relaisShopId === shopId && ord.status === "Livrée" && !ord.commissionSettled) {
           ord.commissionSettled = true;
           ord.commissionSettledAt = Date.now();
-          saveDoc("orders", ord);
+          secureOrderSaveDoc(ord);
           count++;
         }
       }
@@ -34291,7 +34338,7 @@ root.addEventListener("click", function(e) {
       if (restoreOrder) {
         restoreOrder.livreurHistoryRestoredAt = Date.now();
         save();
-        saveDoc("orders", restoreOrder);
+        secureOrderSaveDoc(restoreOrder);
         showToast(t("toast_order_restored_active"));
       }
       render();
