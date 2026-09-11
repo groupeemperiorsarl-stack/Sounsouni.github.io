@@ -21807,7 +21807,7 @@ function fetchVerificationDocument(docKey) {
 }
 
 function renderDocPasswordModal() {
-  var html = '<div class="modal-overlay" data-action="close-doc-password-modal">';
+  var html = '<div class="modal-overlay" style="z-index:9999;" data-action="close-doc-password-modal">';
   html += '<div class="modal-sheet">';
   html += '<div class="section-title" style="margin-bottom:10px;"><i class="fa-solid fa-lock"></i> Confirmez votre accès Admin</div>';
   html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;">Pour voir cette photo, retapez votre mot de passe Admin.</div>';
