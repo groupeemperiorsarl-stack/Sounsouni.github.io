@@ -16018,6 +16018,19 @@ function cancelOrder(orderId) {
   }
   logOrderStatusChange(order, "Annulée");
   order.cancelledAt = Date.now();
+  // Le statut général ne suffit pas — chaque vendeur regarde en priorité
+  // SON propre statut (order.vendorStatuses), qui restait sinon bloqué
+  // sur son ancienne valeur (ex: "Nouvelle") même après l'annulation.
+  if (!order.vendorStatuses) order.vendorStatuses = {};
+  var notifiedSellersOnCancel = {};
+  for (var jj = 0; jj < order.items.length; jj++) {
+    var sellerIdCancel = order.items[jj].sellerId;
+    if (sellerIdCancel && !notifiedSellersOnCancel[sellerIdCancel]) {
+      notifiedSellersOnCancel[sellerIdCancel] = true;
+      order.vendorStatuses[sellerIdCancel] = "Annulée";
+      addNotification("sms", "❌ Commande #" + order.id.slice(-5).toUpperCase() + " annulée par l'acheteur.", sellerIdCancel, "seller-orders");
+    }
+  }
   save();
   secureOrderSaveDoc(order);
   render();
@@ -25043,6 +25056,10 @@ function renderSellerOrders() {
     }
   }
   if (myOrders.length === 0) return '<div class="empty-state"><i class="fa-solid fa-inbox"></i><div class="title">' + t("seller_no_order") + '</div></div>';
+  // Les plus récentes en premier — sans ce tri, l'ordre suivait juste
+  // l'arrivée en mémoire (souvent les plus anciennes en premier), au
+  // point de faire croire à tort qu'une commande n'était jamais arrivée.
+  myOrders.sort(function(a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
   var html = '';
   var toShow = state.showAllSellerOrders ? myOrders : myOrders.slice(0, 3);
   for (var k = 0; k < toShow.length; k++) {
@@ -29876,6 +29893,11 @@ function stopScanner() {
 
 function renderNotifPanel() {
   var myNotifs = state.notifications.filter(function(n) { return state.profile && n.userId === state.profile.id; });
+  // Les plus récentes en premier — une notification reçue en direct
+  // depuis un autre appareil (via la synchronisation en temps réel)
+  // s'ajoutait à la fin de la liste au lieu du début, contrairement à
+  // une notification créée directement sur cet appareil.
+  myNotifs.sort(function(a, b) { return (b.time || 0) - (a.time || 0); });
   var html = '<div class="notif-panel-overlay" id="notif-overlay" data-action="close-notif"></div>';
   html += '<div class="notif-panel">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">';
