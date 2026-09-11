@@ -6319,8 +6319,7 @@ function submitBecomeRelais() {
     addressDetail: d.addressDetail || "",
     shopLat: d.shopLat,
     shopLng: d.shopLng,
-    selfiePhotoUri: d.selfiePhotoUri,
-    verificationDocs: d.verificationDocs || [],
+    hasVerificationDocs: true, // la vraie photo part séparément, voir plus bas
     status: "pending",
     createdAt: Date.now()
   };
@@ -6346,6 +6345,10 @@ function submitBecomeRelais() {
   save();
   saveDoc("accounts", state.profile);
   saveDoc("relaisApplications", application);
+  // La vraie photo (selfie + pièce d'identité) ne transite jamais par
+  // app_data — elle part directement vers la table protégée, jamais
+  // visible que par un Admin qui confirme son mot de passe pour la voir.
+  submitVerificationDocuments("relais_app_" + application.id, d.selfiePhotoUri, d.verificationDocs);
   state.view = "market";
   state.relaisApplyDraft = null;
   showToast(t("toast_request_sent_will_notify"));
@@ -13670,13 +13673,15 @@ function registerAccount() {
       addressDetail: d.addressDetail || "",
       shopLat: d.shopLat,
       shopLng: d.shopLng,
-      selfiePhotoUri: d.selfiePhotoUri,
-      verificationDocs: d.verificationDocs || [],
+      hasVerificationDocs: true, // la vraie photo part séparément, voir plus bas
       status: "pending",
       createdAt: Date.now()
     };
     state.relaisApplications.push(application);
     saveDoc("relaisApplications", application);
+    // La vraie photo ne transite jamais par app_data — voir
+    // submitVerificationDocuments et get-verification-docs.
+    submitVerificationDocuments("relais_app_" + application.id, d.selfiePhotoUri, d.verificationDocs);
 
     // Si le quartier saisi n'existe pas dans la liste, une demande séparée
     // part aussi pour que l'admin l'ajoute officiellement à la base.
@@ -21713,6 +21718,48 @@ function setAccountPassword(accountId, newPassword, newRecoveryCode) {
     .catch(function() { return false; });
 }
 
+function submitVerificationDocuments(docKey, selfiePhoto, verificationDocs) {
+  return fetch(supabaseConfig.url + "/functions/v1/submit-verification-docs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+    body: JSON.stringify({ docKey: docKey, selfiePhoto: selfiePhoto, verificationDocs: verificationDocs })
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(res) { return !!res.success; })
+    .catch(function() { return false; });
+}
+
+// Le mot de passe Admin n'est jamais gardé en mémoire persistante — juste
+// le temps de la session en cours, pour éviter de le redemander à
+// chaque photo consultée. Il repart à zéro à chaque rechargement de l'app.
+var _adminSessionPasswordCache = null;
+
+function fetchVerificationDocument(docKey) {
+  var adminUsername = getAdminCredentials("owner").username;
+  if (state.adminCountryScope) {
+    var na = state.nationalAdmins.find(function(a) { return a.country === state.adminCountryScope; });
+    if (na) adminUsername = na.ownerUsername;
+  }
+  function tryFetch(pwd) {
+    return fetch(supabaseConfig.url + "/functions/v1/get-verification-docs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+      body: JSON.stringify({ adminUsername: adminUsername, adminPassword: pwd, docKey: docKey })
+    }).then(function(r) { return r.json(); });
+  }
+  var cached = _adminSessionPasswordCache;
+  var firstTry = cached ? tryFetch(cached) : Promise.resolve({ success: false, error: "unauthorized" });
+  return firstTry.then(function(res) {
+    if (res.success) return res;
+    var entered = prompt("Confirmez votre mot de passe Admin pour voir ce document :");
+    if (!entered) return { success: false, error: "cancelled" };
+    return tryFetch(entered).then(function(res2) {
+      if (res2.success) _adminSessionPasswordCache = entered;
+      return res2;
+    });
+  });
+}
+
 function hashSecret(plainText) {
   var iterations = 100000;
   var salt = crypto.getRandomValues(new Uint8Array(16));
@@ -26996,15 +27043,8 @@ function renderAdminRelaisApplications() {
     html += '</div>';
     html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:4px;"><i class="fa-solid fa-user"></i> ' + esc(app.accountName) + ' · <a href="tel:' + esc(app.accountPhone) + '" style="color:var(--accent)">' + esc(app.accountPhone) + '</a></div>';
     html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:8px;"><i class="fa-solid fa-location-dot"></i> ' + esc(app.quartier) + (app.isAutreQuartier ? t("ad_new_quartier_proposed") : (app.commune ? ', ' + esc(app.commune) : '')) + (app.addressDetail ? ' — ' + esc(app.addressDetail) : '') + '</div>';
-    if (app.selfiePhotoUri) {
-      html += '<div style="font-size:11px;font-weight:700;margin-bottom:4px;">' + t("ad_selfie_photo") + '</div>';
-      html += '<img loading="lazy" src="' + app.selfiePhotoUri + '" style="width:100%;max-height:180px;object-fit:contain;border-radius:10px;border:1px solid var(--border-color);margin-bottom:10px;cursor:pointer;" data-action="view-relais-doc" data-value="' + app.id + '" data-doc-index="selfie" />';
-    }
-    if (app.verificationDocs && app.verificationDocs.length > 0) {
-      html += '<div style="font-size:11px;font-weight:700;margin-bottom:4px;">' + t("ad_verification_docs") + app.verificationDocs.length + ')</div>';
-      for (var di = 0; di < app.verificationDocs.length; di++) {
-        html += '<img loading="lazy" src="' + app.verificationDocs[di] + '" style="width:100%;max-height:180px;object-fit:contain;border-radius:10px;border:1px solid var(--border-color);margin-bottom:8px;cursor:pointer;" data-action="view-relais-doc" data-value="' + app.id + '" data-doc-index="' + di + '" />';
-      }
+    if (app.hasVerificationDocs) {
+      html += '<button type="button" class="btn-secondary" style="width:100%;margin-bottom:10px;" data-action="view-relais-docs-secure" data-value="' + app.id + '"><i class="fa-solid fa-image"></i> Voir la photo et la pièce d\'identité</button>';
     }
     if (app.status === "pending") {
       html += '<div style="display:flex;gap:8px;">';
@@ -33570,15 +33610,22 @@ root.addEventListener("click", function(e) {
       break;
     }
     case "reject-relais-application": rejectRelaisApplication(value); break;
-    case "view-relais-doc": {
-      var appDoc = null;
-      for (var vdi = 0; vdi < state.relaisApplications.length; vdi++) { if (state.relaisApplications[vdi].id === value) { appDoc = state.relaisApplications[vdi]; break; } }
-      if (appDoc && appDoc.documentUri) {
-        state.lightboxImages = [appDoc.documentUri];
+    case "view-relais-docs-secure": {
+      showToast("🔒 Vérification de votre accès Admin...");
+      fetchVerificationDocument("relais_app_" + value).then(function(res) {
+        if (!res.success) {
+          showToast(res.error === "cancelled" ? "Annulé." : "❌ Accès refusé — mot de passe Admin incorrect.");
+          return;
+        }
+        var imgs = [];
+        if (res.selfiePhoto) imgs.push(res.selfiePhoto);
+        if (res.verificationDocs) imgs = imgs.concat(res.verificationDocs);
+        if (imgs.length === 0) { showToast("Aucune photo trouvée pour cette candidature."); return; }
+        state.lightboxImages = imgs;
         state.lightboxIndex = 0;
         state.lightboxOpen = true;
         render();
-      }
+      });
       break;
     }
     case "admin-cancel-boost": {
