@@ -35235,9 +35235,18 @@ root.addEventListener("input", function(e) {
   }
   if (actionInput === "owner-cred-password") {
     if (!el.value) return; // champ vide = on ne touche pas au mot de passe actuel
-    setAccountPassword("admin_owner", el.value).then(function(ok) {
-      if (!ok) showToast("❌ Une erreur est survenue, réessayez.");
-    });
+    // On attend que la personne ait fini de taper (800ms sans nouvelle
+    // lettre) avant d'envoyer quoi que ce soit au serveur — sinon chaque
+    // lettre déclenchait sa propre requête, avec le risque qu'une échoue
+    // en cours de frappe et fasse revenir le champ à vide.
+    clearTimeout(window._ownerPwSaveTimer);
+    var ownerPwValueNow = el.value;
+    window._ownerPwSaveTimer = setTimeout(function() {
+      setAccountPassword("admin_owner", ownerPwValueNow).then(function(ok) {
+        if (!ok) showToast("❌ Une erreur est survenue, réessayez.");
+        else showToast("✅ Mot de passe enregistré.");
+      });
+    }, 800);
     return;
   }
   if (actionInput === "national-owner-username" || actionInput === "national-commission-rate") {
@@ -35250,11 +35259,17 @@ root.addEventListener("input", function(e) {
   }
   if (actionInput === "national-owner-password") {
     if (!el.value) return; // champ vide = on ne touche pas au mot de passe actuel
-    var naEditPw = state.nationalAdmins.find(function(a) { return a.id === el.dataset.config; });
-    if (!naEditPw) return;
-    setAccountPassword("national_admin_" + naEditPw.id, el.value).then(function(ok) {
-      if (!ok) showToast("❌ Une erreur est survenue, réessayez.");
-    });
+    var naEditPwId = el.dataset.config;
+    clearTimeout(window._nationalPwSaveTimer);
+    var nationalPwValueNow = el.value;
+    window._nationalPwSaveTimer = setTimeout(function() {
+      var naEditPw = state.nationalAdmins.find(function(a) { return a.id === naEditPwId; });
+      if (!naEditPw) return;
+      setAccountPassword("national_admin_" + naEditPw.id, nationalPwValueNow).then(function(ok) {
+        if (!ok) showToast("❌ Une erreur est survenue, réessayez.");
+        else showToast("✅ Mot de passe enregistré.");
+      });
+    }, 800);
     return;
   }
   if (actionInput === "intl-city-quartiers") {
