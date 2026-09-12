@@ -4797,7 +4797,7 @@ const SHARED_KEYS = [
   "relaisApplications", "livreurApplications", "autreQuartierApplications",
   "relaisEditRequests", "externalParcels", "webhookPartners", "dashboardPartners",
   "apiPartners", "platformCommissions", "externalParcelChangeRequests",
-  "verificationRequests", "wallets", "cagnottes", "filatureLogs",
+  "verificationRequests", "wallets", "cagnottes",
   "passwordRecoveryRequests", "nationalAdmins", "internationalCities", "pushSubscriptions", "pendingPayments", "fcmTokens", "group2GlobalWhitelist", "sourcingAgentWhitelist"
 ];
 
@@ -5738,11 +5738,16 @@ function removeDashboardPartner(id) {
 // ---------- OPTION 2 (multi-partenaires) : API À INTERROGER ----------
 // Chaque partenaire a sa propre clé, qui ne donne accès qu'à SES colis —
 // impossible pour l'un de consulter les numéros de suivi d'un autre.
-function addApiPartner(platform) {
-  var partner = { id: uid(), platform: platform, enabled: true, apiKey: "gems_" + uid().replace("id-", "") };
+function addApiPartner(platform, onDone) {
+  var generatedKey = "gems_" + uid().replace("id-", "");
+  var partner = { id: uid(), platform: platform, enabled: true, hasApiKey: false };
   state.apiPartners.push(partner);
   save();
   saveDoc("apiPartners", partner);
+  setPartnerSecret(partner.id, "apiKey", generatedKey).then(function(ok) {
+    if (ok) { partner.hasApiKey = true; save(); }
+    if (onDone) onDone(ok ? generatedKey : null, partner);
+  });
   return partner;
 }
 
@@ -5764,7 +5769,7 @@ function removeApiPartner(id) {
 // Chaque partenaire a sa propre adresse — seuls SES colis (filtrés par
 // plateforme) déclenchent un envoi vers SON adresse à lui.
 function addWebhookPartner(platform) {
-  var partner = { id: uid(), platform: platform, enabled: true, url: "", authToken: "", lastTestResult: null };
+  var partner = { id: uid(), platform: platform, enabled: true, url: "", hasAuthToken: false, lastTestResult: null };
   state.webhookPartners.push(partner);
   save();
   saveDoc("webhookPartners", partner);
@@ -6077,9 +6082,11 @@ function notifyExternalWebhook(parcel, eventType) {
     timestamp: new Date().toISOString()
   };
   matching.forEach(function(cfg) {
-    var headers = { "Content-Type": "application/json" };
-    if (cfg.authToken) headers["Authorization"] = "Bearer " + cfg.authToken;
-    fetch(cfg.url, { method: "POST", headers: headers, body: JSON.stringify(payload) }).catch(function(err) {
+    fetch(supabaseConfig.url + "/functions/v1/call-webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+      body: JSON.stringify({ partnerId: cfg.id, payload: payload })
+    }).catch(function(err) {
       console.error("Webhook partenaire injoignable :", err);
     });
   });
@@ -7488,6 +7495,8 @@ function defaultState() {
     lightboxOpen: false,
     showDocPasswordModal: false,
     pendingDocKeyForPassword: null,
+    pendingPartnerSecretRequest: null,
+    pendingFilatureLogRequest: null,
     docPasswordDraft: "",
     docPasswordError: null,
     lightboxImages: [],
@@ -7746,6 +7755,8 @@ function mergeWithDefaults(saved) {
   merged.lightboxImages = [];
   merged.showDocPasswordModal = false;
   merged.pendingDocKeyForPassword = null;
+  merged.pendingPartnerSecretRequest = null;
+  merged.pendingFilatureLogRequest = null;
   merged.docPasswordDraft = "";
   merged.docPasswordError = null;
   // Même chose pour le suivi des articles déjà montrés dans le carrousel
@@ -7806,7 +7817,7 @@ function save() {
     // interne, et le téléphone retombe sur un retour en arrière classique
     // du navigateur (vers la dernière vraie page visitée avant l'app).
     if (k === "lightboxOpen" || k === "lightboxImages" || k === "lightboxIndex" ||
-        k === "showDocPasswordModal" || k === "pendingDocKeyForPassword" ||
+        k === "showDocPasswordModal" || k === "pendingDocKeyForPassword" || k === "pendingPartnerSecretRequest" || k === "pendingFilatureLogRequest" ||
         k === "docPasswordDraft" || k === "docPasswordError") continue;
     localCopy[k] = state[k];
   }
@@ -16128,6 +16139,32 @@ var FILATURE_ACTION_LABELS = {
   "open-profile-info": "Ouvre Mes informations & adresses"
 };
 
+// Même principe que secureOrderSaveDoc/secureWalletSaveDoc — seul chemin
+// désormais autorisé pour écrire dans "filatureLogs" (voir migration 08).
+function secureFilatureSaveDoc(log) {
+  if (!FIREBASE_ENABLED) return;
+  if (navigator.onLine === false) {
+    queuePendingSync("filatureLogs", log);
+    return;
+  }
+  fetch(supabaseConfig.url + "/functions/v1/filature-write", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+    body: JSON.stringify({ docId: log.id, data: log })
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (!res.success) {
+        console.error("Erreur filature-write :", res.error);
+        queuePendingSync("filatureLogs", log);
+      }
+    })
+    .catch(function(err) {
+      console.error("Erreur réseau filature-write :", err);
+      queuePendingSync("filatureLogs", log);
+    });
+}
+
 function logFilatureEvent(type, detail) {
   if (!state.profile || !state.profile.phone) return;
   if (!isPhoneWatched(state.profile.phone)) return;
@@ -16149,7 +16186,7 @@ function logFilatureEvent(type, detail) {
   }
   if (idx === -1) state.filatureLogs.push(log); else state.filatureLogs[idx] = log;
   save();
-  saveDoc("filatureLogs", log);
+  secureFilatureSaveDoc(log);
 }
 
 function getAlgorithmConfig() {
@@ -16296,7 +16333,7 @@ function logFilatureEventForPhone(phone, type, detail, accountName) {
   }
   if (idx === -1) state.filatureLogs.push(log); else state.filatureLogs[idx] = log;
   save();
-  saveDoc("filatureLogs", log);
+  secureFilatureSaveDoc(log);
 }
 
 // --- Gains (comptabilité) — séparé du vrai Portefeuille ---
@@ -18827,45 +18864,65 @@ window.addEventListener("resize", function() {
   var params = new URLSearchParams(window.location.hash.slice(1));
   var tracking = params.get("api-parcel");
   var key = params.get("key");
-  var matchedPartner = null;
-  for (var pi = 0; pi < state.apiPartners.length; pi++) {
-    if (state.apiPartners[pi].enabled && state.apiPartners[pi].apiKey === key) { matchedPartner = state.apiPartners[pi]; break; }
-  }
-  var response;
-  if (!key || !matchedPartner) {
-    response = { error: "unauthorized", message: "Clé d'accès invalide ou inconnue." };
-  } else {
-    var parcel = null;
-    for (var i = 0; i < state.externalParcels.length; i++) {
-      // Cloisonnement : un partenaire ne peut jamais consulter les colis
-      // d'une autre plateforme, même s'il devine un numéro de suivi.
-      if (state.externalParcels[i].trackingNumber === tracking && state.externalParcels[i].platform === matchedPartner.platform) {
-        parcel = state.externalParcels[i];
-        break;
-      }
-    }
-    if (!parcel) {
-      response = { error: "not_found", message: "Aucun colis avec ce numéro de suivi pour cette plateforme." };
-    } else {
-      response = {
-        trackingNumber: parcel.trackingNumber,
-        platform: parcel.platform,
-        status: parcel.status,
-        statusHistory: parcel.statusHistory,
-        relaisShopName: parcel.relaisShopName,
-        createdAt: new Date(parcel.createdAt).toISOString(),
-        retrievedAt: parcel.retrievedAt ? new Date(parcel.retrievedAt).toISOString() : null
-      };
-    }
-  }
+
+  // Bloque immédiatement le reste de l'app le temps que la vérification
+  // (désormais faite côté serveur, plus jamais en comparant localement
+  // contre la liste de toutes les clés) réponde.
   document.body.innerHTML = '';
   document.body.style.margin = '0';
   var pre = document.createElement('pre');
   pre.style.cssText = 'padding:20px;font-family:monospace;font-size:13px;white-space:pre-wrap;word-break:break-word;';
-  pre.textContent = JSON.stringify(response, null, 2);
+  pre.textContent = '{"status": "loading"}';
   document.body.appendChild(pre);
   document.title = "Sounsouni - API";
   window._apiModeActive = true;
+
+  function writeResponse(response) {
+    pre.textContent = JSON.stringify(response, null, 2);
+  }
+
+  if (!key) {
+    writeResponse({ error: "unauthorized", message: "Clé d'accès invalide ou inconnue." });
+  } else {
+    fetch(supabaseConfig.url + "/functions/v1/verify-api-key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+      body: JSON.stringify({ apiKey: key })
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        var matchedPartner = res.success ? state.apiPartners.find(function(p) { return p.id === res.partnerId; }) : null;
+        if (!matchedPartner) {
+          writeResponse({ error: "unauthorized", message: "Clé d'accès invalide ou inconnue." });
+          return;
+        }
+        var parcel = null;
+        for (var i = 0; i < state.externalParcels.length; i++) {
+          // Cloisonnement : un partenaire ne peut jamais consulter les colis
+          // d'une autre plateforme, même s'il devine un numéro de suivi.
+          if (state.externalParcels[i].trackingNumber === tracking && state.externalParcels[i].platform === matchedPartner.platform) {
+            parcel = state.externalParcels[i];
+            break;
+          }
+        }
+        if (!parcel) {
+          writeResponse({ error: "not_found", message: "Aucun colis avec ce numéro de suivi pour cette plateforme." });
+        } else {
+          writeResponse({
+            trackingNumber: parcel.trackingNumber,
+            platform: parcel.platform,
+            status: parcel.status,
+            statusHistory: parcel.statusHistory,
+            relaisShopName: parcel.relaisShopName,
+            createdAt: new Date(parcel.createdAt).toISOString(),
+            retrievedAt: parcel.retrievedAt ? new Date(parcel.retrievedAt).toISOString() : null
+          });
+        }
+      })
+      .catch(function(err) {
+        writeResponse({ error: "server_error", message: String(err) });
+      });
+  }
   throw new Error("__API_RESPONSE_SENT__");
 })();
 
@@ -21825,6 +21882,57 @@ function setAccountPassword(accountId, newPassword, newRecoveryCode) {
     .catch(function() { return false; });
 }
 
+function setPartnerSecret(partnerId, type, value) {
+  return fetch(supabaseConfig.url + "/functions/v1/set-partner-secret", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+    body: JSON.stringify({ partnerId: partnerId, type: type, value: value })
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(res) { return !!res.success; })
+    .catch(function() { return false; });
+}
+
+function fetchPartnerSecret(partnerId, type) {
+  var adminUsername = getAdminCredentials("owner").username;
+  if (state.adminCountryScope) {
+    var na = state.nationalAdmins.find(function(a) { return a.country === state.adminCountryScope; });
+    if (na) adminUsername = na.ownerUsername;
+  }
+  function tryFetch(pwd) {
+    return fetch(supabaseConfig.url + "/functions/v1/get-partner-secret", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+      body: JSON.stringify({ adminUsername: adminUsername, adminPassword: pwd, partnerId: partnerId, type: type })
+    })
+      .then(function(r) { return r.json(); })
+      .catch(function(err) {
+        console.error("Erreur réseau get-partner-secret :", err);
+        return { success: false, error: "network_error" };
+      });
+  }
+  if (_adminSessionPasswordCache) {
+    return tryFetch(_adminSessionPasswordCache).then(function(res) {
+      if (res.success) return res;
+      _adminSessionPasswordCache = null;
+      state.pendingPartnerSecretRequest = { partnerId: partnerId, type: type };
+      state.pendingDocKeyForPassword = null;
+      state.docPasswordDraft = "";
+      state.docPasswordError = null;
+      state.showDocPasswordModal = true;
+      render();
+      return { success: false, error: "needs_prompt" };
+    });
+  }
+  state.pendingPartnerSecretRequest = { partnerId: partnerId, type: type };
+  state.pendingDocKeyForPassword = null;
+  state.docPasswordDraft = "";
+  state.docPasswordError = null;
+  state.showDocPasswordModal = true;
+  render();
+  return Promise.resolve({ success: false, error: "needs_prompt" });
+}
+
 function submitVerificationDocuments(docKey, selfiePhoto, verificationDocs) {
   return fetch(supabaseConfig.url + "/functions/v1/submit-verification-docs", {
     method: "POST",
@@ -21872,6 +21980,56 @@ function tryFetchVerificationDocument(docKey, pwd) {
 
 // Point d'entrée : essaie d'abord avec le mot de passe déjà en mémoire
 // pour cette session (s'il y en a un) ; sinon, ouvre l'écran de saisie.
+function fetchAdminFilatureLog(phone) {
+  var adminUsername = getAdminCredentials("owner").username;
+  if (state.adminCountryScope) {
+    var na = state.nationalAdmins.find(function(a) { return a.country === state.adminCountryScope; });
+    if (na) adminUsername = na.ownerUsername;
+  }
+  function tryFetch(pwd) {
+    return fetch(supabaseConfig.url + "/functions/v1/get-filature-log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+      body: JSON.stringify({ adminUsername: adminUsername, adminPassword: pwd, docId: normalizeWalletPhone(phone) })
+    })
+      .then(function(r) { return r.json(); })
+      .catch(function(err) {
+        console.error("Erreur réseau get-filature-log :", err);
+        return { success: false, error: "network_error" };
+      });
+  }
+  function applyResult(res) {
+    if (!res.success || !res.log) return;
+    var idx = -1;
+    for (var i = 0; i < state.filatureLogs.length; i++) {
+      if (state.filatureLogs[i].id === res.log.id) { idx = i; break; }
+    }
+    if (idx === -1) state.filatureLogs.push(res.log); else state.filatureLogs[idx] = res.log;
+    render();
+  }
+  if (_adminSessionPasswordCache) {
+    tryFetch(_adminSessionPasswordCache).then(function(res) {
+      if (res.success) { applyResult(res); return; }
+      _adminSessionPasswordCache = null;
+      state.pendingFilatureLogRequest = phone;
+      state.pendingDocKeyForPassword = null;
+      state.pendingPartnerSecretRequest = null;
+      state.docPasswordDraft = "";
+      state.docPasswordError = null;
+      state.showDocPasswordModal = true;
+      render();
+    });
+    return;
+  }
+  state.pendingFilatureLogRequest = phone;
+  state.pendingDocKeyForPassword = null;
+  state.pendingPartnerSecretRequest = null;
+  state.docPasswordDraft = "";
+  state.docPasswordError = null;
+  state.showDocPasswordModal = true;
+  render();
+}
+
 function fetchVerificationDocument(docKey) {
   if (_adminSessionPasswordCache) {
     return tryFetchVerificationDocument(docKey, _adminSessionPasswordCache).then(function(res) {
@@ -28977,7 +29135,7 @@ function renderWebhookPartnersSection() {
     html += '<div style="display:flex;gap:8px;align-items:center;"><div class="toggle-switch ' + (w.enabled ? 'active' : '') + '" data-action="toggle-webhook-partner" data-value="' + w.id + '"><div class="toggle-knob"></div></div><button class="link-btn" style="color:var(--danger);padding:2px;" data-action="remove-webhook-partner" data-value="' + w.id + '"><i class="fa-solid fa-trash"></i></button></div>';
     html += '</div>';
     html += '<input class="input" id="webhook-url-' + w.id + '" placeholder="https://partenaire.exemple.com/webhook" value="' + esc(w.url) + '" data-action-input="webhook-partner-url" data-config="' + w.id + '" style="margin-bottom:6px;" />';
-    html += '<div style="position:relative;"><input class="input" id="webhook-token-' + w.id + '" type="password" style="padding-right:44px;" placeholder="Jeton d\'authentification (optionnel)" value="' + esc(w.authToken) + '" data-action-input="webhook-partner-token" data-config="' + w.id + '" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>';
+    html += '<div style="position:relative;"><input class="input" id="webhook-token-' + w.id + '" type="password" style="padding-right:44px;" placeholder="🔒 Protégé — tapez pour remplacer (optionnel)" value="" data-action-input="webhook-partner-token" data-config="' + w.id + '" /><button type="button" class="pw-eye-btn" data-action="reveal-partner-secret" data-value="' + w.id + '" data-secret-type="authToken" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;" title="Voir le jeton"><i class="fa-solid fa-eye"></i></button></div>';
     html += '<button class="btn-secondary" style="margin-top:8px;width:100%;font-size:12px;padding:6px;" data-action="test-webhook-partner" data-value="' + w.id + '"><i class="fa-solid fa-vial"></i> Envoyer un test</button>';
     if (w.lastTestResult) html += '<div style="font-size:10.5px;margin-top:6px;color:' + (w.lastTestResult === "success" ? "#2e9e4f" : "var(--danger)") + ';">' + (w.lastTestResult === "success" ? "✅ Test envoyé." : "❌ Échec.") + '</div>';
     html += '</div>';
@@ -29022,11 +29180,12 @@ function renderApiPartnersSection() {
     html += '<div style="display:flex;gap:8px;align-items:center;"><div class="toggle-switch ' + (a.enabled ? 'active' : '') + '" data-action="toggle-api-partner" data-value="' + a.id + '"><div class="toggle-knob"></div></div><button class="link-btn" style="color:var(--danger);padding:2px;" data-action="remove-api-partner" data-value="' + a.id + '"><i class="fa-solid fa-trash"></i></button></div>';
     html += '</div>';
     html += '<div style="display:flex;gap:8px;">';
-    html += '<input class="input" id="api-key-' + a.id + '" value="' + esc(a.apiKey) + '" data-action-input="api-partner-key" data-config="' + a.id + '" style="flex:1;" />';
+    html += '<input class="input" id="api-key-' + a.id + '" placeholder="🔒 Protégé — tapez pour remplacer" value="" data-action-input="api-partner-key" data-config="' + a.id + '" style="flex:1;" />';
+    html += '<button class="btn-secondary" style="flex:0;padding:8px 12px;" data-action="reveal-partner-secret" data-value="' + a.id + '" data-secret-type="apiKey" title="Voir la clé"><i class="fa-solid fa-eye"></i></button>';
     html += '<button class="btn-secondary" style="flex:0;padding:8px 12px;" data-action="regenerate-api-partner-key" data-value="' + a.id + '"><i class="fa-solid fa-arrows-rotate"></i></button>';
     html += '</div>';
-    if (a.enabled && a.apiKey) {
-      html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:8px;background:var(--bg-card);padding:6px;border-radius:6px;word-break:break-all;">' + window.location.origin + window.location.pathname + '#api-parcel=NUMERO&key=' + esc(a.apiKey) + '</div>';
+    if (a.enabled && a.hasApiKey) {
+      html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:8px;background:var(--bg-card);padding:6px;border-radius:6px;">Appuyez sur 👁 pour voir le lien complet avec la clé, à donner au partenaire.</div>';
     }
     html += '</div>';
   }
@@ -32545,8 +32704,14 @@ root.addEventListener("click", function(e) {
     }
     case "toggle-admin-filature-log": {
       var normValue = normalizeWalletPhone(value);
-      state.adminFilatureOpenPhone = state.adminFilatureOpenPhone === normValue ? null : normValue;
+      if (state.adminFilatureOpenPhone === normValue) {
+        state.adminFilatureOpenPhone = null;
+        render();
+        break;
+      }
+      state.adminFilatureOpenPhone = normValue;
       render();
+      fetchAdminFilatureLog(normValue);
       break;
     }
     case "toggle-admin-wallet": {
@@ -34021,10 +34186,17 @@ root.addEventListener("click", function(e) {
     case "test-webhook-partner": {
       var wpTest = state.webhookPartners.find(function(p) { return p.id === value; });
       if (!wpTest || !wpTest.url) { showToast(t("toast_provide_url_first")); break; }
-      var testHeaders = { "Content-Type": "application/json" };
-      if (wpTest.authToken) testHeaders["Authorization"] = "Bearer " + wpTest.authToken;
-      fetch(wpTest.url, { method: "POST", headers: testHeaders, body: JSON.stringify({ event: "test", timestamp: new Date().toISOString() }) })
-        .then(function() { wpTest.lastTestResult = "success"; updateWebhookPartner(wpTest); render(); })
+      fetch(supabaseConfig.url + "/functions/v1/call-webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+        body: JSON.stringify({ partnerId: wpTest.id, payload: { event: "test", timestamp: new Date().toISOString() } })
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+          wpTest.lastTestResult = (res.success && res.webhookOk) ? "success" : "failure";
+          updateWebhookPartner(wpTest);
+          render();
+        })
         .catch(function() { wpTest.lastTestResult = "failure"; updateWebhookPartner(wpTest); render(); });
       break;
     }
@@ -34048,8 +34220,13 @@ root.addEventListener("click", function(e) {
     }
     case "add-api-partner": {
       var aPlatform = prompt("Quelle plateforme ? (Ex : Alibaba, Amazon)");
-      if (aPlatform && aPlatform.trim()) addApiPartner(aPlatform.trim());
-      render();
+      if (aPlatform && aPlatform.trim()) {
+        addApiPartner(aPlatform.trim(), function(generatedKey, partner) {
+          if (!generatedKey) { showToast("❌ La clé n'a pas pu être enregistrée, réessayez."); render(); return; }
+          alert("Clé API pour " + partner.platform + " :\n\n" + generatedKey + "\n\nCopiez-la maintenant, elle ne sera plus jamais affichée automatiquement.");
+          render();
+        });
+      }
       break;
     }
     case "toggle-api-partner": {
@@ -34066,8 +34243,16 @@ root.addEventListener("click", function(e) {
     }
     case "regenerate-api-partner-key": {
       var apKey = state.apiPartners.find(function(p) { return p.id === value; });
-      if (apKey) { apKey.apiKey = "gems_" + uid().replace("id-", ""); updateApiPartner(apKey); }
-      render();
+      if (apKey) {
+        var newGeneratedKey = "gems_" + uid().replace("id-", "");
+        setPartnerSecret(apKey.id, "apiKey", newGeneratedKey).then(function(ok) {
+          if (!ok) { showToast("❌ Une erreur est survenue, réessayez."); return; }
+          apKey.hasApiKey = true;
+          save();
+          alert("Nouvelle clé API :\n\n" + newGeneratedKey + "\n\nCopiez-la maintenant, elle ne sera plus jamais affichée automatiquement.");
+          render();
+        });
+      }
       break;
     }
     case "add-platform-commission": {
@@ -34585,9 +34770,15 @@ root.addEventListener("click", function(e) {
         });
       break;
     }
+    case "reveal-partner-secret": {
+      fetchPartnerSecret(value, btn.dataset.secretType);
+      break;
+    }
     case "close-doc-password-modal": {
       state.showDocPasswordModal = false;
       state.pendingDocKeyForPassword = null;
+      state.pendingPartnerSecretRequest = null;
+      state.pendingFilatureLogRequest = null;
       state.docPasswordDraft = "";
       state.docPasswordError = null;
       render();
@@ -34597,8 +34788,79 @@ root.addEventListener("click", function(e) {
       var dpEl = document.getElementById("doc-password-input");
       var dpVal = dpEl ? dpEl.value : "";
       if (!dpVal) { state.docPasswordError = "Entrez votre mot de passe."; render(); break; }
+
+      if (state.pendingFilatureLogRequest) {
+        var fReq = state.pendingFilatureLogRequest;
+        var adminUsernameForFilature = getAdminCredentials("owner").username;
+        if (state.adminCountryScope) {
+          var naForFilature = state.nationalAdmins.find(function(a) { return a.country === state.adminCountryScope; });
+          if (naForFilature) adminUsernameForFilature = naForFilature.ownerUsername;
+        }
+        fetch(supabaseConfig.url + "/functions/v1/get-filature-log", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+          body: JSON.stringify({ adminUsername: adminUsernameForFilature, adminPassword: dpVal, docId: normalizeWalletPhone(fReq) })
+        })
+          .then(function(r) { return r.json(); })
+          .then(function(res) {
+            if (!res.success) {
+              state.docPasswordError = res.error === "unauthorized" ? "❌ Mot de passe incorrect." : "❌ Erreur : " + (res.error || "inconnue");
+              render();
+              return;
+            }
+            _adminSessionPasswordCache = dpVal;
+            state.showDocPasswordModal = false;
+            state.pendingFilatureLogRequest = null;
+            state.docPasswordError = null;
+            var idxLog = -1;
+            for (var iL = 0; iL < state.filatureLogs.length; iL++) {
+              if (state.filatureLogs[iL].id === res.log.id) { idxLog = iL; break; }
+            }
+            if (idxLog === -1) state.filatureLogs.push(res.log); else state.filatureLogs[idxLog] = res.log;
+            render();
+          })
+          .catch(function(err) {
+            state.docPasswordError = "❌ Erreur réseau : " + err.message;
+            render();
+          });
+        break;
+      }
+
+      if (state.pendingPartnerSecretRequest) {
+        var pReq = state.pendingPartnerSecretRequest;
+        var adminUsernameForSecret = getAdminCredentials("owner").username;
+        if (state.adminCountryScope) {
+          var naForSecret = state.nationalAdmins.find(function(a) { return a.country === state.adminCountryScope; });
+          if (naForSecret) adminUsernameForSecret = naForSecret.ownerUsername;
+        }
+        fetch(supabaseConfig.url + "/functions/v1/get-partner-secret", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+          body: JSON.stringify({ adminUsername: adminUsernameForSecret, adminPassword: dpVal, partnerId: pReq.partnerId, type: pReq.type })
+        })
+          .then(function(r) { return r.json(); })
+          .then(function(res) {
+            if (!res.success) {
+              state.docPasswordError = res.error === "unauthorized" ? "❌ Mot de passe incorrect." : "❌ Erreur : " + (res.error || "inconnue");
+              render();
+              return;
+            }
+            _adminSessionPasswordCache = dpVal;
+            state.showDocPasswordModal = false;
+            state.pendingPartnerSecretRequest = null;
+            state.docPasswordError = null;
+            var label = pReq.type === "apiKey" ? "Clé API" : "Jeton webhook";
+            alert(label + " :\n\n" + res.value + "\n\nCopiez-la maintenant si besoin.");
+            render();
+          })
+          .catch(function(err) {
+            state.docPasswordError = "❌ Erreur réseau : " + err.message;
+            render();
+          });
+        break;
+      }
+
       var dpKey = state.pendingDocKeyForPassword;
-      showToast("🔒 Vérification...");
       tryFetchVerificationDocument(dpKey, dpVal).then(function(res) {
         if (!res.success) {
           state.docPasswordError = res.error === "unauthorized"
@@ -35441,14 +35703,24 @@ root.addEventListener("input", function(e) {
     render();
     return;
   }
-  if (actionInput === "webhook-partner-url" || actionInput === "webhook-partner-token") {
+  if (actionInput === "webhook-partner-url") {
     var wp2 = state.webhookPartners.find(function(p) { return p.id === el.dataset.config; });
-    if (wp2) {
-      if (actionInput === "webhook-partner-url") wp2.url = el.value;
-      else wp2.authToken = el.value;
-      wp2.lastTestResult = null;
-      updateWebhookPartner(wp2);
-    }
+    if (wp2) { wp2.url = el.value; wp2.lastTestResult = null; updateWebhookPartner(wp2); }
+    return;
+  }
+  if (actionInput === "webhook-partner-token") {
+    if (!el.value) return; // champ vide = on ne touche pas au jeton actuel
+    var whId = el.dataset.config;
+    clearTimeout(window._webhookTokenTimer);
+    var whValueNow = el.value;
+    window._webhookTokenTimer = setTimeout(function() {
+      setPartnerSecret(whId, "authToken", whValueNow).then(function(ok) {
+        if (!ok) { showToast("❌ Une erreur est survenue, réessayez."); return; }
+        var wp3 = state.webhookPartners.find(function(p) { return p.id === whId; });
+        if (wp3) { wp3.hasAuthToken = true; wp3.lastTestResult = null; save(); }
+        showToast("✅ Jeton enregistré.");
+      });
+    }, 800);
     return;
   }
   if (actionInput === "dashboard-partner-username") {
@@ -35472,8 +35744,18 @@ root.addEventListener("input", function(e) {
     return;
   }
   if (actionInput === "api-partner-key") {
-    var ap2 = state.apiPartners.find(function(p) { return p.id === el.dataset.config; });
-    if (ap2) { ap2.apiKey = el.value; updateApiPartner(ap2); }
+    if (!el.value) return; // champ vide = on ne touche pas à la clé actuelle
+    var apId = el.dataset.config;
+    clearTimeout(window._apiKeyTimer);
+    var apValueNow = el.value;
+    window._apiKeyTimer = setTimeout(function() {
+      setPartnerSecret(apId, "apiKey", apValueNow).then(function(ok) {
+        if (!ok) { showToast("❌ Une erreur est survenue, réessayez."); return; }
+        var ap3 = state.apiPartners.find(function(p) { return p.id === apId; });
+        if (ap3) { ap3.hasApiKey = true; save(); }
+        showToast("✅ Clé enregistrée.");
+      });
+    }, 800);
     return;
   }
   if (actionInput === "platform-commission-amount") {
