@@ -5714,7 +5714,7 @@ function isVipAdActive(ad) {
 // a ses propres identifiants et ne voit jamais que ses propres colis
 // (filtrés par plateforme), sans que rien ne se mélange entre eux.
 function addDashboardPartner(platform) {
-  var partner = { id: uid(), platform: platform, enabled: true, username: "", password: "" };
+  var partner = { id: uid(), platform: platform, enabled: true, username: "", hasPassword: false };
   state.dashboardPartners.push(partner);
   save();
   saveDoc("dashboardPartners", partner);
@@ -28999,7 +28999,7 @@ function renderDashboardPartnersSection() {
     html += '<div style="display:flex;gap:8px;align-items:center;"><div class="toggle-switch ' + (d.enabled ? 'active' : '') + '" data-action="toggle-dashboard-partner" data-value="' + d.id + '"><div class="toggle-knob"></div></div><button class="link-btn" style="color:var(--danger);padding:2px;" data-action="remove-dashboard-partner" data-value="' + d.id + '"><i class="fa-solid fa-trash"></i></button></div>';
     html += '</div>';
     html += '<input class="input" id="dash-user-' + d.id + '" placeholder="Nom d\'utilisateur" value="' + esc(d.username) + '" data-action-input="dashboard-partner-username" data-config="' + d.id + '" style="margin-bottom:6px;" />';
-    html += '<div style="position:relative;"><input class="input" id="dash-pass-' + d.id + '" type="password" style="padding-right:44px;" placeholder="Mot de passe" value="' + esc(d.password) + '" data-action-input="dashboard-partner-password" data-config="' + d.id + '" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>';
+    html += '<div style="position:relative;"><input class="input" id="dash-pass-' + d.id + '" type="password" style="padding-right:44px;" placeholder="🔒 Protégé — tapez pour remplacer" value="" data-action-input="dashboard-partner-password" data-config="' + d.id + '" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>';
     if (d.enabled && d.username) {
       html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:8px;background:var(--bg-card);padding:6px;border-radius:6px;word-break:break-all;">Lien : ' + window.location.origin + window.location.pathname + '#partner-dashboard</div>';
     }
@@ -34097,17 +34097,24 @@ root.addEventListener("click", function(e) {
     }
     case "close-admin-parcel-detail": state.adminParcelDetailId = null; render(); break;
     case "submit-partner-gate": {
-      var matched = state.dashboardPartners.find(function(p) {
-        return p.enabled && p.username && p.username === state.partnerGateUser && p.password === state.partnerGatePass;
+      var candidateP = state.dashboardPartners.find(function(p) {
+        return p.enabled && p.username && p.username === state.partnerGateUser && p.hasPassword;
       });
-      if (matched) {
-        state.partnerDashboardUnlocked = true;
-        state.partnerDashboardMatchedId = matched.id;
-        state.partnerGateError = "";
-      } else {
+      if (!candidateP) {
         state.partnerGateError = "Identifiants incorrects.";
+        render();
+        break;
       }
-      render();
+      verifyAccountPassword("dashboard_partner_" + candidateP.id, state.partnerGatePass).then(function(match) {
+        if (match) {
+          state.partnerDashboardUnlocked = true;
+          state.partnerDashboardMatchedId = candidateP.id;
+          state.partnerGateError = "";
+        } else {
+          state.partnerGateError = "Identifiants incorrects.";
+        }
+        render();
+      });
       break;
     }
     case "logout-partner-dashboard": {
@@ -35444,13 +35451,24 @@ root.addEventListener("input", function(e) {
     }
     return;
   }
-  if (actionInput === "dashboard-partner-username" || actionInput === "dashboard-partner-password") {
+  if (actionInput === "dashboard-partner-username") {
     var dp2 = state.dashboardPartners.find(function(p) { return p.id === el.dataset.config; });
-    if (dp2) {
-      if (actionInput === "dashboard-partner-username") dp2.username = el.value;
-      else dp2.password = el.value;
-      updateDashboardPartner(dp2);
-    }
+    if (dp2) { dp2.username = el.value; updateDashboardPartner(dp2); }
+    return;
+  }
+  if (actionInput === "dashboard-partner-password") {
+    if (!el.value) return; // champ vide = on ne touche pas au mot de passe actuel
+    var dpId = el.dataset.config;
+    clearTimeout(window._dashPartnerPwTimer);
+    var dashPwValueNow = el.value;
+    window._dashPartnerPwTimer = setTimeout(function() {
+      setAccountPassword("dashboard_partner_" + dpId, dashPwValueNow).then(function(ok) {
+        if (!ok) { showToast("❌ Une erreur est survenue, réessayez."); return; }
+        var dp3 = state.dashboardPartners.find(function(p) { return p.id === dpId; });
+        if (dp3) { dp3.hasPassword = true; save(); }
+        showToast("✅ Mot de passe enregistré.");
+      });
+    }, 800);
     return;
   }
   if (actionInput === "api-partner-key") {
