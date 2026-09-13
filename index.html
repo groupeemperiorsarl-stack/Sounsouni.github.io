@@ -19478,7 +19478,78 @@ function render() {
   }
 }
 
+function renderBoostDebugPanel() {
+  var html = '<div style="padding:16px;font-family:monospace;font-size:12px;line-height:1.6;background:#fff;min-height:100vh;">';
+  html += '<div style="font-size:16px;font-weight:800;margin-bottom:14px;">🔍 Diagnostic articles boostés</div>';
+
+  html += '<div style="background:#eee;padding:10px;border-radius:8px;margin-bottom:12px;">';
+  html += '<b>État général</b><br>';
+  html += 'Produits chargés (state.products) : <b>' + state.products.length + '</b><br>';
+  html += 'Boosts chargés (state.boosts) : <b>' + state.boosts.length + '</b><br>';
+  html += 'Catégorie active : <b>' + esc(state.category) + '</b><br>';
+  html += 'Recherche active : <b>"' + esc(state.search) + '"</b><br>';
+  html += 'Tri actif (marketFilters.sortBy) : <b>' + esc(state.marketFilters.sortBy) + '</b><br>';
+  html += 'Filtre boutique : <b>' + (state.shopFilterSellerId || 'aucun') + '</b><br>';
+  html += 'Filtre secteur : <b>' + (state.sectorFilter || 'aucun') + '</b><br>';
+  html += 'En stock uniquement : <b>' + state.marketFilters.inStockOnly + '</b><br>';
+  html += 'En promo uniquement : <b>' + state.marketFilters.onSaleOnly + '</b><br>';
+  html += 'Prix min/max : <b>' + (state.marketFilters.priceMin || '-') + ' / ' + (state.marketFilters.priceMax || '-') + '</b>';
+  html += '</div>';
+
+  html += '<div style="background:#eee;padding:10px;border-radius:8px;margin-bottom:12px;">';
+  html += '<b>Tous les boosts trouvés</b><br>';
+  if (state.boosts.length === 0) {
+    html += '<span style="color:#c0272d;">Aucun boost du tout dans state.boosts !</span>';
+  }
+  for (var i = 0; i < state.boosts.length; i++) {
+    var b = state.boosts[i];
+    var active = isBoostActive(b);
+    html += '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #999;">';
+    html += 'Cible : ' + b.targetType + ' → ' + b.targetId + '<br>';
+    html += 'Statut : ' + esc(b.status) + (b.status === "actif" ? ' ✅' : ' ❌ (pas "actif")') + '<br>';
+    html += 'Expire : ' + (b.expiresAt ? new Date(b.expiresAt).toLocaleString('fr-FR') + (b.expiresAt > Date.now() ? ' ✅' : ' ❌ EXPIRÉ') : '<span style="color:#c0272d;">aucune date !</span>') + '<br>';
+    html += '<b>isBoostActive() : ' + (active ? '✅ true' : '❌ false') + '</b><br>';
+    var prodInState = null;
+    for (var j = 0; j < state.products.length; j++) { if (state.products[j].id === b.targetId) { prodInState = state.products[j]; break; } }
+    html += 'Produit chargé localement (state.products) : ' + (prodInState ? '✅ oui — "' + esc(prodInState.name) + '"' : '❌ NON, absent de state.products') + '<br>';
+    if (prodInState) {
+      html += 'isProductBoosted() pour ce produit : ' + (isProductBoosted(prodInState) ? '✅ true' : '❌ false') + '<br>';
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+
+  html += '<div style="background:#eee;padding:10px;border-radius:8px;margin-bottom:12px;">';
+  html += '<b>Résultat de filteredProducts() (ce que le Marché utilise vraiment)</b><br>';
+  try {
+    var filtered = filteredProducts(true);
+    html += 'Nombre total après filtre : <b>' + filtered.length + '</b><br>';
+    for (var k = 0; k < state.boosts.length; k++) {
+      var bb = state.boosts[k];
+      if (bb.targetType === "product") {
+        var pos = -1;
+        for (var m = 0; m < filtered.length; m++) { if (filtered[m].id === bb.targetId) { pos = m; break; } }
+        html += 'Position de "' + bb.targetId + '" dans la liste finale : ' + (pos === -1 ? '<span style="color:#c0272d;">❌ ABSENT de la liste finale</span>' : '<span style="color:#1a7d1a;">✅ position ' + pos + '</span>') + '<br>';
+      }
+    }
+  } catch (e) {
+    html += '<span style="color:#c0272d;">❌ ERREUR pendant filteredProducts() : ' + esc(e.message) + '</span>';
+  }
+  html += '</div>';
+
+  html += '<div style="font-size:11px;color:#666;margin-top:20px;">Fais une capture de TOUTE cette page (défile si besoin) et envoie-la.</div>';
+  html += '</div>';
+  return html;
+}
+
 function buildHTML() {
+  // Panneau de diagnostic temporaire — accessible en ajoutant #debugboost
+  // à la fin de l'adresse, pour voir EXACTEMENT ce que l'app voit sur CET
+  // appareil précis (au lieu de deviner depuis un environnement de test
+  // séparé qui ne peut pas reproduire les vraies données).
+  if (window.location.hash === "#debugboost") {
+    return renderBoostDebugPanel();
+  }
   // Fiche publique d'un Point de Retrait — consultable via un lien sans compte
   // ni connexion, envoyé par SMS au destinataire d'un colis. Vérifié en
   // tout premier, avant même d'exiger un profil.
@@ -36540,6 +36611,17 @@ var bootDone = false;
 
 function maybeSignalBootReady() {
   if (_generalSyncReady && _productsSyncReady) {
+    // Ne se déclenche qu'une seule fois, précisément au moment où les
+    // DEUX synchronisations (produits ET le reste, dont les boosts) sont
+    // enfin toutes les deux prêtes — avant ce correctif, ceci se
+    // déclenchait dès que les produits arrivaient seuls, sans garantie
+    // que la liste des boosts (chargée en parallèle, sans ordre garanti)
+    // soit déjà disponible, ce qui pouvait faire manquer silencieusement
+    // un article tout juste boosté.
+    if (!window._relevantProductsChecked) {
+      window._relevantProductsChecked = true;
+      ensureRelevantOldProductsLoaded();
+    }
     if (!bootDone) {
       bootDone = true;
       _splashAppDataReady = true;
@@ -36600,14 +36682,10 @@ function finishProductsBoot() {
   save();
   _productsSyncReady = true;
   maybeSignalBootReady();
-  // Un article boosté (payé par son vendeur pour être mis en avant) ou
-  // déjà acheté par la personne DOIT toujours pouvoir être proposé,
-  // même vieux, même hors du lot "récent" chargé au départ — sinon le
-  // système de points perdrait tout son sens pour ces cas précis.
-  ensureRelevantOldProductsLoaded();
   // Vérification globale des articles trop vieux (particuliers
   // uniquement) — déclenchée par N'IMPORTE QUI ouvrant l'app, pas
   // seulement le vendeur concerné (voir la note détaillée plus haut).
+  // Ne dépend que des produits déjà chargés, donc peut se faire ici.
   maybeRunGlobalStaleProductCheck();
 }
 
