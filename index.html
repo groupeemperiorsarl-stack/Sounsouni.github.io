@@ -7495,6 +7495,7 @@ function defaultState() {
     lightboxOpen: false,
     showDocPasswordModal: false,
     showAppDownloadContact: false,
+    showInstallGuide: false,
     pendingDocKeyForPassword: null,
     pendingPartnerSecretRequest: null,
     pendingFilatureLogRequest: null,
@@ -19349,16 +19350,20 @@ function render() {
   if (!window._skipScrollRestore) {
     window.scrollTo(0, pageScrollY);
   }
-  window._skipScrollRestore = false;
   var liveHeader = document.querySelector('.gems-header');
   if (liveHeader) {
     var mainEl = document.querySelector('main');
     if (mainEl) mainEl.style.paddingTop = (liveHeader.offsetHeight + 14) + 'px';
   }
-  if (modalScrollTop !== null) {
-    var newModalSheet = document.querySelector(".modal-sheet");
-    if (newModalSheet) newModalSheet.scrollTop = modalScrollTop;
+  var newModalSheet = document.querySelector(".modal-sheet");
+  if (newModalSheet) {
+    // Ne pas restaurer l'ancienne position ne suffit pas à elle seule à
+    // repartir en haut — Idiomorph réutilise le même élément, qui garde
+    // sinon sa position de défilement précédente telle quelle. On la
+    // remet donc explicitement à zéro dans ce cas.
+    newModalSheet.scrollTop = (window._skipScrollRestore || modalScrollTop === null) ? 0 : modalScrollTop;
   }
+  window._skipScrollRestore = false;
   if (videoState) {
     var newVideo = document.getElementById("product-detail-video");
     if (newVideo && newVideo.dataset.src === videoState.src) {
@@ -20845,7 +20850,9 @@ function renderProfileModal() {
 
   html += '<div class="profile-menu-list" style="margin-top:20px;">';
   html += '<button class="vendor-hub-card" data-action="open-user-guide" style="background:var(--bg-body);"><i class="fa-solid fa-book-open"></i><div><div class="vh-title">' + t("profile_user_guide") + '</div><div class="vh-sub">' + t("profile_user_guide_sub") + '</div></div><i class="fa-solid fa-chevron-right"></i></button>';
-  html += '<button class="vendor-hub-card" data-action="open-app-download-contact" style="background:var(--bg-body);"><i class="fa-solid fa-circle-info"></i><div><div class="vh-title">Télécharger l\'app & Nous contacter</div><div class="vh-sub">Application Android, adresse, téléphone, email</div></div><i class="fa-solid fa-chevron-right"></i></button>';
+  if (!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) {
+    html += '<button class="vendor-hub-card" data-action="open-app-download-contact" style="background:var(--bg-body);"><i class="fa-solid fa-circle-info"></i><div><div class="vh-title">Télécharger l\'app & Nous contacter</div><div class="vh-sub">Application Android, adresse, téléphone, email</div></div><i class="fa-solid fa-chevron-right"></i></button>';
+  }
   html += '<div class="vendor-hub-card" style="background:var(--bg-body);flex-direction:column;align-items:stretch;">';
   html += '<div style="display:flex;align-items:center;gap:14px;margin-bottom:10px;"><i class="fa-solid fa-globe" style="font-size:22px;color:var(--accent);width:26px;text-align:center;flex-shrink:0;"></i><div><div class="vh-title">' + t("profile_language") + '</div><div class="vh-sub">' + t("profile_language_sub") + '</div></div></div>';
   html += '<div style="display:flex;gap:8px;">';
@@ -22061,14 +22068,38 @@ function renderAppDownloadContactModal() {
   var isNativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
   var html = '<div class="modal-overlay" data-action="close-app-download-contact">';
   html += '<div class="modal-sheet">';
+
+  if (state.showInstallGuide) {
+    // Étape intermédiaire avant le vrai téléchargement — on rassure la
+    // personne d'abord, elle peut fermer directement si elle est pressée
+    // et connaît déjà la manipulation.
+    html += '<div class="section-title" style="margin-bottom:6px;"><i class="fa-brands fa-android" style="color:#3ddc84;"></i> Avant d\'installer</div>';
+    html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:16px;"><i class="fa-solid fa-shield-halved"></i> C\'est normal et sans danger — votre téléphone affiche ce message pour toute application qui n\'arrive pas du Play Store, même les plus sûres.</div>';
+    var installSteps = [
+      { text: "Une fois le fichier téléchargé, appuyez dessus pour l\'ouvrir." },
+      { text: "Un message apparaît : \"Installation bloquée\" ou \"Source inconnue\". Appuyez sur <b>Paramètres</b>." },
+      { text: "Activez l\'interrupteur <b>\"Autoriser depuis cette source\"</b> (uniquement pour cette fois, pour votre navigateur)." },
+      { text: "Revenez en arrière et appuyez de nouveau sur <b>Installer</b> — ça se termine normalement." }
+    ];
+    for (var isi = 0; isi < installSteps.length; isi++) {
+      html += '<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:14px;">';
+      html += '<div style="flex-shrink:0;width:26px;height:26px;border-radius:50%;background:var(--accent-glow);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;">' + (isi + 1) + '</div>';
+      html += '<div style="font-size:13px;line-height:1.5;padding-top:3px;">' + installSteps[isi].text + '</div>';
+      html += '</div>';
+    }
+    html += '<button class="btn-primary" style="width:100%;margin-top:6px;" data-action="close-install-guide-and-download"><i class="fa-solid fa-download"></i> J\'ai compris, télécharger</button>';
+    html += '<button class="link-btn" style="width:100%;text-align:center;margin-top:10px;font-size:12.5px;" data-action="close-install-guide-and-download">Je suis pressé(e), continuer directement</button>';
+    html += '</div></div>';
+    return html;
+  }
+
   html += '<div class="section-title" style="margin-bottom:14px;"><i class="fa-solid fa-circle-info"></i> Informations</div>';
 
   if (!isNativeApp) {
     html += '<div style="margin-bottom:20px;">';
     html += '<div style="font-weight:700;font-size:14px;margin-bottom:8px;"><i class="fa-brands fa-android" style="color:#3ddc84;"></i> Télécharger l\'application</div>';
     html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:10px;">Installez l\'app Android pour une meilleure expérience — plus rapide, notifications, et fonctionne même hors ligne.</div>';
-    html += '<a href="./app-release.apk" download="Sounsouni.apk" class="btn-primary" style="display:block;text-align:center;text-decoration:none;"><i class="fa-solid fa-download"></i> Télécharger l\'app Android</a>';
-    html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:8px;"><i class="fa-solid fa-triangle-exclamation"></i> Après le téléchargement, votre téléphone peut demander une autorisation ("Installer des apps inconnues") — c\'est normal, acceptez-la pour continuer l\'installation.</div>';
+    html += '<button class="btn-primary" style="width:100%;" data-action="show-install-guide"><i class="fa-solid fa-download"></i> Télécharger l\'app Android</button>';
     html += '</div>';
     html += '<div style="border-top:1px solid var(--border-color);margin-bottom:16px;"></div>';
   }
@@ -33154,12 +33185,12 @@ root.addEventListener("click", function(e) {
         save();
         saveDoc("accounts", state.profile);
       }
+      // render() restaure normalement la position de défilement d'avant
+      // (pour éviter les sauts intempestifs ailleurs dans l'app) —
+      // _skipScrollRestore désactive cette restauration juste cette
+      // fois-ci, réglé AVANT render() pour qu'il en tienne compte.
+      window._skipScrollRestore = true;
       render();
-      // Le défilement doit se faire APRÈS que la nouvelle fiche produit
-      // soit vraiment affichée à l'écran — sinon le navigateur pouvait
-      // "annuler" ce défilement dès que le contenu changeait juste après,
-      // donnant l'impression que rien ne s'était passé en cliquant depuis
-      // les recommandations en bas d'une autre fiche.
       window.scrollTo(0, 0);
       break;
     }
@@ -34812,7 +34843,22 @@ root.addEventListener("click", function(e) {
       break;
     }
     case "open-app-download-contact": state.showAppDownloadContact = true; render(); break;
-    case "close-app-download-contact": state.showAppDownloadContact = false; render(); break;
+    case "close-app-download-contact": state.showAppDownloadContact = false; state.showInstallGuide = false; render(); break;
+    case "show-install-guide": state.showInstallGuide = true; render(); break;
+    case "close-install-guide-and-download": {
+      state.showInstallGuide = false;
+      state.showAppDownloadContact = false;
+      render();
+      // Déclenché depuis le code plutôt qu'un vrai lien cliqué à la main —
+      // même résultat pour la personne, juste après avoir vu le guide.
+      var dlLink = document.createElement("a");
+      dlLink.href = "./app-release.apk";
+      dlLink.download = "Sounsouni.apk";
+      document.body.appendChild(dlLink);
+      dlLink.click();
+      document.body.removeChild(dlLink);
+      break;
+    }
     case "close-doc-password-modal": {
       state.showDocPasswordModal = false;
       state.pendingDocKeyForPassword = null;
