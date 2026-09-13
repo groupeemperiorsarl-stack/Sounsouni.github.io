@@ -1508,6 +1508,24 @@ button:active {
   margin-bottom: 5px;
 }
 
+.boost-badge-icon {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: linear-gradient(135deg, #f6dd8c, #d4af37);
+  border: 1.5px solid #b8901f;
+  color: #c0272d;
+  font-size: 11px;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+}
+
 .product-image {
   aspect-ratio: 2 / 3;
   height: auto;
@@ -6740,6 +6758,14 @@ function sortMarketWithAlgorithm(products) {
   }
 
   var result = [];
+  // Une insertion régulière tous les N articles normaux (comme au
+  // départ) — surtout, ça garantit qu'un article sponsorisé apparaît
+  // TÔT (vers la 10e position), peu importe la taille du catalogue.
+  // Le calcul par "espacement sur toute la liste" tenté juste avant
+  // avait un vrai défaut : avec un seul article sponsorisé au milieu
+  // d'un grand catalogue, il finissait pile au milieu de centaines
+  // d'articles — techniquement présent, mais enterré, donc invisible
+  // en pratique sans défiler énormément.
   for (var n = 0; n < normalSorted.length; n++) {
     result.push(normalSorted[n]);
     if ((n + 1) % cfg.boostInjectionRate === 0) result.push(pickBoostedItem());
@@ -16856,14 +16882,27 @@ function addReview(productId, rating, comment) {
   return true;
 }
 
-function getProductReviews(productId) {
-  var result = [];
+// Même principe que getAccountsIndex ci-dessus, pour les avis cette
+// fois — sans ça, chaque produit affiché reparcourait la totalité des
+// avis de toute l'app, deux fois de suite (note moyenne + nombre
+// d'avis), à chaque fois qu'un produit s'affichait.
+var _reviewsIndexCache = null;
+var _reviewsIndexCacheLen = -1;
+function getReviewsIndex() {
+  if (_reviewsIndexCache && _reviewsIndexCacheLen === state.reviews.length) return _reviewsIndexCache;
+  var idx = {};
   for (var i = 0; i < state.reviews.length; i++) {
-    if (state.reviews[i].productId === productId) {
-      result.push(state.reviews[i]);
-    }
+    var pid = state.reviews[i].productId;
+    if (!idx[pid]) idx[pid] = [];
+    idx[pid].push(state.reviews[i]);
   }
-  return result;
+  _reviewsIndexCache = idx;
+  _reviewsIndexCacheLen = state.reviews.length;
+  return idx;
+}
+
+function getProductReviews(productId) {
+  return getReviewsIndex()[productId] || [];
 }
 
 function getProductAverageRating(productId) {
@@ -18405,7 +18444,14 @@ function computeRelevanceScores(profile) {
 // (par défaut 30%) vient du réglage Admin.
 function interleaveDiscovery(sortedIds, allIds, discoveryRatio) {
   if (discoveryRatio <= 0 || sortedIds.length === 0) return sortedIds;
-  var discoveryPool = allIds.filter(function(id) { return sortedIds.indexOf(id) !== -1; });
+  // .indexOf() dans une boucle coûte cher à grande échelle (il reparcourt
+  // toute la liste à chaque appel) — remplacé par un vrai répertoire
+  // (objet), qui vérifie une présence instantanément au lieu de
+  // reparcourir. Avec 20 000 articles, ça faisait des centaines de
+  // millions de comparaisons rien que pour cette fonction.
+  var sortedIdsSet = {};
+  for (var sdi = 0; sdi < sortedIds.length; sdi++) sortedIdsSet[sortedIds[sdi]] = true;
+  var discoveryPool = allIds.filter(function(id) { return sortedIdsSet[id]; });
   // Bassin de découverte = même liste, mais mélangée — une position "hasard
   // parmi ce qui existe", pas nécessairement mal noté ou impertinent, juste
   // pas strictement trié par historique à cet endroit précis.
@@ -18428,17 +18474,18 @@ function interleaveDiscovery(sortedIds, allIds, discoveryRatio) {
     window._discoveryShuffleCache = { key: cacheKey, order: shuffled };
   }
   var result = [];
+  var resultSet = {};
   var discoveryIdx = 0;
   var everyNth = Math.max(2, Math.round(1 / discoveryRatio));
   for (var i = 0; i < sortedIds.length; i++) {
     // L'article normal d'abord — jamais sauté, jamais perdu.
-    if (result.indexOf(sortedIds[i]) === -1) result.push(sortedIds[i]);
+    if (!resultSet[sortedIds[i]]) { result.push(sortedIds[i]); resultSet[sortedIds[i]] = true; }
     // Puis, de temps en temps, un article "découverte" en plus — inséré,
     // jamais à la place d'un autre.
     if ((i + 1) % everyNth === 0) {
       while (discoveryIdx < shuffled.length) {
         var pick = shuffled[discoveryIdx++];
-        if (result.indexOf(pick) === -1) { result.push(pick); break; }
+        if (!resultSet[pick]) { result.push(pick); resultSet[pick] = true; break; }
       }
     }
   }
@@ -19238,6 +19285,14 @@ function setupMarketInfiniteScroll() {
     if (entries[0].isIntersecting && !window._marketLoadingMore) {
       window._marketLoadingMore = true;
       state.marketVisibleCount = (state.marketVisibleCount || MARKET_PAGE_SIZE) + MARKET_PAGE_SIZE;
+      // On ne redemande une nouvelle fournée à Supabase que si ce qui est
+      // déjà en mémoire commence vraiment à manquer (moins d'une page
+      // d'avance) — pas à chaque fois que 20 articles de plus s'affichent,
+      // sinon on redemanderait bien plus souvent que nécessaire alors que
+      // les 300 déjà chargés suffisent encore largement.
+      if (state.marketVisibleCount + MARKET_PAGE_SIZE >= state.products.length) {
+        loadMoreProductsIfNeeded();
+      }
       window._skipScrollRestore = true;
       render();
       window._marketLoadingMore = false;
@@ -22765,7 +22820,31 @@ function renderLoginBrandBanner() {
 // Recommandations liées à un contexte (catégorie ou secteur) — complète
 // avec les recommandations générales si pas assez d'articles dans ce
 // contexte précis, plutôt que d'afficher un bloc vide ou trop court.
+// Même principe que searchProductsOnServer, pour une catégorie précise
+// cette fois — sans ça, les recommandations "même catégorie" ou "même
+// secteur" ne pouvaient piocher que dans le lot déjà chargé, faible ou
+// vide pour une catégorie peu représentée parmi les articles récents.
+var _categoriesCheckedThisSession = {};
+function ensureCategoryProductsLoaded(category) {
+  if (!category || category === "Tout" || _categoriesCheckedThisSession[category] || _productsFullyLoaded) return;
+  _categoriesCheckedThisSession[category] = true;
+  sb.from("app_data").select("*").eq("collection", "products")
+    .eq("data->>category", category)
+    .limit(50)
+    .then(function(res) {
+      if (res.error || !res.data) { console.error("Échec du chargement de la catégorie côté serveur :", res.error); return; }
+      var existingIds = {};
+      for (var cpi = 0; cpi < state.products.length; cpi++) existingIds[state.products[cpi].id] = true;
+      var addedAny = false;
+      res.data.forEach(function(row) {
+        if (!existingIds[row.data.id]) { state.products.push(row.data); addedAny = true; }
+      });
+      if (addedAny) { save(); render(); }
+    });
+}
+
 function getContextualRecommendations(limit, category, sectorKey) {
+  if (category) ensureCategoryProductsLoaded(category);
   limit = limit || 9;
   function matchesContext(p) {
     if (category && category !== "Tout") return p.category === category;
@@ -23326,6 +23405,8 @@ function renderCategoryPage() {
 
 // ---------- PAGE DE RECHERCHE (recherche + filtre synchronisés) ----------
 function renderSearchPage() {
+  if (state.search.trim()) searchProductsOnServer(state.search);
+  if (state.category && state.category !== "Tout") ensureCategoryProductsLoaded(state.category);
   var products = filteredProducts();
 
   var html = renderMarketTopSection(true);
@@ -23566,6 +23647,7 @@ function renderShopPage() {
 
 
 function renderMarket() {
+  if (state.search.trim()) searchProductsOnServer(state.search);
   var products = filteredProducts(true);
   var recommendations = getRecommendations(4);
   var mcfg = getMarketConfig();
@@ -23718,6 +23800,23 @@ function renderFilterPanel() {
   return html;
 }
 
+// Répertoire des comptes par identifiant, construit une seule fois et
+// réutilisé tant que la liste des comptes n'a pas changé de taille —
+// évite de reparcourir TOUS les comptes à chaque produit affiché (avant
+// ce correctif : une vraie boucle complète par produit, par exemple 20
+// 000 comparaisons rien que pour vérifier le badge "compte vérifié" du
+// vendeur, répétée pour chaque article visible du marché).
+var _accountsIndexCache = null;
+var _accountsIndexCacheLen = -1;
+function getAccountsIndex() {
+  if (_accountsIndexCache && _accountsIndexCacheLen === state.accounts.length) return _accountsIndexCache;
+  var idx = {};
+  for (var i = 0; i < state.accounts.length; i++) idx[state.accounts[i].id] = state.accounts[i];
+  _accountsIndexCache = idx;
+  _accountsIndexCacheLen = state.accounts.length;
+  return idx;
+}
+
 function productCard(p, disableImageSwipe, compactBadgeLine, marketBadges) {
   var discount = discountPercent(p);
   var fav = isFavorite(p.id);
@@ -23727,7 +23826,7 @@ function productCard(p, disableImageSwipe, compactBadgeLine, marketBadges) {
   var mcfgCard = marketBadges ? getMarketConfig() : null;
   var sellerVerified = false;
   if (marketBadges) {
-    var sellerAcc = state.accounts.find(function(a) { return a.id === p.sellerId; });
+    var sellerAcc = getAccountsIndex()[p.sellerId];
     sellerVerified = mcfgCard.verifiedBadgeShowAll ? true : !!(sellerAcc && sellerAcc.verified);
   }
   var isNew = marketBadges && mcfgCard.showNewTag && (p.createdAt || 0) >= (Date.now() - newArrivalsDurationMs(mcfgCard));
@@ -23775,6 +23874,9 @@ function productCard(p, disableImageSwipe, compactBadgeLine, marketBadges) {
   if (discount) {
     html += '<span class="discount-corner">-' + discount + '%</span>';
   }
+  if (isProductBoosted(p) && !compactBadgeLine) {
+    html += '<span class="boost-badge-icon" title="Sponsorisé"><i class="fa-solid fa-rocket"></i></span>';
+  }
   if (p.itemType === "service") {
     html += '<span class="service-badge"><i class="fa-solid fa-calendar-check"></i> Service</span>';
   }
@@ -23789,9 +23891,6 @@ function productCard(p, disableImageSwipe, compactBadgeLine, marketBadges) {
   html += '<i class="fa-' + (fav ? 'solid' : 'regular') + ' fa-heart"></i>';
   html += '</button>';
   html += '<div class="product-body" data-action="open-product" data-value="' + p.id + '">';
-  if (isProductBoosted(p) && !compactBadgeLine) {
-    html += '<span class="boost-badge"><i class="fa-solid fa-rocket"></i> Sponsorisé</span>';
-  }
   if (compactBadgeLine) html += '<div class="na-line1">';
   html += '<div class="price-row">';
   if (marketBadges && p.oldPrice) {
@@ -24861,9 +24960,12 @@ function renderProductCategoryPicker() {
 // Grille des produits déjà publiés par le vendeur — réutilisée par la liste
 // et par l'écran de choix de catégorie.
 function renderMyProductsGrid(myProducts) {
+  var STALE_PRODUCT_DAYS = 30;
+  var staleThreshold = Date.now() - STALE_PRODUCT_DAYS * 24 * 60 * 60 * 1000;
   var html = '<div class="product-grid">';
   for (var o = 0; o < myProducts.length; o++) {
     var p = myProducts[o];
+    var isStale = (p.createdAt || 0) < staleThreshold;
     html += '<div class="product-card">';
     html += '<div class="product-image" style="height:110px;">';
     if (p.images && p.images.length > 0) {
@@ -24887,6 +24989,12 @@ function renderMyProductsGrid(myProducts) {
     }
     if (isProductBoosted(p)) {
       html += '<div class="boost-badge" style="margin-top:6px;"><i class="fa-solid fa-rocket"></i> ' + t("mpg_boost_active") + '</div>';
+    }
+    if (isStale) {
+      html += '<div style="margin-top:8px;background:rgba(246,195,67,0.15);border:1px solid var(--gold);border-radius:8px;padding:8px;">';
+      html += '<div style="font-size:11px;font-weight:700;margin-bottom:6px;"><i class="fa-solid fa-clock-rotate-left"></i> Cet article commence à dater — il risque de moins apparaître.</div>';
+      html += '<button class="btn-secondary" style="width:100%;padding:8px;font-size:12px;" data-action="refresh-old-product" data-value="' + p.id + '"><i class="fa-solid fa-arrows-rotate"></i> Toujours disponible ? Actualiser</button>';
+      html += '</div>';
     }
     // Retours des clients (j'aime/j'aime pas + avis) — visibles ici aussi
     // pour le vendeur, sans qu'il ait besoin d'aller voir sa fiche publique
@@ -29416,6 +29524,45 @@ function renderProductSectorDetails(p) {
   return html;
 }
 
+// Limite la part d'articles sponsorisés dans une liste — les non
+// sponsorisés remplissent en priorité. Si peu de non-sponsorisés
+// existent, la liste finale est plus courte plutôt que de combler avec
+// des sponsorisés au-delà du ratio autorisé — mieux vaut une section
+// plus courte et honnête qu'une section pleine mais artificiellement
+// gonflée de publicité.
+function capBoostedShare(candidates, limit, maxRatio) {
+  var nonBoosted = [], boosted = [];
+  for (var i = 0; i < candidates.length; i++) {
+    if (isProductBoosted(candidates[i])) boosted.push(candidates[i]); else nonBoosted.push(candidates[i]);
+  }
+  // On réserve d'abord une vraie place aux non-sponsorisés (75% de la
+  // limite par défaut), puis on complète avec des sponsorisés dans la
+  // part restante — ainsi, les sponsors gardent une vraie visibilité
+  // garantie quand il y a assez de contenu, sans jamais dominer la
+  // section quand le contenu organique vient à manquer.
+  var targetNonBoosted = Math.ceil(limit * (1 - maxRatio));
+  var keptNonBoosted = nonBoosted.slice(0, targetNonBoosted);
+  // S'il n'y a AUCUN article non sponsorisé pour ce contexte, le calcul
+  // de ratio tombe à zéro par construction (0 × n'importe quoi = 0) —
+  // ce qui masquait complètement les sponsorisés au lieu de les
+  // montrer, alors qu'il n'y a justement rien d'autre à montrer à leur
+  // place. Mieux vaut afficher les sponsorisés que rien du tout.
+  var maxBoostedAllowed = keptNonBoosted.length > 0
+    ? Math.floor(keptNonBoosted.length * maxRatio / (1 - maxRatio))
+    : Math.min(limit, boosted.length);
+  var remainingSlots = limit - keptNonBoosted.length;
+  var boostedToAdd = Math.min(maxBoostedAllowed, boosted.length, remainingSlots);
+  var result = keptNonBoosted.concat(boosted.slice(0, boostedToAdd));
+  // S'il reste de la place que les sponsorisés n'ont pas pu combler
+  // (pas assez de sponsors actifs), on la remplit avec d'autres
+  // non-sponsorisés plutôt que de raccourcir la liste sans raison.
+  if (result.length < limit && nonBoosted.length > keptNonBoosted.length) {
+    var extra = nonBoosted.slice(keptNonBoosted.length, keptNonBoosted.length + (limit - result.length));
+    result = result.concat(extra);
+  }
+  return result;
+}
+
 function renderProductModal() {
   var p = null;
   for (var i = 0; i < state.products.length; i++) {
@@ -29618,11 +29765,19 @@ function renderProductModal() {
   html += '</div>';
 
   // Produits recommandés (même catégorie que l'article consulté)
-  var related = [];
-  for (var rp = 0; rp < state.products.length && related.length < 30; rp++) {
+  ensureCategoryProductsLoaded(p.category);
+  var relatedCandidates = [];
+  for (var rp = 0; rp < state.products.length; rp++) {
     var rprod = state.products[rp];
-    if (rprod.id !== p.id && rprod.category === p.category) related.push(rprod);
+    if (rprod.id !== p.id && rprod.category === p.category) relatedCandidates.push(rprod);
   }
+  // Les vieux articles non sponsorisés d'une catégorie peuvent avoir été
+  // écartés du lot chargé (voir le nouveau système de chargement par
+  // lots), alors que les sponsorisés, eux, sont toujours garantis
+  // présents — sans cette limite, une catégorie où beaucoup de vendeurs
+  // boostent pouvait se retrouver avec une section "que du sponsorisé",
+  // ce qui n'est ni honnête ni agréable à voir.
+  var related = capBoostedShare(relatedCandidates, 30, 0.25);
   if (related.length > 0) {
     html += '<div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">';
     html += '<div style="font-weight:700;font-size:14px;margin-bottom:10px;"><i class="fa-solid fa-star"></i> Vous pourriez aussi aimer</div>';
@@ -29632,10 +29787,11 @@ function renderProductModal() {
   }
 
   // Produits du marché (échantillon général)
-  var marketSample = [];
-  for (var ms = 0; ms < state.products.length && marketSample.length < 30; ms++) {
-    if (state.products[ms].id !== p.id) marketSample.push(state.products[ms]);
+  var marketCandidates = [];
+  for (var ms = 0; ms < state.products.length; ms++) {
+    if (state.products[ms].id !== p.id) marketCandidates.push(state.products[ms]);
   }
+  var marketSample = capBoostedShare(marketCandidates, 30, 0.25);
   if (marketSample.length > 0) {
     html += '<div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">';
     html += '<div style="font-weight:700;font-size:14px;margin-bottom:10px;"><i class="fa-solid fa-shop"></i> Produits du marché</div>';
@@ -34638,6 +34794,25 @@ root.addEventListener("click", function(e) {
     }
     case "cancel-edit-product": cancelEditProduct(); break;
     case "delete-product": deleteProduct(value); break;
+    case "refresh-old-product": {
+      var stillInStock = confirm("Cet article est-il toujours disponible chez vous, en stock ?\n\nOK = Oui, actualiser mon article\nAnnuler = Non, je vais gérer le stock moi-même");
+      var refreshProd = null;
+      for (var rfi = 0; rfi < state.products.length; rfi++) { if (state.products[rfi].id === value) { refreshProd = state.products[rfi]; break; } }
+      if (!refreshProd) break;
+      if (stillInStock) {
+        // "createdAt" gouverne à la fois le badge "Nouveau" et le bonus de
+        // fraîcheur du système de points — le remettre à maintenant fait
+        // vraiment réapparaître l'article comme neuf, pas juste visuellement.
+        refreshProd.createdAt = Date.now();
+        save();
+        saveDoc("products", refreshProd); // met aussi à jour "updated_at", qui régit l'inclusion dans le lot récent
+        showToast("✅ Article actualisé — il réapparaît comme neuf.");
+      } else {
+        showToast("D'accord — pense à mettre le stock à jour depuis \"Modifier\" si besoin.");
+      }
+      render();
+      break;
+    }
     case "set-order-status": setOrderStatus(btn.dataset.order, value); break;
     case "seller-confirm-ready": sellerConfirmReady(btn.dataset.order); break;
     case "set-booking-status": {
@@ -36351,6 +36526,262 @@ setInterval(function() {
   clockEl.textContent = pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
 }, 1000);
 
+// ---------- Chargement des produits par lots (marché à grande échelle) ----------
+// Avant ce correctif : TOUS les produits de TOUTE l'app étaient
+// téléchargés par CHAQUE visiteur dès l'ouverture — plusieurs dizaines
+// de Mo à grande échelle (voir le test de charge). Maintenant : un
+// premier lot récent seulement, le reste arrive au fur et à mesure du
+// défilement ou d'une recherche.
+var PRODUCTS_BATCH_SIZE = 300;
+var _productsFullyLoaded = false;
+var _generalSyncReady = false;
+var _productsSyncReady = false;
+var bootDone = false;
+
+function maybeSignalBootReady() {
+  if (_generalSyncReady && _productsSyncReady) {
+    if (!bootDone) {
+      bootDone = true;
+      _splashAppDataReady = true;
+      trySplashFinish();
+    } else if (_splashFinished) {
+      render();
+    }
+  }
+}
+
+function syncProductsInitialBatch() {
+  sb.from("app_data").select("*").eq("collection", "products")
+    .order("updated_at", { ascending: false })
+    .limit(PRODUCTS_BATCH_SIZE)
+    .then(function(res) {
+      if (res.error || !res.data) {
+        // Filet de sécurité : si cette requête échoue pour une raison
+        // quelconque (syntaxe encore mal éprouvée, réseau...), on
+        // retombe sur l'ancien comportement (tout charger) plutôt que
+        // de laisser le marché vide pour de bon.
+        console.error("Échec du chargement initial des produits, repli sur le chargement complet :", res.error);
+        sb.from("app_data").select("*").eq("collection", "products").then(function(fallbackRes) {
+          if (!fallbackRes.error && fallbackRes.data) {
+            state.products = fallbackRes.data.map(function(row) { return row.data; });
+            _productsFullyLoaded = true;
+            finishProductsBoot();
+          } else {
+            finishProductsBoot(); // même en double échec, on ne bloque jamais le démarrage de l'app
+          }
+        });
+        return;
+      }
+      state.products = res.data.map(function(row) { return row.data; });
+      _productsFullyLoaded = res.data.length < PRODUCTS_BATCH_SIZE;
+      finishProductsBoot();
+    });
+}
+
+function finishProductsBoot() {
+  // Premier lancement de ce projet Supabase (table vide) : on y dépose
+  // le catalogue de démo, une seule fois. Déplacé ici (plutôt que dans
+  // la synchronisation générale) car c'est seulement à cet endroit
+  // qu'on sait vraiment si le catalogue est vide ou pas.
+  if (state.products.length === 0 && !localStorage.getItem("gems_seeded_v1")) {
+    localStorage.setItem("gems_seeded_v1", "1");
+    SEED_PRODUCTS.forEach(function(p) { saveDoc("products", p); });
+  }
+  // Nettoyage ponctuel des articles de démonstration — même logique
+  // qu'avant, juste déplacée ici pour la même raison.
+  if (!localStorage.getItem("gems_seed_cleanup_v1")) {
+    localStorage.setItem("gems_seed_cleanup_v1", "1");
+    var seedProductsStillPresent = state.products.filter(function(p) { return p.sellerId === "seed"; });
+    if (seedProductsStillPresent.length > 0) {
+      seedProductsStillPresent.forEach(function(p) { deleteRemoteDoc("products", p.id); });
+      state.products = state.products.filter(function(p) { return p.sellerId !== "seed"; });
+    }
+  }
+  save();
+  _productsSyncReady = true;
+  maybeSignalBootReady();
+  // Un article boosté (payé par son vendeur pour être mis en avant) ou
+  // déjà acheté par la personne DOIT toujours pouvoir être proposé,
+  // même vieux, même hors du lot "récent" chargé au départ — sinon le
+  // système de points perdrait tout son sens pour ces cas précis.
+  ensureRelevantOldProductsLoaded();
+  // Vérification globale des articles trop vieux (particuliers
+  // uniquement) — déclenchée par N'IMPORTE QUI ouvrant l'app, pas
+  // seulement le vendeur concerné (voir la note détaillée plus haut).
+  maybeRunGlobalStaleProductCheck();
+}
+
+// Va chercher, un par un, tout produit connu comme boosté ou déjà
+// acheté par cette personne, mais absent du lot déjà chargé — ces deux
+// listes (boosts, commandes) restent, elles, entièrement synchronisées
+// comme avant, donc on sait déjà QUELS identifiants chercher.
+// ---------- Actualisation obligatoire des articles (vendeurs particuliers) ----------
+// Ne concerne QUE les particuliers (sellerType === "particulier") — les
+// entreprises (restaurants, hôtels...) proposent un service permanent au
+// jour le jour, pas un stock d'articles ponctuels, donc ça n'a pas de
+// sens de les forcer à "actualiser" quoi que ce soit.
+//
+// Déclenché par N'IMPORTE QUI ouvrant l'app (comme checkStalePickupOrders
+// pour les colis non récupérés) — pas seulement le vendeur concerné.
+// Important avec notre chargement par lots : on interroge Supabase
+// DIRECTEMENT pour la liste des articles anciens, plutôt que de se fier à
+// ce qui est déjà chargé localement (qui peut être incomplet) — ainsi,
+// même si le vendeur concerné ne se reconnecte jamais, le premier autre
+// visiteur qui ouvre l'app quelque part déclenche quand même la
+// vérification pour lui.
+var STALE_WARNING_START_DAYS = 60;
+var STALE_DELETE_DAYS = 90;
+var STALE_WARNING_INTERVAL_DAYS = 4; // un rappel tous les 3-5 jours environ
+var STALE_CHECK_KEY = "gems_last_stale_check_v1";
+var STALE_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000; // au plus deux fois par jour et par appareil, peu importe le nombre de visiteurs
+
+function maybeRunGlobalStaleProductCheck() {
+  var last = localStorage.getItem(STALE_CHECK_KEY);
+  if (last && (Date.now() - parseInt(last, 10)) < STALE_CHECK_INTERVAL_MS) return;
+  localStorage.setItem(STALE_CHECK_KEY, String(Date.now()));
+  var now = Date.now();
+  var warnThreshold = now - STALE_WARNING_START_DAYS * 24 * 60 * 60 * 1000;
+  var deleteThreshold = now - STALE_DELETE_DAYS * 24 * 60 * 60 * 1000;
+  sb.from("app_data").select("*").eq("collection", "products")
+    .eq("data->>sellerType", "particulier")
+    .lt("data->>createdAt", String(warnThreshold))
+    .then(function(res) {
+      if (res.error || !res.data) { console.error("Échec de la vérification globale des articles anciens :", res.error); return; }
+      var touchedLocalIds = {};
+      res.data.forEach(function(row) {
+        var p = row.data;
+        var age = p.createdAt || 0;
+        if (age < deleteThreshold) {
+          deleteRemoteDoc("products", p.id);
+          addNotification("whatsapp", "🗑️ Votre article \"" + p.name + "\" a été supprimé automatiquement après 3 mois sans actualisation.", p.sellerId, "seller-products");
+          touchedLocalIds[p.id] = "delete";
+        } else {
+          var lastWarned = p.staleWarningLastSentAt || 0;
+          if (now - lastWarned > STALE_WARNING_INTERVAL_DAYS * 24 * 60 * 60 * 1000) {
+            var deleteDate = new Date(age + STALE_DELETE_DAYS * 24 * 60 * 60 * 1000);
+            addNotification("whatsapp", "⏳ Votre article \"" + p.name + "\" n'a pas été actualisé depuis longtemps. Il sera supprimé automatiquement le " + deleteDate.toLocaleDateString("fr-FR") + " si vous ne l'actualisez pas avant (bouton \"Toujours disponible ? Actualiser\" dans Mes produits).", p.sellerId, "seller-products");
+            p.staleWarningLastSentAt = now;
+            saveDoc("products", p);
+          }
+        }
+      });
+      // Répercute localement, au cas où certains de ces articles étaient
+      // déjà chargés dans CETTE session précise.
+      if (Object.keys(touchedLocalIds).length > 0) {
+        state.products = state.products.filter(function(pp) { return touchedLocalIds[pp.id] !== "delete"; });
+        save();
+        if (_splashFinished) render();
+      }
+    });
+}
+
+function ensureRelevantOldProductsLoaded() {
+  var neededIds = {};
+  var now = Date.now();
+  for (var bi = 0; bi < state.boosts.length; bi++) {
+    var b = state.boosts[bi];
+    if (isBoostActive(b) && b.targetType === "product") neededIds[b.targetId] = true;
+  }
+  if (state.profile) {
+    for (var oi = 0; oi < state.orders.length; oi++) {
+      var o = state.orders[oi];
+      if (o.buyerId !== state.profile.id) continue;
+      for (var ii = 0; ii < o.items.length; ii++) neededIds[o.items[ii].productId] = true;
+    }
+  }
+  var existingIds = {};
+  for (var pi = 0; pi < state.products.length; pi++) existingIds[state.products[pi].id] = true;
+  var missingIds = Object.keys(neededIds).filter(function(id) { return !existingIds[id]; });
+  // Un vendeur doit toujours voir la totalité de SES PROPRES articles dans
+  // "Mes produits", peu importe leur âge — sans ça, "Mes produits"
+  // paraîtrait incomplet, et la vérification d'actualisation/suppression
+  // automatique plus bas ne pourrait jamais voir ses vieux articles.
+  if (state.profile && (state.profile.role === "vendeur" || state.profile.shopName)) {
+    ensureAllSellerOwnProductsLoaded(missingIds);
+  } else if (missingIds.length > 0) {
+    fetchMissingProductIds(missingIds);
+  }
+}
+
+function fetchMissingProductIds(missingIds) {
+  if (missingIds.length === 0) return;
+  sb.from("app_data").select("*").eq("collection", "products").in("id", missingIds)
+    .then(function(res) {
+      if (res.error || !res.data) { console.error("Échec du chargement des produits boostés/déjà achetés :", res.error); return; }
+      res.data.forEach(function(row) { state.products.push(row.data); });
+      save();
+      if (_splashFinished) render();
+    });
+}
+
+// Charge TOUS les articles du vendeur connecté (même très vieux) —
+// nécessaire pour que "Mes produits" reste complet, et pour que la
+// vérification d'actualisation/suppression automatique (voir plus bas)
+// puisse voir l'intégralité de son catalogue, pas seulement le lot
+// récent déjà chargé pour tout le monde.
+function ensureAllSellerOwnProductsLoaded(alsoMissingIds) {
+  sb.from("app_data").select("*").eq("collection", "products").eq("data->>sellerId", state.profile.id)
+    .then(function(res) {
+      if (res.error || !res.data) {
+        console.error("Échec du chargement du catalogue complet du vendeur :", res.error);
+        fetchMissingProductIds(alsoMissingIds);
+        return;
+      }
+      var existingIds = {};
+      for (var pi = 0; pi < state.products.length; pi++) existingIds[state.products[pi].id] = true;
+      res.data.forEach(function(row) { if (!existingIds[row.data.id]) { state.products.push(row.data); existingIds[row.data.id] = true; } });
+      var stillMissing = alsoMissingIds.filter(function(id) { return !existingIds[id]; });
+      save();
+      if (_splashFinished) render();
+      fetchMissingProductIds(stillMissing);
+    });
+}
+
+// Appelée quand l'affichage du marché approche de la fin de ce qui est
+// déjà chargé localement (défilement infini) — va chercher le lot
+// suivant côté serveur, au lieu de supposer à tort que tout est déjà là.
+function loadMoreProductsIfNeeded() {
+  if (_productsFullyLoaded || window._loadingMoreProducts) return;
+  window._loadingMoreProducts = true;
+  sb.from("app_data").select("*").eq("collection", "products")
+    .order("updated_at", { ascending: false })
+    .range(state.products.length, state.products.length + PRODUCTS_BATCH_SIZE - 1)
+    .then(function(res) {
+      window._loadingMoreProducts = false;
+      if (res.error || !res.data) { console.error("Échec du chargement de produits supplémentaires :", res.error); return; }
+      var existingIds = {};
+      for (var epi = 0; epi < state.products.length; epi++) existingIds[state.products[epi].id] = true;
+      res.data.forEach(function(row) { if (!existingIds[row.data.id]) state.products.push(row.data); });
+      if (res.data.length < PRODUCTS_BATCH_SIZE) _productsFullyLoaded = true;
+      save();
+      render();
+    });
+}
+
+// Recherche : sans ça, chercher un article ne trouverait que parmi ce
+// qui est déjà chargé localement, jamais tout le catalogue. Interroge
+// directement Supabase, puis fusionne les résultats avec ce qui est
+// déjà en mémoire (jamais de doublon, jamais de perte).
+var _lastServerSearchTerm = null;
+function searchProductsOnServer(term) {
+  var trimmed = (term || "").trim();
+  if (!trimmed || trimmed === _lastServerSearchTerm || _productsFullyLoaded) return;
+  _lastServerSearchTerm = trimmed;
+  sb.from("app_data").select("*").eq("collection", "products")
+    .ilike("data->>name", "%" + trimmed + "%")
+    .limit(100)
+    .then(function(res) {
+      if (res.error || !res.data) { console.error("Échec de la recherche côté serveur :", res.error); return; }
+      var existingIds = {};
+      for (var spi = 0; spi < state.products.length; spi++) existingIds[state.products[spi].id] = true;
+      var addedAny = false;
+      res.data.forEach(function(row) {
+        if (!existingIds[row.data.id]) { state.products.push(row.data); addedAny = true; }
+      });
+      if (addedAny) { save(); render(); }
+    });
+}
+
 function trySplashFinish() {
   if (_splashFinished) return;
   if (_splashMinTimeDone && _splashAppDataReady) {
@@ -36389,7 +36820,7 @@ function bootAppWithLocalData() {
     _splashAppDataReady = true;
     trySplashFinish();
   } else {
-    var bootDone = false;
+    bootDone = false;
     var LAST_SYNC_KEY = "gems_last_sync_v2";
     var lastSyncAt = localStorage.getItem(LAST_SYNC_KEY);
     // Il faut les DEUX pour vraiment sauter la synchro complète — un
@@ -36437,7 +36868,11 @@ function bootAppWithLocalData() {
     // Supabase alors qu'elle n'a rien en mémoire pour les compléter, et le
     // marché reste vide.
     var needsFullSync = !lastSyncAt || !hasCachedData || (Date.now() - new Date(lastSyncAt).getTime()) > ONE_DAY_MS;
-    var query = sb.from("app_data").select("*");
+    // "products" est désormais chargé à part, par lots (voir
+    // syncProductsInitialBatch) — de très loin la plus grosse collection
+    // à grande échelle, elle ne doit plus jamais être téléchargée en bloc
+    // avec tout le reste pour chaque visiteur.
+    var query = sb.from("app_data").select("*").neq("collection", "products");
     if (!needsFullSync) query = query.gt("updated_at", lastSyncAt);
 
     query.then(function(res) {
@@ -36467,38 +36902,17 @@ function bootAppWithLocalData() {
         localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
         refreshProfileFromAccounts();
         save();
-
-        // Premier lancement de ce projet Supabase (table vide) : on y dépose
-        // le catalogue de démo, une seule fois.
-        if (state.products.length === 0 && !localStorage.getItem("gems_seeded_v1")) {
-          localStorage.setItem("gems_seeded_v1", "1");
-          SEED_PRODUCTS.forEach(function(p) { saveDoc("products", p); });
-        }
-
-        // Nettoyage — les articles de démonstration déposés au tout début
-        // (avant l'arrivée des premiers vrais vendeurs) ne servent plus à
-        // rien maintenant que le marché est actif, et les gardent aurait
-        // laissé les acheteurs les commander pour de vrai par erreur.
-        // Ponctuel, une seule fois : ils sont repérés par leur sellerId
-        // "seed", partagé par aucun vrai compte.
-        if (!localStorage.getItem("gems_seed_cleanup_v1")) {
-          localStorage.setItem("gems_seed_cleanup_v1", "1");
-          var seedProductsStillPresent = state.products.filter(function(p) { return p.sellerId === "seed"; });
-          if (seedProductsStillPresent.length > 0) {
-            seedProductsStillPresent.forEach(function(p) { deleteRemoteDoc("products", p.id); });
-            state.products = state.products.filter(function(p) { return p.sellerId !== "seed"; });
-            save();
-          }
-        }
       }
-      if (!bootDone) {
-        bootDone = true;
-        _splashAppDataReady = true;
-        trySplashFinish();
-      } else if (_splashFinished) {
-        render(); // les nouveautés reçues en fond doivent apparaître à l'écran
-      }
+      _generalSyncReady = true;
+      maybeSignalBootReady();
     });
+
+    // Chargement des produits, à part et par lots — voir la note plus
+    // haut sur pourquoi cette collection ne fait plus partie de la
+    // synchronisation générale. Lancé en parallèle de la requête
+    // ci-dessus (pas l'un après l'autre), pour ne pas ralentir le
+    // démarrage.
+    syncProductsInitialBatch();
 
     // Écoute en temps réel : chaque changement (venant de cet appareil ou
     // d'un autre) met à jour le bon tableau et redessine l'écran.
