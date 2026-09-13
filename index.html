@@ -7494,6 +7494,7 @@ function defaultState() {
     seasonalEffects: { enabled: false, effect: "none" },
     lightboxOpen: false,
     showDocPasswordModal: false,
+    showAppDownloadContact: false,
     pendingDocKeyForPassword: null,
     pendingPartnerSecretRequest: null,
     pendingFilatureLogRequest: null,
@@ -18981,6 +18982,7 @@ var OVERLAY_REGISTRY = [
   { key: "adminViewingConv", isOpen: function () { return !!state.adminViewingConversationId; }, close: function () { state.adminViewingConversationId = null; } },
   { key: "findAccount", isOpen: function () { return state.showFindAccountModal; }, close: function () { state.showFindAccountModal = false; } },
   { key: "docPassword", isOpen: function () { return state.showDocPasswordModal; }, close: function () { state.showDocPasswordModal = false; state.pendingDocKeyForPassword = null; } },
+  { key: "appDownloadContact", isOpen: function () { return state.showAppDownloadContact; }, close: function () { state.showAppDownloadContact = false; } },
   { key: "leavePublishConfirm", isOpen: function () { return state.showLeavePublishConfirm; }, close: function () { state.showLeavePublishConfirm = false; } },
   { key: "vendorConsentGate", isOpen: function () { return state.showVendorConsentGate; }, close: function () { state.showVendorConsentGate = false; } },
   { key: "addressModal", isOpen: function () { return state.showAddressModal; }, close: function () { state.showAddressModal = false; state.addressDraft = null; } },
@@ -19562,6 +19564,7 @@ function buildHTML() {
   if (state.toastMsg) html += '<div class="toast">' + esc(state.toastMsg) + '</div>';
   if (state.lightboxOpen) html += renderLightbox();
   if (state.showDocPasswordModal) html += renderDocPasswordModal();
+  if (state.showAppDownloadContact) html += renderAppDownloadContactModal();
   if (state.chatOpen) html += renderChatWidget();
   html += renderChatToggle();
   return html;
@@ -20842,6 +20845,7 @@ function renderProfileModal() {
 
   html += '<div class="profile-menu-list" style="margin-top:20px;">';
   html += '<button class="vendor-hub-card" data-action="open-user-guide" style="background:var(--bg-body);"><i class="fa-solid fa-book-open"></i><div><div class="vh-title">' + t("profile_user_guide") + '</div><div class="vh-sub">' + t("profile_user_guide_sub") + '</div></div><i class="fa-solid fa-chevron-right"></i></button>';
+  html += '<button class="vendor-hub-card" data-action="open-app-download-contact" style="background:var(--bg-body);"><i class="fa-solid fa-circle-info"></i><div><div class="vh-title">Télécharger l\'app & Nous contacter</div><div class="vh-sub">Application Android, adresse, téléphone, email</div></div><i class="fa-solid fa-chevron-right"></i></button>';
   html += '<div class="vendor-hub-card" style="background:var(--bg-body);flex-direction:column;align-items:stretch;">';
   html += '<div style="display:flex;align-items:center;gap:14px;margin-bottom:10px;"><i class="fa-solid fa-globe" style="font-size:22px;color:var(--accent);width:26px;text-align:center;flex-shrink:0;"></i><div><div class="vh-title">' + t("profile_language") + '</div><div class="vh-sub">' + t("profile_language_sub") + '</div></div></div>';
   html += '<div style="display:flex;gap:8px;">';
@@ -22051,6 +22055,34 @@ function fetchVerificationDocument(docKey) {
   state.showDocPasswordModal = true;
   render();
   return Promise.resolve({ success: false, error: "needs_prompt" });
+}
+
+function renderAppDownloadContactModal() {
+  var isNativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  var html = '<div class="modal-overlay" data-action="close-app-download-contact">';
+  html += '<div class="modal-sheet">';
+  html += '<div class="section-title" style="margin-bottom:14px;"><i class="fa-solid fa-circle-info"></i> Informations</div>';
+
+  if (!isNativeApp) {
+    html += '<div style="margin-bottom:20px;">';
+    html += '<div style="font-weight:700;font-size:14px;margin-bottom:8px;"><i class="fa-brands fa-android" style="color:#3ddc84;"></i> Télécharger l\'application</div>';
+    html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:10px;">Installez l\'app Android pour une meilleure expérience — plus rapide, notifications, et fonctionne même hors ligne.</div>';
+    html += '<a href="./app-release.apk" download="Sounsouni.apk" class="btn-primary" style="display:block;text-align:center;text-decoration:none;"><i class="fa-solid fa-download"></i> Télécharger l\'app Android</a>';
+    html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:8px;"><i class="fa-solid fa-triangle-exclamation"></i> Après le téléchargement, votre téléphone peut demander une autorisation ("Installer des apps inconnues") — c\'est normal, acceptez-la pour continuer l\'installation.</div>';
+    html += '</div>';
+    html += '<div style="border-top:1px solid var(--border-color);margin-bottom:16px;"></div>';
+  }
+
+  html += '<div>';
+  html += '<div style="font-weight:700;font-size:14px;margin-bottom:10px;"><i class="fa-solid fa-headset"></i> Contactez-nous</div>';
+  html += '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;"><i class="fa-solid fa-location-dot" style="color:var(--accent);width:18px;margin-top:2px;"></i><div style="font-size:13px;">Bamako, Soterco en face de Bougouba<br>Immeuble MH Logistique</div></div>';
+  html += '<a href="tel:+22393010123" style="display:flex;align-items:center;gap:10px;margin-bottom:12px;text-decoration:none;color:inherit;"><i class="fa-solid fa-phone" style="color:var(--accent);width:18px;"></i><div style="font-size:13px;">+223 93 01 01 23</div></a>';
+  html += '<a href="mailto:contact@sounsouni.pro" style="display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit;"><i class="fa-solid fa-envelope" style="color:var(--accent);width:18px;"></i><div style="font-size:13px;">contact@sounsouni.pro</div></a>';
+  html += '</div>';
+
+  html += '<button class="btn-secondary" style="width:100%;margin-top:20px;" data-action="close-app-download-contact">Fermer</button>';
+  html += '</div></div>';
+  return html;
 }
 
 function renderDocPasswordModal() {
@@ -29556,7 +29588,7 @@ function renderProductModal() {
 
   // Produits recommandés (même catégorie que l'article consulté)
   var related = [];
-  for (var rp = 0; rp < state.products.length && related.length < 6; rp++) {
+  for (var rp = 0; rp < state.products.length && related.length < 30; rp++) {
     var rprod = state.products[rp];
     if (rprod.id !== p.id && rprod.category === p.category) related.push(rprod);
   }
@@ -29570,7 +29602,7 @@ function renderProductModal() {
 
   // Produits du marché (échantillon général)
   var marketSample = [];
-  for (var ms = 0; ms < state.products.length && marketSample.length < 6; ms++) {
+  for (var ms = 0; ms < state.products.length && marketSample.length < 30; ms++) {
     if (state.products[ms].id !== p.id) marketSample.push(state.products[ms]);
   }
   if (marketSample.length > 0) {
@@ -33107,7 +33139,6 @@ root.addEventListener("click", function(e) {
       break;
     case "open-product": {
       state.detailProductId = value; state.activeImageIndex = 0; state.selectedQty = 1; state.selectedColor = null; state.selectedSize = null;
-      window.scrollTo(0, 0);
       state.filatureProductOpenedAt = Date.now();
       var filatureProd = null;
       for (var fpi = 0; fpi < state.products.length; fpi++) { if (state.products[fpi].id === value) { filatureProd = state.products[fpi]; break; } }
@@ -33124,6 +33155,12 @@ root.addEventListener("click", function(e) {
         saveDoc("accounts", state.profile);
       }
       render();
+      // Le défilement doit se faire APRÈS que la nouvelle fiche produit
+      // soit vraiment affichée à l'écran — sinon le navigateur pouvait
+      // "annuler" ce défilement dès que le contenu changeait juste après,
+      // donnant l'impression que rien ne s'était passé en cliquant depuis
+      // les recommandations en bas d'une autre fiche.
+      window.scrollTo(0, 0);
       break;
     }
     case "close-product": {
@@ -34774,6 +34811,8 @@ root.addEventListener("click", function(e) {
       fetchPartnerSecret(value, btn.dataset.secretType);
       break;
     }
+    case "open-app-download-contact": state.showAppDownloadContact = true; render(); break;
+    case "close-app-download-contact": state.showAppDownloadContact = false; render(); break;
     case "close-doc-password-modal": {
       state.showDocPasswordModal = false;
       state.pendingDocKeyForPassword = null;
