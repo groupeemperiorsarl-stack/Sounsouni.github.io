@@ -1511,7 +1511,7 @@ button:active {
 .boost-badge-icon {
   position: absolute;
   top: 8px;
-  right: 8px;
+  right: 41px;
   z-index: 4;
   display: inline-flex;
   align-items: center;
@@ -6757,18 +6757,24 @@ function sortMarketWithAlgorithm(products) {
     return pool[slotIdx % pool.length];
   }
 
-  var result = [];
-  // Une insertion régulière tous les N articles normaux (comme au
-  // départ) — surtout, ça garantit qu'un article sponsorisé apparaît
-  // TÔT (vers la 10e position), peu importe la taille du catalogue.
-  // Le calcul par "espacement sur toute la liste" tenté juste avant
-  // avait un vrai défaut : avec un seul article sponsorisé au milieu
-  // d'un grand catalogue, il finissait pile au milieu de centaines
-  // d'articles — techniquement présent, mais enterré, donc invisible
-  // en pratique sans défiler énormément.
-  for (var n = 0; n < normalSorted.length; n++) {
-    result.push(normalSorted[n]);
-    if ((n + 1) % cfg.boostInjectionRate === 0) result.push(pickBoostedItem());
+  // Chaque produit actuellement boosté DOIT apparaître au moins une fois
+  // à chaque ouverture du marché — avant ce correctif, le tirage
+  // cyclique (pickBoostedItem) pouvait, selon le nombre de sponsors
+  // actifs à un instant donné, en ignorer certains complètement sans
+  // que personne ne s'en aperçoive. Les articles ciblés (pertinents
+  // pour ce profil) passent en premier, mais aucun n'est jamais exclu.
+  var orderedBoosted = targetedBoosted.concat(boosted.filter(function(p) { return targetedBoosted.indexOf(p) === -1; }));
+  var boostedToShow = orderedBoosted.length;
+  var result = normalSorted.slice();
+  // Espacement régulier, mais qui se resserre automatiquement s'il y a
+  // beaucoup de sponsors actifs à caser — sans ça, avec un catalogue
+  // court et beaucoup de sponsors, certains se seraient encore
+  // retrouvés au-delà de la fin de la liste.
+  var spacing = Math.max(1, Math.min(cfg.boostInjectionRate, Math.floor(result.length / (boostedToShow + 1)) || 1));
+  var insertPos = spacing;
+  for (var bi = 0; bi < boostedToShow; bi++) {
+    result.splice(Math.min(insertPos, result.length), 0, orderedBoosted[bi]);
+    insertPos += spacing + 1;
   }
   return result;
 }
@@ -23717,6 +23723,26 @@ function renderShopPage() {
 }
 
 
+// Mélange stable et reproductible : le même "cycle" redonne toujours le
+// même ordre (pas un nouveau tirage à chaque rendu, ce qui donnerait
+// l'impression que les articles sautent dans tous les sens pendant
+// qu'on regarde) — mais un cycle différent donne un ordre différent.
+// Utilisé pour reproposer un petit catalogue déjà entièrement défilé,
+// sans jamais répéter deux fois le même enchaînement.
+function seededShuffle(arr, seed) {
+  var result = arr.slice();
+  var s = seed || 1;
+  function nextRand() {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  }
+  for (var i = result.length - 1; i > 0; i--) {
+    var j = Math.floor(nextRand() * (i + 1));
+    var tmp = result[i]; result[i] = result[j]; result[j] = tmp;
+  }
+  return result;
+}
+
 function renderMarket() {
   if (state.search.trim()) searchProductsOnServer(state.search);
   var products = filteredProducts(true);
@@ -23785,7 +23811,25 @@ function renderMarket() {
     // automatiquement au fur et à mesure qu'on approche du bas, via
     // l'observateur mis en place par setupMarketInfiniteScroll().
     if (!state.marketVisibleCount) state.marketVisibleCount = MARKET_PAGE_SIZE;
-    var visibleProducts = products.slice(0, state.marketVisibleCount);
+    // Catalogue encore petit (moins de 300 articles) : plutôt que de
+    // s'arrêter net une fois tout défilé, on repropose les mêmes
+    // articles dans un ORDRE MÉLANGÉ différent à chaque cycle — jamais
+    // deux fois le même enchaînement — jusqu'à 4 fois maximum. Une fois
+    // le catalogue assez grand, ce mécanisme se désactive tout seul et
+    // on repasse au système normal (du vrai contenu à chaque défilement).
+    var MARKET_REPEAT_THRESHOLD = 300;
+    var MARKET_MAX_REPEATS = 4;
+    var visibleProducts;
+    if (products.length > 0 && products.length < MARKET_REPEAT_THRESHOLD && state.marketVisibleCount > products.length) {
+      var extended = products.slice();
+      var cyclesNeeded = Math.min(MARKET_MAX_REPEATS, Math.ceil(state.marketVisibleCount / products.length) - 1);
+      for (var cyc = 1; cyc <= cyclesNeeded; cyc++) {
+        extended = extended.concat(seededShuffle(products, cyc));
+      }
+      visibleProducts = extended.slice(0, Math.min(state.marketVisibleCount, products.length * (MARKET_MAX_REPEATS + 1)));
+    } else {
+      visibleProducts = products.slice(0, state.marketVisibleCount);
+    }
     var REPEAT_EVERY = 24; // la recommandation réapparaît tous les 20-30 articles parcourus (multiple pair)
     var INLINE_RECO_TITLES = ["★ Recommandé pour vous", "🔥 Les tendances du moment", "🏷️ Meilleures affaires"];
     var inlineRecoBlockCount = 0;
@@ -29623,7 +29667,15 @@ function capBoostedShare(candidates, limit, maxRatio) {
     : Math.min(limit, boosted.length);
   var remainingSlots = limit - keptNonBoosted.length;
   var boostedToAdd = Math.min(maxBoostedAllowed, boosted.length, remainingSlots);
-  var result = keptNonBoosted.concat(boosted.slice(0, boostedToAdd));
+  // Rotation dans le temps (toutes les 5 minutes, même principe que la
+  // "découverte" du marché) — sans ça, s'il y a plus de sponsors actifs
+  // que de places disponibles, c'était TOUJOURS les mêmes premiers
+  // rencontrés dans le tableau qui passaient, et les autres (comme
+  // "Drap d'examen" dans le cas rapporté) ne s'affichaient jamais nulle
+  // part dans cette section, même actifs et bien chargés.
+  var rotationSlot = boosted.length > 0 ? Math.floor(Date.now() / (5 * 60 * 1000)) % boosted.length : 0;
+  var rotatedBoosted = boosted.slice(rotationSlot).concat(boosted.slice(0, rotationSlot));
+  var result = keptNonBoosted.concat(rotatedBoosted.slice(0, boostedToAdd));
   // S'il reste de la place que les sponsorisés n'ont pas pu combler
   // (pas assez de sponsors actifs), on la remplit avec d'autres
   // non-sponsorisés plutôt que de raccourcir la liste sans raison.
