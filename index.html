@@ -7527,6 +7527,7 @@ function defaultState() {
     lightboxOpen: false,
     showDocPasswordModal: false,
     showAppDownloadContact: false,
+    showDownloadNudge: false,
     showInstallGuide: false,
     pendingDocKeyForPassword: null,
     pendingPartnerSecretRequest: null,
@@ -19699,6 +19700,7 @@ function buildHTML() {
   if (state.showMascotHint && state.view === "market" && !state.activeTour) html += renderMascotHint();
   if (state.activeTour) html += renderTourOverlay();
   if (state.toastMsg) html += '<div class="toast">' + esc(state.toastMsg) + '</div>';
+  if (state.showDownloadNudge) html += renderDownloadNudge();
   if (state.lightboxOpen) html += renderLightbox();
   if (state.showDocPasswordModal) html += renderDocPasswordModal();
   if (state.showAppDownloadContact) html += renderAppDownloadContactModal();
@@ -22196,6 +22198,19 @@ function fetchVerificationDocument(docKey) {
   return Promise.resolve({ success: false, error: "needs_prompt" });
 }
 
+// Petit bandeau non bloquant (pas une fenêtre par-dessus tout, juste un
+// rappel discret en bas de l'écran) — la personne peut continuer à
+// utiliser le site normalement pendant qu'il est affiché.
+function renderDownloadNudge() {
+  var html = '<div style="position:fixed;left:12px;right:12px;bottom:16px;z-index:60;background:var(--bg-card);border:1px solid var(--border-color);border-radius:14px;padding:12px 14px;box-shadow:0 4px 16px rgba(0,0,0,0.2);display:flex;align-items:center;gap:10px;">';
+  html += '<i class="fa-brands fa-android" style="color:#3ddc84;font-size:20px;"></i>';
+  html += '<div style="flex:1;font-size:12.5px;line-height:1.3;">Profitez d\'une meilleure expérience — <b>téléchargez l\'app Android</b></div>';
+  html += '<button data-action="open-app-download-contact" style="background:var(--accent);color:white;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;white-space:nowrap;">Voir</button>';
+  html += '<button data-action="close-download-nudge" style="background:transparent;border:none;color:var(--text-dim);font-size:16px;padding:2px 4px;">✕</button>';
+  html += '</div>';
+  return html;
+}
+
 function renderAppDownloadContactModal() {
   var isNativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
   var html = '<div class="modal-overlay" data-action="close-app-download-contact">';
@@ -22232,6 +22247,7 @@ function renderAppDownloadContactModal() {
     html += '<div style="font-weight:700;font-size:14px;margin-bottom:8px;"><i class="fa-brands fa-android" style="color:#3ddc84;"></i> Télécharger l\'application</div>';
     html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:10px;">Installez l\'app Android pour une meilleure expérience — plus rapide, notifications, et fonctionne même hors ligne.</div>';
     html += '<button class="btn-primary" style="width:100%;" data-action="show-install-guide"><i class="fa-solid fa-download"></i> Télécharger l\'app Android</button>';
+    html += '<div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--text-dim);"><i class="fa-brands fa-apple"></i> iOS — bientôt disponible</div>';
     html += '</div>';
     html += '<div style="border-top:1px solid var(--border-color);margin-bottom:16px;"></div>';
   }
@@ -22239,7 +22255,7 @@ function renderAppDownloadContactModal() {
   html += '<div>';
   html += '<div style="font-weight:700;font-size:14px;margin-bottom:10px;"><i class="fa-solid fa-headset"></i> Contactez-nous</div>';
   html += '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;"><i class="fa-solid fa-location-dot" style="color:var(--accent);width:18px;margin-top:2px;"></i><div style="font-size:13px;">Bamako, Soterco en face de Bougouba<br>Immeuble MH Logistique</div></div>';
-  html += '<a href="tel:+22393010123" style="display:flex;align-items:center;gap:10px;margin-bottom:12px;text-decoration:none;color:inherit;"><i class="fa-solid fa-phone" style="color:var(--accent);width:18px;"></i><div style="font-size:13px;">+223 93 01 01 23</div></a>';
+  html += '<a href="https://wa.me/22393010123" target="_blank" style="display:flex;align-items:center;gap:10px;margin-bottom:12px;text-decoration:none;color:inherit;"><i class="fa-brands fa-whatsapp" style="color:#25D366;width:18px;font-size:16px;"></i><div style="font-size:13px;">Cliquez ici pour nous contacter sur <span style="color:#25D366;font-weight:600;">WhatsApp</span></div></a>';
   html += '<a href="mailto:contact@sounsouni.pro" style="display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit;"><i class="fa-solid fa-envelope" style="color:var(--accent);width:18px;"></i><div style="font-size:13px;">contact@sounsouni.pro</div></a>';
   html += '</div>';
 
@@ -35140,7 +35156,8 @@ root.addEventListener("click", function(e) {
       fetchPartnerSecret(value, btn.dataset.secretType);
       break;
     }
-    case "open-app-download-contact": state.showAppDownloadContact = true; render(); break;
+    case "open-app-download-contact": state.showAppDownloadContact = true; state.showDownloadNudge = false; render(); break;
+    case "close-download-nudge": state.showDownloadNudge = false; render(); break;
     case "close-app-download-contact": state.showAppDownloadContact = false; state.showInstallGuide = false; render(); break;
     case "show-install-guide": state.showInstallGuide = true; render(); break;
     case "close-install-guide-and-download": {
@@ -37128,6 +37145,32 @@ loadStateAsync().then(function(loaded) {
   console.error("Chargement de l'état local impossible :", e);
   bootAppWithLocalData(); // on démarre quand même, avec les valeurs par défaut
 });
+
+// ---------- Petit rappel périodique pour télécharger l'app (web uniquement) ----------
+// Jamais dans l'app installée elle-même (vérifié à chaque déclenchement,
+// pas seulement au démarrage, au cas où Capacitor mettrait un peu de
+// temps à s'annoncer). Utilise sessionStorage (pas localStorage) : le
+// compteur repart donc naturellement à zéro à chaque fois que la
+// personne revient sur le site après avoir été absente un moment —
+// pas besoin de "se reconnecter" avec un mot de passe pour ça.
+var DOWNLOAD_NUDGE_FIRST_DELAY_MS = 10 * 1000; // le tout premier, rapide : 10 secondes après l'ouverture
+var DOWNLOAD_NUDGE_INTERVAL_MS = 7 * 60 * 1000; // les suivants, plus espacés : environ toutes les 7 minutes
+var DOWNLOAD_NUDGE_MAX_SHOWS = 3;
+function triggerDownloadNudgeIfAllowed() {
+  var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  if (isNative) return;
+  var shownCount = parseInt(sessionStorage.getItem("sounsouni_dl_nudge_count") || "0", 10);
+  if (shownCount >= DOWNLOAD_NUDGE_MAX_SHOWS) return;
+  if (state.showDownloadNudge) return; // déjà affiché, ne pas empiler
+  sessionStorage.setItem("sounsouni_dl_nudge_count", String(shownCount + 1));
+  state.showDownloadNudge = true;
+  render();
+}
+function scheduleDownloadNudge() {
+  setTimeout(triggerDownloadNudgeIfAllowed, DOWNLOAD_NUDGE_FIRST_DELAY_MS);
+  setInterval(triggerDownloadNudgeIfAllowed, DOWNLOAD_NUDGE_INTERVAL_MS);
+}
+scheduleDownloadNudge();
 
 // Décide si un changement reçu du serveur mérite un bip + une notification
 // système sur CET appareil — c'est-à-dire : ça concerne le compte
