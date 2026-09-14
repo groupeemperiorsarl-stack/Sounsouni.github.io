@@ -7684,6 +7684,13 @@ function defaultState() {
     // plateforme, que ce soit avec ou sans parrainage.
     totalCommissionRate: 0.07,
     affiliateCommission: 0.05,
+    // Jeton signé délivré par verify-login après un mot de passe correct
+    // — à présenter (en-tête X-Session-Token) pour toute action sensible
+    // (commandes, portefeuille, changement de mot de passe). Jeton
+    // séparé, à très courte durée, pour le seul cas "mot de passe
+    // oublié" : passwordResetToken, effacé dès qu'il a servi une fois.
+    sessionToken: null,
+    passwordResetToken: null,
   };
 }
 
@@ -14998,17 +15005,17 @@ function placeOrder() {
   }
 
   if (form.payment === "portefeuille") {
-    // Débit réel et immédiat — double vérification du solde ici (même si
-    // le bouton est déjà désactivé côté affichage quand le solde est
-    // insuffisant), pour ne jamais créer de commande sans que l'argent
-    // ait réellement été prélevé.
-    var walletOk = debitWallet(state.profile.phone, orderDraft.total, "achat_boutique", { orderId: orderDraft.id, accountName: "Commande #" + orderId.slice(-5).toUpperCase() });
-    if (!walletOk) {
-      showToast(t("toast_wallet_insufficient_order"));
-      return;
-    }
-    orderDraft.paymentStatus = "paid";
-    finalizeOrder(orderDraft, { simulated: false });
+    // Débit réel — le serveur relit le vrai solde et refuse si
+    // insuffisant, on ne finalise la commande que si le débit a
+    // vraiment réussi.
+    callWalletOperation({ operation: "debit", amount: orderDraft.total, reason: "achat_boutique", meta: { orderId: orderDraft.id, accountName: "Commande #" + orderId.slice(-5).toUpperCase() } }).then(function(res) {
+      if (!res.success) {
+        showToast(t("toast_wallet_insufficient_order"));
+        return;
+      }
+      orderDraft.paymentStatus = "paid";
+      finalizeOrder(orderDraft, { simulated: false });
+    });
     return;
   }
 
@@ -15126,19 +15133,17 @@ function finalizeOrder(order, opts) {
     addNotification("sms", "🔑 Code OTP : " + order.otp + " — Ne le partagez pas !", order.buyerId, "orders");
   }
   
-  var commissionResult = attributeCommission(order.id, order.buyerId, order.subtotal);
-  // On garde le détail de la commission directement sur la commande — c'est
-  // ce qui permet au tableau de bord Admin de reconstruire un vrai détail
-  // vente par vente, sans devoir redeviner après coup qui a été parrainé.
-  order.commissionRate = commissionResult.totalRate;
-  order.commissionMode = getCommissionConfig().commissionMode;
-  order.commissionTotal = order.subtotal * commissionResult.totalRate;
-  order.affiliateId = commissionResult.affiliateId || null;
-  order.affiliateAmount = commissionResult.amount || 0;
-  order.platformCommissionAmount = commissionResult.platformAmount;
-  if (commissionResult.affiliateId) {
-    addNotification("whatsapp", "💰 Commission de parrainage : +" + money(commissionResult.amount) + " créditée.", commissionResult.affiliateId);
-  }
+  // Les champs financiers (taux, montants, parrain identifié) ne sont
+  // plus calculés ici : order-write les calcule et les vérifie lui-même,
+  // à partir du code de parrainage brut transmis ci-dessous — jamais
+  // depuis un montant que ce téléphone aurait calculé.
+  order.commissionRate = null;
+  order.commissionMode = null;
+  order.commissionTotal = null;
+  order.affiliateId = null;
+  order.affiliateAmount = null;
+  order.affiliateCommissionCredited = false;
+  order.platformCommissionAmount = null;
   
   var sellers = {};
   for (var k = 0; k < order.items.length; k++) {
@@ -15187,55 +15192,15 @@ function finalizeOrder(order, opts) {
 // après la commission — appelée depuis les trois chemins qui peuvent
 // marquer une commande "Livrée" (statut manuel, code OTP, retrait en
 // point de retrait), pour ne jamais en oublier un.
-function creditSellersForOrder(order) {
-  var sellerPortions = {};
-  var sellerItemNames = {};
-  for (var oi = 0; oi < order.items.length; oi++) {
-    var oit = order.items[oi];
-    sellerPortions[oit.sellerId] = (sellerPortions[oit.sellerId] || 0) + oit.price * oit.qty;
-    sellerItemNames[oit.sellerId] = sellerItemNames[oit.sellerId] || [];
-    sellerItemNames[oit.sellerId].push(oit.name);
-  }
-  var commissionCfgAtCredit = getCommissionConfig();
-  var orderRate = order.commissionRate != null ? order.commissionRate : commissionCfgAtCredit.totalCommissionRate;
-  var orderCommissionMode = order.commissionMode || commissionCfgAtCredit.commissionMode;
-  for (var sellerIdKey in sellerPortions) {
-    var sellerAcc = null;
-    for (var sai3 = 0; sai3 < state.accounts.length; sai3++) {
-      if (state.accounts[sai3].id === sellerIdKey) { sellerAcc = state.accounts[sai3]; break; }
-    }
-    if (!sellerAcc || !sellerAcc.phone) continue;
-    // Mode "deduct" (historique) : l'acheteur a payé le prix affiché, le
-    // vendeur reçoit (prix - commission). Mode "add" : la commission était
-    // déjà incluse dans le prix payé par l'acheteur — le vendeur reçoit
-    // donc l'intégralité de sa part, sans nouvelle déduction (sinon la
-    // commission serait prélevée deux fois).
-    // Un vendeur "international" ne subit AUCUNE commission automatique
-    // ici — son côté financier reste volontairement manuel (coordination
-    // avec son agent de sourcing), pas un prélèvement par l'app à chaque
-    // commande. Il reçoit donc l'intégralité de sa part, sans déduction,
-    // en attendant qu'un mécanisme dédié à son cas soit mis en place.
-    var netAmount = (sellerAcc.sellerType === "international" || orderCommissionMode === "add")
-      ? sellerPortions[sellerIdKey]
-      : sellerPortions[sellerIdKey] * (1 - orderRate);
-    // Avant, "accountName" affichait le nom du VENDEUR lui-même (donc "reçu
-    // de vous-même") — corrigé pour montrer ce qui compte vraiment : quel
-    // acheteur, pour quel(s) article(s), sur quelle commande.
-    var itemNames = sellerItemNames[sellerIdKey];
-    var itemSummary = itemNames.slice(0, 2).join(", ") + (itemNames.length > 2 ? "…" : "");
-    // L'argent est réel seulement s'il est passé par un vrai mouvement
-    // électronique DANS l'app (Portefeuille de l'acheteur, ou plus tard
-    // mobile money) — dans ce cas le vendeur reçoit directement de l'argent
-    // réel. Pour "paiement à la livraison" (espèces, hors de l'app), ce
-    // n'est encore qu'une comptabilité : ça va dans "Gains", pas dans le
-    // Portefeuille, tant que l'administration ne l'a pas réellement versé.
-    var isElectronicPayment = order.payment === "portefeuille" || order.payment === "orange_money" || order.payment === "moov_money";
-    if (isElectronicPayment) {
-      creditWallet(sellerAcc.phone, netAmount, "vente", { accountId: order.buyerId, accountName: (order.buyerName || "Un acheteur") + " — " + itemSummary, orderId: order.id });
-    } else {
-      creditEarnings(sellerAcc.phone, netAmount, "vente", { accountId: order.buyerId, accountName: (order.buyerName || "Un acheteur") + " — " + itemSummary, orderId: order.id });
-    }
-  }
+// Règle le paiement des vendeurs ET du parrain éventuel sur une commande
+// livrée — désormais calculé et vérifié ENTIÈREMENT côté serveur (voir
+// wallet-write, opération "settle_order_payouts") : ce téléphone ne fait
+// que déclencher la vérification, il ne calcule et n'envoie plus aucun
+// montant lui-même.
+function settleOrderPayouts(order) {
+  callWalletOperation({ operation: "settle_order_payouts", orderId: order.id }).then(function(res) {
+    if (!res.success) console.error("Erreur settle_order_payouts :", res.error);
+  });
 }
 
 function setOrderStatus(orderId, status) {
@@ -15263,7 +15228,7 @@ function setOrderStatus(orderId, status) {
   if (status === "Livrée") {
     order.deliveredAt = Date.now();
     addNotification("whatsapp", "✅ Commande #" + orderId.slice(-5).toUpperCase() + " livrée !", order.buyerId, "orders");
-    creditSellersForOrder(order);
+    settleOrderPayouts(order);
   }
   if (state.profile.role === "livreur" && !order.livreurId) {
     order.livreurId = state.profile.id;
@@ -15484,7 +15449,7 @@ function verifyDeliveryOTP(orderId, inputOTP) {
   if (order.otp === inputOTP) {
     logOrderStatusChange(order, "Livrée");
     order.deliveredAt = Date.now();
-    creditSellersForOrder(order);
+    settleOrderPayouts(order);
     save();
     secureOrderSaveDoc(order);
     render();
@@ -15539,7 +15504,7 @@ function confirmRelaisRetrait(orderId, inputCode) {
   if (order.codeRetrait === inputCode) {
     logOrderStatusChange(order, "Livrée");
     order.deliveredAt = Date.now();
-    creditSellersForOrder(order);
+    settleOrderPayouts(order);
     save();
     secureOrderSaveDoc(order);
     render();
@@ -16297,8 +16262,8 @@ function secureOrderSaveDoc(order) {
   }
   fetch(supabaseConfig.url + "/functions/v1/order-write", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
-    body: JSON.stringify({ docId: order.id, data: order })
+    headers: authHeaders(),
+    body: JSON.stringify({ docId: order.id, data: order, referralCode: localStorage.getItem('gems_referral') || null })
   })
     .then(function(r) { return r.json(); })
     .then(function(res) {
@@ -16313,38 +16278,20 @@ function secureOrderSaveDoc(order) {
     });
 }
 
-function secureWalletSaveDoc(collectionName, docData) {
-  if (!FIREBASE_ENABLED) return;
-  if (navigator.onLine === false) {
-    queuePendingSync(collectionName, docData);
-    return;
-  }
-  fetch(supabaseConfig.url + "/functions/v1/wallet-write", {
+// Appelle une opération de wallet-write — le serveur recalcule tout
+// lui-même (jamais un solde envoyé par le téléphone), voir le fichier
+// de la fonction pour la liste des opérations disponibles.
+function callWalletOperation(payload) {
+  return fetch(supabaseConfig.url + "/functions/v1/wallet-write", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
-    body: JSON.stringify({ collection: collectionName, docId: docData.id, data: docData })
+    headers: authHeaders(),
+    body: JSON.stringify(payload)
   })
     .then(function(r) { return r.json(); })
-    .then(function(res) {
-      if (!res.success) {
-        console.error("Erreur wallet-write (" + collectionName + ") :", res.error);
-        queuePendingSync(collectionName, docData);
-      }
-    })
     .catch(function(err) {
-      console.error("Erreur réseau wallet-write (" + collectionName + ") :", err);
-      queuePendingSync(collectionName, docData);
+      console.error("Erreur réseau wallet-write :", err);
+      return { success: false, error: "network_error" };
     });
-}
-
-function saveWallet(wallet) {
-  var idx = -1;
-  for (var i = 0; i < state.wallets.length; i++) {
-    if (state.wallets[i].id === wallet.id) { idx = i; break; }
-  }
-  if (idx === -1) state.wallets.push(wallet); else state.wallets[idx] = wallet;
-  save();
-  secureWalletSaveDoc("wallets", wallet);
 }
 
 // credit/débit — chaque mouvement garde une trace complète (montant, motif,
@@ -16388,77 +16335,6 @@ function getEarnings(phone) {
   return { id: eid, phone: phone, total: 0, transactions: [] };
 }
 
-function saveEarnings(ledger) {
-  var idx = -1;
-  for (var i = 0; i < state.earningsLedgers.length; i++) {
-    if (state.earningsLedgers[i].id === ledger.id) { idx = i; break; }
-  }
-  if (idx === -1) state.earningsLedgers.push(ledger); else state.earningsLedgers[idx] = ledger;
-  save();
-  secureWalletSaveDoc("earningsLedgers", ledger);
-}
-
-function creditEarnings(phone, amount, reason, meta) {
-  if (!phone || !amount || amount <= 0) return;
-  var ledger = getEarnings(phone);
-  ledger.total = (ledger.total || 0) + amount;
-  ledger.transactions = ledger.transactions || [];
-  ledger.transactions.push({
-    id: uid(),
-    amount: amount,
-    reason: reason,
-    accountId: meta && meta.accountId || null,
-    accountName: meta && meta.accountName || null,
-    orderId: meta && meta.orderId || null,
-    createdAt: Date.now()
-  });
-  saveEarnings(ledger);
-}
-
-function creditWallet(phone, amount, reason, meta) {
-  if (!phone || !amount || amount <= 0) return;
-  var wallet = getWallet(phone);
-  wallet.balance = (wallet.balance || 0) + amount;
-  wallet.transactions = wallet.transactions || [];
-  wallet.transactions.push({
-    id: uid(),
-    type: "credit",
-    amount: amount,
-    reason: reason,
-    accountId: meta && meta.accountId || null,
-    accountName: meta && meta.accountName || null,
-    orderId: meta && meta.orderId || null,
-    message: meta && meta.message || null,
-    createdAt: Date.now()
-  });
-  saveWallet(wallet);
-  // Un gain explicite — le motif ET la provenance (qui/quoi), jamais juste
-  // "solde modifié". C'est précisément ce qui était demandé.
-  logFilatureEventForPhone(phone, "gain", "+" + money(amount) + " — " + walletReasonLabel({ reason: reason, accountName: meta && meta.accountName, type: "credit" }));
-}
-
-function debitWallet(phone, amount, reason, meta) {
-  if (!phone || !amount || amount <= 0) return false;
-  var wallet = getWallet(phone);
-  if ((wallet.balance || 0) < amount) return false;
-  wallet.balance -= amount;
-  wallet.transactions = wallet.transactions || [];
-  wallet.transactions.push({
-    id: uid(),
-    type: "debit",
-    amount: amount,
-    reason: reason,
-    accountId: meta && meta.accountId || null,
-    accountName: meta && meta.accountName || null,
-    orderId: meta && meta.orderId || null,
-    message: meta && meta.message || null,
-    createdAt: Date.now()
-  });
-  saveWallet(wallet);
-  logFilatureEventForPhone(phone, "depense", "−" + money(amount) + " — " + walletReasonLabel({ reason: reason, accountName: meta && meta.accountName, type: "debit" }));
-  return true;
-}
-
 // Retrouve un compte par son numéro de téléphone — pour vérifier qu'un
 // destinataire de transfert existe vraiment avant de bouger de l'argent.
 // Retrouve un compte par son numéro — d'abord une correspondance exacte,
@@ -16488,27 +16364,25 @@ function findAccountByPhone(phone) {
 // deux personnes reste lisible (et pour l'Admin qui peut tout consulter).
 function transferWallet(fromPhone, toPhoneRaw, amount, message) {
   var toPhone = (toPhoneRaw || "").trim();
-  if (!toPhone) { showToast(t("toast_enter_recipient_number")); return false; }
+  if (!toPhone) { showToast(t("toast_enter_recipient_number")); return Promise.resolve(false); }
   if (normalizeWalletPhone(toPhone) === normalizeWalletPhone(fromPhone)) {
-    showToast(t("toast_cannot_send_to_self")); return false;
+    showToast(t("toast_cannot_send_to_self")); return Promise.resolve(false);
   }
-  if (isNaN(amount) || amount <= 0) { showToast(t("toast_enter_valid_amount")); return false; }
+  if (isNaN(amount) || amount <= 0) { showToast(t("toast_enter_valid_amount")); return Promise.resolve(false); }
   var recipient = findAccountByPhone(toPhone);
-  if (!recipient) { showToast(t("toast_no_account_number")); return false; }
-  var senderWallet = getWallet(fromPhone);
-  if ((senderWallet.balance || 0) < amount) { showToast(t("toast_insufficient_balance")); return false; }
+  if (!recipient) { showToast(t("toast_no_account_number")); return Promise.resolve(false); }
   var senderAcc = findAccountByPhone(fromPhone);
   var senderName = senderAcc ? (senderAcc.shopName || senderAcc.name) : "Quelqu'un";
   var recipientName = recipient.shopName || recipient.name;
-  debitWallet(fromPhone, amount, "transfert_envoye", { accountId: recipient.id, accountName: recipientName, message: message || "" });
-  // Toujours créditer le numéro CANONIQUE enregistré sur le compte (pas le
-  // texte tapé tel quel) — sinon, si la personne a tapé son numéro sans
-  // l'indicatif pays, l'argent partirait dans un portefeuille fantôme que
-  // le destinataire ne verrait jamais sur son propre écran.
-  creditWallet(recipient.phone, amount, "transfert_recu", { accountId: senderAcc ? senderAcc.id : null, accountName: senderName, message: message || "" });
-  addNotification("whatsapp", "💸 Vous avez reçu " + money(amount) + " de " + senderName + " sur votre Sounsouni Portefeuille.", recipient.id, "wallet");
-  showToast(t("dt_amount_added") + money(amount) + t("dt_sent_to") + recipientName + t("dt_period"));
-  return true;
+  return callWalletOperation({ operation: "transfer", toAccountId: recipient.id, amount: amount, reason: "transfert_envoye", meta: { message: message || "" } }).then(function(res) {
+    if (!res.success) {
+      showToast(res.error === "insufficient_balance" ? t("toast_insufficient_balance") : "❌ Une erreur est survenue, réessayez.");
+      return false;
+    }
+    addNotification("whatsapp", "💸 Vous avez reçu " + money(amount) + " de " + senderName + " sur votre Sounsouni Portefeuille.", recipient.id, "wallet");
+    showToast(t("dt_amount_added") + money(amount) + t("dt_sent_to") + recipientName + t("dt_period"));
+    return true;
+  });
 }
 
 // ---------- CAGNOTTE ----------
@@ -16560,121 +16434,75 @@ function createCagnotte(title, description, targetAmount) {
 
 function contributeToCagnotte(cagnotteId, contributorPhone, amount, message) {
   var cagnotte = getCagnotte(cagnotteId);
-  if (!cagnotte) { showToast(t("toast_pot_not_found")); return false; }
-  if (cagnotte.status !== "active") { showToast(t("toast_pot_already_closed")); return false; }
-  if (isNaN(amount) || amount <= 0) { showToast(t("toast_enter_valid_amount")); return false; }
-  var ok = debitWallet(contributorPhone, amount, "cagnotte_contribution", { accountId: cagnotte.creatorId, accountName: cagnotte.title, message: message || "" });
-  if (!ok) { showToast(t("toast_insufficient_wallet_balance")); return false; }
-  var contributorAcc = findAccountByPhone(contributorPhone);
-  cagnotte.balance = (cagnotte.balance || 0) + amount;
-  cagnotte.contributions.push({
-    id: uid(),
-    contributorId: contributorAcc ? contributorAcc.id : null,
-    contributorName: contributorAcc ? (contributorAcc.shopName || contributorAcc.name) : "Anonyme",
-    amount: amount,
-    message: message || "",
-    createdAt: Date.now()
+  if (!cagnotte) { showToast(t("toast_pot_not_found")); return Promise.resolve(false); }
+  if (cagnotte.status !== "active") { showToast(t("toast_pot_already_closed")); return Promise.resolve(false); }
+  if (isNaN(amount) || amount <= 0) { showToast(t("toast_enter_valid_amount")); return Promise.resolve(false); }
+  return callWalletOperation({ operation: "contribute_to_cagnotte", cagnotteId: cagnotteId, amount: amount, message: message || "" }).then(function(res) {
+    if (!res.success) { showToast(t("toast_insufficient_wallet_balance")); return false; }
+    var contributorAcc = findAccountByPhone(contributorPhone);
+    addNotification("whatsapp", "🎉 " + (contributorAcc ? (contributorAcc.shopName || contributorAcc.name) : "Quelqu'un") + " a cotisé " + money(amount) + " à votre cagnotte \"" + cagnotte.title + "\" !", cagnotte.creatorId, "wallet");
+    showToast(t("dt_thanks_contribution") + money(amount) + t("dt_exclaim"));
+    return true;
   });
-  saveCagnotte(cagnotte);
-  addNotification("whatsapp", "🎉 " + (contributorAcc ? (contributorAcc.shopName || contributorAcc.name) : "Quelqu'un") + " a cotisé " + money(amount) + " à votre cagnotte \"" + cagnotte.title + "\" !", cagnotte.creatorId, "wallet");
-  showToast(t("dt_thanks_contribution") + money(amount) + t("dt_exclaim"));
-  return true;
 }
 
 function closeCagnotte(cagnotteId) {
   var cagnotte = getCagnotte(cagnotteId);
-  if (!cagnotte) return false;
-  if (cagnotte.status !== "active") { showToast(t("toast_pot_already_closed")); return false; }
-  if (!state.profile || cagnotte.creatorId !== state.profile.id) { showToast(t("toast_only_creator_can_close")); return false; }
-  if ((cagnotte.balance || 0) > 0) {
-    creditWallet(cagnotte.creatorPhone, cagnotte.balance, "cagnotte_recuperee", { accountName: cagnotte.title });
-  }
-  cagnotte.status = "closed";
-  cagnotte.closedAt = Date.now();
-  saveCagnotte(cagnotte);
-  showToast(t("dt_pot_closed") + money(cagnotte.balance) + t("dt_transferred_wallet"));
-  return true;
+  if (!cagnotte) return Promise.resolve(false);
+  if (cagnotte.status !== "active") { showToast(t("toast_pot_already_closed")); return Promise.resolve(false); }
+  if (!state.profile || cagnotte.creatorId !== state.profile.id) { showToast(t("toast_only_creator_can_close")); return Promise.resolve(false); }
+  return callWalletOperation({ operation: "withdraw_cagnotte", cagnotteId: cagnotteId }).then(function(res) {
+    if (!res.success) { showToast("❌ Une erreur est survenue, réessayez."); return false; }
+    showToast(t("dt_pot_closed") + money(res.amount || 0) + t("dt_transferred_wallet"));
+    return true;
+  });
 }
 
 // ---------- BON CADEAU ----------
-// Contrairement au transfert (qui déplace de l'argent déjà dans l'app),
-// un bon cadeau fait entrer de l'ARGENT NEUF — quelqu'un paie (via
-// mobile money, une fois la vraie passerelle branchée) pour créditer le
-// portefeuille d'un proche, même si ce proche n'a pas encore de compte
-// Sounsouni : l'argent l'attend, prêt le jour où il s'inscrit.
+// ⚠️ Temporairement désactivé : dans sa forme actuelle, cette
+// fonctionnalité créditait de l'ARGENT NEUF sans qu'aucune somme
+// équivalente n'ait été débitée nulle part — un problème que la
+// sécurisation du serveur ne pouvait pas corriger sans decision produit
+// (fallait-il une vraie passerelle de paiement, ou débiter l'expéditeur
+// depuis son propre portefeuille ?). Le serveur (wallet-write) refuse
+// désormais cette opération — voir la note en tête de ce fichier.
 function sendGiftCard(fromPhone, toPhoneRaw, amount, message) {
   var toPhone = (toPhoneRaw || "").trim();
   var toDigits = toPhone.replace(/\D/g, "");
-  if (toDigits.length < 8) { showToast(t("toast_enter_valid_phone1")); return false; }
-  if (isNaN(amount) || amount <= 0) { showToast(t("toast_enter_valid_amount")); return false; }
-  var fromAcc = findAccountByPhone(fromPhone);
-  var fromName = fromAcc ? (fromAcc.shopName || fromAcc.name) : "Quelqu'un";
-  var recipient = findAccountByPhone(toPhone);
-  creditWallet(recipient ? recipient.phone : resolveWalletPhone(toPhone), amount, "bon_cadeau", { accountId: fromAcc ? fromAcc.id : null, accountName: fromName, message: message || "" });
-  if (recipient) {
-    addNotification("whatsapp", "🎁 " + fromName + " vous a offert un bon cadeau de " + money(amount) + " sur votre Sounsouni Portefeuille !", recipient.id, "wallet");
-  }
-  showToast(recipient ? (t("dt_giftcard_sent_to") + money(amount) + t("dt_giftcard_sent_to_end") + (recipient.shopName || recipient.name) + t("dt_exclaim")) : t("dt_giftcard_pending"));
-  return true;
+  if (toDigits.length < 8) { showToast(t("toast_enter_valid_phone1")); return Promise.resolve(false); }
+  if (isNaN(amount) || amount <= 0) { showToast(t("toast_enter_valid_amount")); return Promise.resolve(false); }
+  showToast("🚧 Bon cadeau temporairement indisponible — en attente d'une vraie passerelle de paiement.");
+  return Promise.resolve(false);
 }
 
 // ---------- SOUNSOUNI CARTE (paiement QR en boutique) ----------
-// Le code QR de chaque personne, c'est simplement son numéro de téléphone
-// encodé — puisque c'est déjà l'identifiant du portefeuille. Un vendeur
-// scanne ce code pour encaisser un paiement directement depuis le
-// portefeuille du client, sans passer par du cash ni une vraie carte.
+// ⚠️ Temporairement désactivé : ici, c'est le VENDEUR qui est connecté
+// et qui déclenchait un débit sur le portefeuille de l'ACHETEUR scanné
+// — l'inverse de toutes les autres opérations (où l'appelant ne peut
+// débiter que son propre portefeuille). Rouvrir ça en sécurité demande
+// une vraie preuve de consentement de l'acheteur (ex : un code à usage
+// unique que l'acheteur montre et que le vendeur saisit, vérifié côté
+// serveur) — pas encore conçue. Décision à prendre ensemble.
 function chargeWalletPayment(buyerPhone, sellerPhone, amount) {
   if (normalizeWalletPhone(buyerPhone) === normalizeWalletPhone(sellerPhone)) {
-    showToast(t("toast_own_qr")); return false;
+    showToast(t("toast_own_qr")); return Promise.resolve(false);
   }
-  if (isNaN(amount) || amount <= 0) { showToast(t("toast_enter_valid_amount")); return false; }
-  var buyer = findAccountByPhone(buyerPhone);
-  if (!buyer) {
-    // Hors connexion, on ne peut vérifier QUE ce que cet appareil connaît
-    // déjà — un compte jamais croisé ici ne peut pas être confirmé tant
-    // que la connexion n'est pas revenue, pour éviter d'encaisser à
-    // l'aveugle pour un faux numéro.
-    if (navigator.onLine === false) {
-      showToast(t("toast_no_connection_unknown_client"));
-    } else {
-      showToast(t("toast_no_account_code"));
-    }
-    return false;
-  }
-  var sellerAcc = findAccountByPhone(sellerPhone);
-  var sellerName = sellerAcc ? (sellerAcc.shopName || sellerAcc.name) : "la boutique";
-  var ok = debitWallet(buyer.phone, amount, "paiement_boutique", { accountId: sellerAcc ? sellerAcc.id : null, accountName: sellerName });
-  if (!ok) { showToast(t("toast_insufficient_customer_wallet")); return false; }
-  creditWallet(sellerPhone, amount, "paiement_boutique", { accountId: buyer.id, accountName: buyer.shopName || buyer.name });
-  addNotification("whatsapp", "💳 Paiement de " + money(amount) + " chez " + sellerName + " — réglé avec votre Sounsouni Portefeuille.", buyer.id, "wallet");
-  if (navigator.onLine === false) {
-    showToast(t("dt_offline_collected") + money(amount) + t("dt_offline_collected_end"));
-  } else {
-    showToast(t("dt_collected_from_wallet") + money(amount) + t("dt_collected_from_wallet_mid") + (buyer.shopName || buyer.name) + t("dt_period"));
-  }
-  return true;
+  if (isNaN(amount) || amount <= 0) { showToast(t("toast_enter_valid_amount")); return Promise.resolve(false); }
+  showToast("🚧 Paiement Sounsouni Carte temporairement indisponible — nécessite une nouvelle conception sécurisée.");
+  return Promise.resolve(false);
 }
 
 // ---------- DIASPORA ----------
-// Même mécanique que le Bon cadeau (de l'argent NEUF qui crédite un
-// portefeuille) — mais pensé pour quelqu'un à l'étranger qui envoie de
-// l'argent à un proche au Mali. Tant qu'aucune vraie passerelle de
-// paiement internationale n'est branchée, la confirmation reste
-// symbolique, exactement comme pour Orange Money/Moov Money ailleurs
-// dans l'app.
+// ⚠️ Temporairement désactivé — même raison que "Bon cadeau" : de
+// l'argent neuf sans source vérifiable. Le serveur refuse cette
+// opération jusqu'à décision (vraie passerelle de paiement internationale).
 function sendDiasporaTransfer(toPhoneRaw, amount, senderName, message) {
   var toPhone = (toPhoneRaw || "").trim();
   var toDigits = toPhone.replace(/\D/g, "");
-  if (toDigits.length < 8) { showToast(t("toast_enter_valid_phone1")); return false; }
-  if (isNaN(amount) || amount <= 0) { showToast(t("toast_enter_valid_amount")); return false; }
-  var recipient = findAccountByPhone(toPhone);
-  var displaySenderName = (senderName || "").trim() || "Un proche depuis l'étranger";
-  creditWallet(recipient ? recipient.phone : resolveWalletPhone(toPhone), amount, "diaspora", { accountName: displaySenderName, message: message || "" });
-  if (recipient) {
-    addNotification("whatsapp", "🌍 " + displaySenderName + " vous a envoyé " + money(amount) + " depuis l'étranger, sur votre Sounsouni Portefeuille !", recipient.id, "wallet");
-  }
-  showToast(recipient ? (t("dt_amount_added") + money(amount) + t("dt_sent_to") + (recipient.shopName || recipient.name) + t("dt_exclaim")) : t("dt_transfer_sent_pending"));
-  return true;
+  if (toDigits.length < 8) { showToast(t("toast_enter_valid_phone1")); return Promise.resolve(false); }
+  if (isNaN(amount) || amount <= 0) { showToast(t("toast_enter_valid_amount")); return Promise.resolve(false); }
+  showToast("🚧 Transfert Diaspora temporairement indisponible — en attente d'une vraie passerelle de paiement.");
+  return Promise.resolve(false);
 }
 
 function getCommissionConfig() {
@@ -16774,62 +16602,10 @@ function checkPaymentReturn() {
   }
 }
 
-function attributeCommission(orderId, buyerId, orderTotal) {
-  var ref = localStorage.getItem('gems_referral');
-  var cfg = getCommissionConfig();
-  var totalRate = cfg.totalCommissionRate;
-  var affiliateRate = cfg.affiliateCommission;
-  var platformKeepRate = totalRate; // par défaut, tout revient à la plateforme
-
-  var affiliate = null;
-  if (ref) {
-    for (var i = 0; i < state.accounts.length; i++) {
-      if (state.accounts[i].affiliateCode === ref) {
-        affiliate = state.accounts[i];
-        break;
-      }
-    }
-  }
-
-  if (affiliate) {
-    var commission = orderTotal * affiliateRate;
-    var earning = {
-      orderId: orderId,
-      buyerId: buyerId,
-      amount: commission,
-      rate: affiliateRate,
-      date: Date.now()
-    };
-    for (var j = 0; j < state.accounts.length; j++) {
-      if (state.accounts[j].id === affiliate.id) {
-        state.accounts[j].affiliateBalance = (state.accounts[j].affiliateBalance || 0) + commission;
-        state.accounts[j].affiliateReferrals = (state.accounts[j].affiliateReferrals || 0) + 1;
-        if (!Array.isArray(state.accounts[j].affiliateEarnings)) state.accounts[j].affiliateEarnings = [];
-        state.accounts[j].affiliateEarnings.push(earning);
-        if (state.profile && state.profile.id === affiliate.id) state.profile = { ...state.accounts[j] };
-        saveDoc("accounts", state.accounts[j]);
-        // Même geste que pour une vente : ça atterrit dans le portefeuille
-        // unique de cette personne, pas seulement dans un compteur à part.
-        // Avant, "accountName" répétait le nom de la personne qui TOUCHE la
-        // commission — corrigé pour montrer qui a été parrainé et sur
-        // quelle commande, l'information qui compte vraiment ici.
-        if (state.accounts[j].phone) {
-          var referredBuyer = null;
-          for (var rbi = 0; rbi < state.accounts.length; rbi++) { if (state.accounts[rbi].id === buyerId) { referredBuyer = state.accounts[rbi]; break; } }
-          creditEarnings(state.accounts[j].phone, commission, "parrainage", { accountId: buyerId, accountName: (referredBuyer ? referredBuyer.name : "Un filleul") + " — commande #" + orderId.slice(-5).toUpperCase(), orderId: orderId });
-        }
-        break;
-      }
-    }
-    platformKeepRate = totalRate - affiliateRate; // le reste revient à la plateforme
-    save();
-    return { amount: commission, affiliateId: affiliate.id, platformAmount: orderTotal * platformKeepRate, totalRate: totalRate };
-  }
-
-  // Pas de parrain identifié : la commission totale revient en entier à la
-  // plateforme — rien à attribuer à qui que ce soit.
-  return { amount: 0, affiliateId: null, platformAmount: orderTotal * platformKeepRate, totalRate: totalRate };
-}
+// Le calcul de la commission et le crédit du parrain sont désormais
+// entièrement gérés côté serveur — voir order-write (calcul et
+// vérification à la création) et wallet-write / settle_order_payouts
+// (crédit réel à la livraison confirmée).
 
 function getAffiliateStats() {
   if (!state.profile) return null;
@@ -21991,6 +21767,15 @@ function b64ToBuf(b64) {
 // la migration de sécurité : ni le mot de passe de la personne, ni celui
 // de qui que ce soit d'autre, ne doit plus jamais transiter en clair ni
 // être comparé localement.
+// Petit utilitaire central : construit les en-têtes d'une requête vers
+// une fonction serveur, en y ajoutant le jeton de session s'il y en a
+// un — pour ne jamais l'oublier sur un appel qui en a besoin.
+function authHeaders(extra) {
+  var h = Object.assign({ "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey }, extra || {});
+  if (state.sessionToken) h["X-Session-Token"] = state.sessionToken;
+  return h;
+}
+
 function verifyAccountPassword(accountId, password) {
   return fetch(supabaseConfig.url + "/functions/v1/verify-login", {
     method: "POST",
@@ -21998,7 +21783,16 @@ function verifyAccountPassword(accountId, password) {
     body: JSON.stringify({ accountId: accountId, password: password })
   })
     .then(function(r) { return r.json(); })
-    .then(function(res) { return !!res.success; })
+    .then(function(res) {
+      // Un mot de passe correct délivre un vrai jeton de session — on le
+      // garde, il faudra le présenter pour toute action sensible ensuite
+      // (commandes, portefeuille, changement de mot de passe...).
+      if (res.success && res.sessionToken) {
+        state.sessionToken = res.sessionToken;
+        save();
+      }
+      return !!res.success;
+    })
     .catch(function() { return false; }); // panne réseau = refusé, jamais accepté par défaut
 }
 
@@ -22009,7 +21803,16 @@ function verifyAccountRecoveryCode(accountId, recoveryCode) {
     body: JSON.stringify({ accountId: accountId, recoveryCode: recoveryCode })
   })
     .then(function(r) { return r.json(); })
-    .then(function(res) { return !!res.success; })
+    .then(function(res) {
+      // Un code de récupération correct ne délivre PAS une vraie session
+      // — juste un jeton spécial, à courte durée, qui ne permettra que de
+      // définir un nouveau mot de passe (voir submit-forgot-password-reset).
+      if (res.success && res.passwordResetToken) {
+        state.passwordResetToken = res.passwordResetToken;
+        save();
+      }
+      return !!res.success;
+    })
     .catch(function() { return false; });
 }
 
@@ -22017,13 +21820,24 @@ function setAccountPassword(accountId, newPassword, newRecoveryCode) {
   var payload = { accountId: accountId };
   if (newPassword) payload.newPassword = newPassword;
   if (newRecoveryCode) payload.newRecoveryCode = newRecoveryCode;
+  // Utilise le jeton de réinitialisation s'il y en a un en attente
+  // (juste après un code de récupération vérifié) — sinon la vraie
+  // session normale, si elle existe (changement volontaire).
+  var extraHeaders = {};
+  if (state.passwordResetToken) extraHeaders["X-Session-Token"] = state.passwordResetToken;
+  else if (state.sessionToken) extraHeaders["X-Session-Token"] = state.sessionToken;
   return fetch(supabaseConfig.url + "/functions/v1/set-password", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+    headers: Object.assign({ "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey }, extraHeaders),
     body: JSON.stringify(payload)
   })
     .then(function(r) { return r.json(); })
-    .then(function(res) { return !!res.success; })
+    .then(function(res) {
+      // Le jeton de réinitialisation ne sert qu'une fois — on l'oublie
+      // dès qu'il a servi, qu'il ait marché ou non.
+      if (state.passwordResetToken) { state.passwordResetToken = null; save(); }
+      return !!res.success;
+    })
     .catch(function() { return false; });
 }
 
@@ -22466,11 +22280,17 @@ function renderSensitiveConfirmModal() {
 // cadeau, clôture de cagnotte, ou finalisation d'une commande).
 function runSensitiveAction(kind, data) {
   if (kind === "walletTransfer") {
-    if (transferWallet(state.profile.phone, data.toPhone, data.amount, data.message)) { state.showWalletTransfer = false; state.showWallet = true; }
+    transferWallet(state.profile.phone, data.toPhone, data.amount, data.message).then(function(ok) {
+      if (ok) { state.showWalletTransfer = false; state.showWallet = true; }
+      render();
+    });
   } else if (kind === "giftCard") {
-    if (sendGiftCard(state.profile.phone, data.toPhone, data.amount, data.message)) { state.showGiftCard = false; state.showWallet = true; }
+    sendGiftCard(state.profile.phone, data.toPhone, data.amount, data.message).then(function(ok) {
+      if (ok) { state.showGiftCard = false; state.showWallet = true; }
+      render();
+    });
   } else if (kind === "closeCagnotte") {
-    closeCagnotte(data.cagnotteId);
+    closeCagnotte(data.cagnotteId).then(function() { render(); });
   } else if (kind === "mobileMoneyPayment") {
     placeOrder();
   }
@@ -22558,7 +22378,7 @@ function renderAffiliateProgramModal() {
   html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:16px;">' + t("aff_explainer") + ' ' + (stats.commissionRate * 100).toFixed(1) + '% ' + t("aff_of_order") + '</div>';
 
   html += '<div class="referral-code-box"><code>' + esc(stats.code) + '</code></div>';
-  html += '<div class="referral-link-box"><input class="input" readonly value="' + t("aff_link_share") + '" data-real-link="' + esc(link) + '" /></div>';
+  html += '<div class="referral-link-box" data-action="copy-referral-link" style="cursor:pointer;"><input class="input" readonly value="' + t("aff_link_share") + '" data-real-link="' + esc(link) + '" style="pointer-events:none;" /></div>';
   html += '<div style="display:flex;justify-content:center;margin:14px 0;">';
   html += '<div class="qr-code-slot" data-qr-value="' + esc(link) + '" style="width:170px;height:170px;background:var(--bg-body);border-radius:14px;padding:10px;"></div>';
   html += '</div>';
@@ -25183,7 +25003,7 @@ function renderSellerProducts() {
     stockLabel = 'Portions disponibles';
     typeFields = '<label class="field-label">' + t("sfield_tempsPreparation") + '</label><input class="input" placeholder="' + t("ph_20min") + '" value="' + esc(d.tempsPreparation || '') + '" data-bind="productDraft.tempsPreparation" />';
     typeFields += '<label class="field-label">' + t("sfield_ingredients") + '</label><textarea class="input" rows="2" placeholder="' + t("ph_liste_ingredients") + '" data-bind="productDraft.ingredients">' + esc(d.ingredients || '') + '</textarea>';
-    typeFields += '<label class="field-label">' + t("sfield_disponibleAujourdhui") + '</label><select class="input" data-bind="productDraft.disponibleAujourdhui"><option value="oui" ' + (d.disponibleAujourdhui === 'oui' ? 'selected' : '') + '' + t("yes") + '</option><option value="non" ' + (d.disponibleAujourdhui === 'non' ? 'selected' : '') + '' + t("no") + '</option></select>';
+    typeFields += '<label class="field-label">' + t("sfield_disponibleAujourdhui") + '</label><select class="input" data-bind="productDraft.disponibleAujourdhui"><option value="oui" ' + (d.disponibleAujourdhui === 'oui' ? 'selected' : '') + '>' + t("yes") + '</option><option value="non" ' + (d.disponibleAujourdhui === 'non' ? 'selected' : '') + '>' + t("no") + '</option></select>';
   } else if (sellerType === 'agriculteur') {
     typeFields = '<label class="field-label">' + t("sfield_provenance") + '</label><input class="input" placeholder="' + t("ph_region_sikasso") + '" value="' + esc(d.provenance || '') + '" data-bind="productDraft.provenance" />';
   } else if (sellerType === 'international') {
@@ -25207,27 +25027,27 @@ function renderSellerProducts() {
       stockLabel = 'Places disponibles';
       typeFields = '<label class="field-label">' + t("sfield_dureeFormation") + '</label><input class="input" placeholder="' + t("ph_3mois_2ans") + '" value="' + esc(d.dureeFormation || '') + '" data-bind="productDraft.dureeFormation" />';
       typeFields += '<label class="field-label">' + t("sfield_niveauRequis") + '</label><input class="input" placeholder="' + t("ph_bac_prerequis") + '" value="' + esc(d.niveauRequis || '') + '" data-bind="productDraft.niveauRequis" />';
-      typeFields += '<label class="field-label">' + t("sfield_diplomeDelivre") + '</label><select class="input" data-bind="productDraft.diplomeDelivre"><option value="oui" ' + (d.diplomeDelivre === 'oui' ? 'selected' : '') + '' + t("yes") + '</option><option value="non" ' + (d.diplomeDelivre === 'non' ? 'selected' : '') + '' + t("opt_non_attestation") + '</option></select>';
-      typeFields += '<label class="field-label">' + t("sfield_modeFormation") + '</label><select class="input" data-bind="productDraft.modeFormation"><option value="presentiel" ' + (d.modeFormation === 'presentiel' ? 'selected' : '') + '' + t("opt_presentiel") + '</option><option value="en_ligne" ' + (d.modeFormation === 'en_ligne' ? 'selected' : '') + '' + t("opt_en_ligne") + '</option><option value="hybride" ' + (d.modeFormation === 'hybride' ? 'selected' : '') + '' + t("opt_hybride") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_diplomeDelivre") + '</label><select class="input" data-bind="productDraft.diplomeDelivre"><option value="oui" ' + (d.diplomeDelivre === 'oui' ? 'selected' : '') + '>' + t("yes") + '</option><option value="non" ' + (d.diplomeDelivre === 'non' ? 'selected' : '') + '>' + t("opt_non_attestation") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_modeFormation") + '</label><select class="input" data-bind="productDraft.modeFormation"><option value="presentiel" ' + (d.modeFormation === 'presentiel' ? 'selected' : '') + '>' + t("opt_presentiel") + '</option><option value="en_ligne" ' + (d.modeFormation === 'en_ligne' ? 'selected' : '') + '>' + t("opt_en_ligne") + '</option><option value="hybride" ' + (d.modeFormation === 'hybride' ? 'selected' : '') + '>' + t("opt_hybride") + '</option></select>';
       typeFields += '<label class="field-label">' + t("sfield_prochaineRentree") + '</label><input class="input" placeholder="' + t("ph_date_rentree") + '" value="' + esc(d.prochaineRentree || '') + '" data-bind="productDraft.prochaineRentree" />';
     } else if (sellerSector === 'sante') {
       stockLabel = 'Disponibilité (créneaux/jour)';
       typeFields = '<label class="field-label">' + t("sfield_dureeActe") + '</label><input class="input" placeholder="' + t("ph_30min") + '" value="' + esc(d.dureeActe || '') + '" data-bind="productDraft.dureeActe" />';
-      typeFields += '<label class="field-label">' + t("sfield_surRendezVous") + '</label><select class="input" data-bind="productDraft.surRendezVous"><option value="oui" ' + (d.surRendezVous === 'oui' ? 'selected' : '') + '' + t("yes") + '</option><option value="non" ' + (d.surRendezVous === 'non' ? 'selected' : '') + '' + t("no") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_surRendezVous") + '</label><select class="input" data-bind="productDraft.surRendezVous"><option value="oui" ' + (d.surRendezVous === 'oui' ? 'selected' : '') + '>' + t("yes") + '</option><option value="non" ' + (d.surRendezVous === 'non' ? 'selected' : '') + '>' + t("no") + '</option></select>';
     } else if (sellerSector === 'beaute') {
       stockLabel = 'Disponibilité (créneaux/jour)';
       typeFields = '<label class="field-label">' + t("sfield_dureeSoin") + '</label><input class="input" placeholder="' + t("ph_1heure") + '" value="' + esc(d.dureeSoin || '') + '" data-bind="productDraft.dureeSoin" />';
-      typeFields += '<label class="field-label">' + t("sfield_surRendezVous") + '</label><select class="input" data-bind="productDraft.surRendezVous"><option value="oui" ' + (d.surRendezVous === 'oui' ? 'selected' : '') + '' + t("yes") + '</option><option value="non" ' + (d.surRendezVous === 'non' ? 'selected' : '') + '' + t("no") + '</option></select>';
-      typeFields += '<label class="field-label">' + t("sfield_serviceADomicile") + '</label><select class="input" data-bind="productDraft.serviceADomicile"><option value="non" ' + (d.serviceADomicile === 'non' ? 'selected' : '') + '' + t("no") + '</option><option value="oui" ' + (d.serviceADomicile === 'oui' ? 'selected' : '') + '' + t("yes") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_surRendezVous") + '</label><select class="input" data-bind="productDraft.surRendezVous"><option value="oui" ' + (d.surRendezVous === 'oui' ? 'selected' : '') + '>' + t("yes") + '</option><option value="non" ' + (d.surRendezVous === 'non' ? 'selected' : '') + '>' + t("no") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_serviceADomicile") + '</label><select class="input" data-bind="productDraft.serviceADomicile"><option value="non" ' + (d.serviceADomicile === 'non' ? 'selected' : '') + '>' + t("no") + '</option><option value="oui" ' + (d.serviceADomicile === 'oui' ? 'selected' : '') + '>' + t("yes") + '</option></select>';
     } else if (sellerSector === 'automobile') {
       stockLabel = 'Disponibilité (véhicules/jour)';
-      typeFields = '<label class="field-label">' + t("sfield_typeServiceAuto") + '</label><select class="input" data-bind="productDraft.typeServiceAuto"><option value="reparation" ' + (d.typeServiceAuto === 'reparation' ? 'selected' : '') + '' + t("opt_reparation") + '</option><option value="vente" ' + (d.typeServiceAuto === 'vente' ? 'selected' : '') + '' + t("opt_vente") + '</option><option value="lavage" ' + (d.typeServiceAuto === 'lavage' ? 'selected' : '') + '' + t("opt_lavage") + '</option><option value="pieces" ' + (d.typeServiceAuto === 'pieces' ? 'selected' : '') + '' + t("opt_pieces_detachees") + '</option></select>';
+      typeFields = '<label class="field-label">' + t("sfield_typeServiceAuto") + '</label><select class="input" data-bind="productDraft.typeServiceAuto"><option value="reparation" ' + (d.typeServiceAuto === 'reparation' ? 'selected' : '') + '>' + t("opt_reparation") + '</option><option value="vente" ' + (d.typeServiceAuto === 'vente' ? 'selected' : '') + '>' + t("opt_vente") + '</option><option value="lavage" ' + (d.typeServiceAuto === 'lavage' ? 'selected' : '') + '>' + t("opt_lavage") + '</option><option value="pieces" ' + (d.typeServiceAuto === 'pieces' ? 'selected' : '') + '>' + t("opt_pieces_detachees") + '</option></select>';
       typeFields += '<label class="field-label">' + t("sfield_delaiIntervention") + '</label><input class="input" placeholder="' + t("ph_sous24h") + '" value="' + esc(d.delaiIntervention || '') + '" data-bind="productDraft.delaiIntervention" />';
       typeFields += '<label class="field-label">' + t("sfield_garantie") + '</label><input class="input" placeholder="' + t("ph_3mois_aucune") + '" value="' + esc(d.garantie || '') + '" data-bind="productDraft.garantie" />';
     } else if (sellerSector === 'hotellerie') {
       stockLabel = 'Chambres disponibles';
       typeFields = '<label class="field-label">' + t("sfield_capacite") + '</label><input class="input" type="number" placeholder="' + t("ph_ex2") + '" value="' + esc(d.capacite || '') + '" data-bind="productDraft.capacite" />';
-      typeFields += '<label class="field-label">' + t("sfield_petitDejeuner") + '</label><select class="input" data-bind="productDraft.petitDejeuner"><option value="non" ' + (d.petitDejeuner === 'non' ? 'selected' : '') + '' + t("no") + '</option><option value="oui" ' + (d.petitDejeuner === 'oui' ? 'selected' : '') + '' + t("yes") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_petitDejeuner") + '</label><select class="input" data-bind="productDraft.petitDejeuner"><option value="non" ' + (d.petitDejeuner === 'non' ? 'selected' : '') + '>' + t("no") + '</option><option value="oui" ' + (d.petitDejeuner === 'oui' ? 'selected' : '') + '>' + t("yes") + '</option></select>';
     } else if (sellerSector === 'decoration') {
       typeFields = '<label class="field-label">' + t("sfield_typePrestationDeco") + '</label><input class="input" placeholder="' + t("ph_deco_salle") + '" value="' + esc(d.typePrestationDeco || '') + '" data-bind="productDraft.typePrestationDeco" />';
       typeFields += '<label class="field-label">' + t("sfield_delaiPreparationDeco") + '</label><input class="input" placeholder="' + t("ph_48h_semaine") + '" value="' + esc(d.delaiPreparationDeco || '') + '" data-bind="productDraft.delaiPreparationDeco" />';
@@ -25253,39 +25073,39 @@ function renderSellerProducts() {
     } else if (d.category === "Électronique & Téléphones" || d.category === "Informatique") {
       typeFields = '<label class="field-label">' + t("sfield_marqueElectro") + '</label><input class="input" placeholder="' + t("ph_marque_electro1") + '" value="' + esc(d.marqueElectro || '') + '" data-bind="productDraft.marqueElectro" />';
       typeFields += '<label class="field-label">' + t("sfield_modele") + '</label><input class="input" placeholder="' + t("ph_modele_electro") + '" value="' + esc(d.modeleElectro || '') + '" data-bind="productDraft.modeleElectro" />';
-      typeFields += '<label class="field-label">' + t("sfield_etatElectro") + '</label><select class="input" data-bind="productDraft.etatElectro"><option value="neuf" ' + (d.etatElectro === 'neuf' ? 'selected' : '') + '' + t("new_condition") + '</option><option value="occasion" ' + (d.etatElectro === 'occasion' ? 'selected' : '') + '' + t("used_condition") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_etatElectro") + '</label><select class="input" data-bind="productDraft.etatElectro"><option value="neuf" selected>' + t("new_condition") + '</option></select>';
       typeFields += '<label class="field-label">' + t("sfield_garantieElectro") + '</label><input class="input" placeholder="' + t("ph_6mois_aucune") + '" value="' + esc(d.garantieElectro || '') + '" data-bind="productDraft.garantieElectro" />';
       typeFields += '<label class="field-label">' + t("sfield_specs_opt") + '</label><input class="input" placeholder="' + t("ph_stockage_ram") + '" value="' + esc(d.specsElectro || '') + '" data-bind="productDraft.specsElectro" />';
     } else if (d.category === "Électroménager") {
       typeFields = '<label class="field-label">' + t("sfield_marqueElectro") + '</label><input class="input" placeholder="' + t("ph_marque_electro2") + '" value="' + esc(d.marqueElectro || '') + '" data-bind="productDraft.marqueElectro" />';
       typeFields += '<label class="field-label">' + t("sfield_puissanceElectro") + '</label><input class="input" placeholder="' + t("ph_1500w_200l") + '" value="' + esc(d.puissanceElectro || '') + '" data-bind="productDraft.puissanceElectro" />';
-      typeFields += '<label class="field-label">' + t("sfield_etatElectro") + '</label><select class="input" data-bind="productDraft.etatElectro"><option value="neuf" ' + (d.etatElectro === 'neuf' ? 'selected' : '') + '' + t("new_condition") + '</option><option value="occasion" ' + (d.etatElectro === 'occasion' ? 'selected' : '') + '' + t("used_condition") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_etatElectro") + '</label><select class="input" data-bind="productDraft.etatElectro"><option value="neuf" selected>' + t("new_condition") + '</option></select>';
       typeFields += '<label class="field-label">' + t("sfield_garantieElectro") + '</label><input class="input" placeholder="' + t("ph_12mois_aucune") + '" value="' + esc(d.garantieElectro || '') + '" data-bind="productDraft.garantieElectro" />';
     } else if (d.category === "Agriculture & Élevage") {
       typeFields = '<label class="field-label">' + t("sfield_quantitePoidsAgri") + '</label><input class="input" placeholder="' + t("ph_ex50") + '" value="' + esc(d.quantitePoidsAgri || '') + '" data-bind="productDraft.quantitePoidsAgri" />';
-      typeFields += '<label class="field-label">' + t("sfield_uniteVenteAgri") + '</label><select class="input" data-bind="productDraft.uniteVenteAgri"><option value="kg" ' + (d.uniteVenteAgri === 'kg' ? 'selected' : '') + '' + t("opt_kg") + '</option><option value="sac" ' + (d.uniteVenteAgri === 'sac' ? 'selected' : '') + '' + t("opt_sac") + '</option><option value="tas" ' + (d.uniteVenteAgri === 'tas' ? 'selected' : '') + '' + t("opt_tas") + '</option><option value="unite" ' + (d.uniteVenteAgri === 'unite' ? 'selected' : '') + '>Unité (tête de bétail…)</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_uniteVenteAgri") + '</label><select class="input" data-bind="productDraft.uniteVenteAgri"><option value="kg" ' + (d.uniteVenteAgri === 'kg' ? 'selected' : '') + '>' + t("opt_kg") + '</option><option value="sac" ' + (d.uniteVenteAgri === 'sac' ? 'selected' : '') + '>' + t("opt_sac") + '</option><option value="tas" ' + (d.uniteVenteAgri === 'tas' ? 'selected' : '') + '>' + t("opt_tas") + '</option><option value="unite" ' + (d.uniteVenteAgri === 'unite' ? 'selected' : '') + '>Unité (tête de bétail…)</option></select>';
       typeFields += '<label class="field-label">' + t("sfield_provenance") + '</label><input class="input" placeholder="' + t("ph_region_sikasso") + '" value="' + esc(d.provenance || '') + '" data-bind="productDraft.provenance" />';
       typeFields += '<label class="field-label">' + t("sfield_saisonRecolte") + '</label><input class="input" placeholder="' + t("ph_oct_dec") + '" value="' + esc(d.saisonRecolte || '') + '" data-bind="productDraft.saisonRecolte" />';
       typeFields += '<label class="field-label">' + t("sfield_fraicheurAgri") + '</label><input class="input" placeholder="' + t("ph_recolte_matin") + '" value="' + esc(d.fraicheurAgri || '') + '" data-bind="productDraft.fraicheurAgri" />';
-      typeFields += '<label class="field-label">' + t("sfield_etatFraicheur") + '</label><select class="input" data-bind="productDraft.etatFraicheur"><option value="" ' + (!d.etatFraicheur ? 'selected' : '') + '>—</option><option value="frais" ' + (d.etatFraicheur === 'frais' ? 'selected' : '') + '' + t("opt_frais") + '</option><option value="sec" ' + (d.etatFraicheur === 'sec' ? 'selected' : '') + '' + t("opt_sec") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_etatFraicheur") + '</label><select class="input" data-bind="productDraft.etatFraicheur"><option value="" ' + (!d.etatFraicheur ? 'selected' : '') + '>—</option><option value="frais" ' + (d.etatFraicheur === 'frais' ? 'selected' : '') + '>' + t("opt_frais") + '</option><option value="sec" ' + (d.etatFraicheur === 'sec' ? 'selected' : '') + '>' + t("opt_sec") + '</option></select>';
     } else if (d.category === "Automobile & Moto") {
       typeFields = '<label class="field-label">' + t("sfield_marqueAuto") + '</label><input class="input" placeholder="' + t("ph_toyota_djakarta") + '" value="' + esc(d.marqueAuto || '') + '" data-bind="productDraft.marqueAuto" />';
       typeFields += '<label class="field-label">' + t("sfield_anneeAuto") + '</label><input class="input" placeholder="' + t("ph_2018") + '" value="' + esc(d.anneeAuto || '') + '" data-bind="productDraft.anneeAuto" />';
-      typeFields += '<label class="field-label">' + t("sfield_etatElectro") + '</label><select class="input" data-bind="productDraft.etatAuto"><option value="neuf" ' + (d.etatAuto === 'neuf' ? 'selected' : '') + '' + t("new_condition") + '</option><option value="occasion" ' + (d.etatAuto === 'occasion' ? 'selected' : '') + '' + t("used_condition") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_etatElectro") + '</label><select class="input" data-bind="productDraft.etatAuto"><option value="neuf" selected>' + t("new_condition") + '</option></select>';
       typeFields += '<label class="field-label">' + t("sfield_kilometrageAuto") + '</label><input class="input" placeholder="' + t("ph_85000km") + '" value="' + esc(d.kilometrageAuto || '') + '" data-bind="productDraft.kilometrageAuto" />';
     } else if (d.category === "Mode Femme" || d.category === "Mode Homme") {
       typeFields = '<label class="field-label">' + t("sfield_materiau") + '</label><input class="input" placeholder="' + t("ph_coton_wax_long") + '" value="' + esc(d.matiereMode || '') + '" data-bind="productDraft.matiereMode" />';
-      typeFields += '<label class="field-label">' + t("sfield_occasionMode") + '</label><select class="input" data-bind="productDraft.occasionMode"><option value="quotidien" ' + (d.occasionMode === 'quotidien' ? 'selected' : '') + '' + t("opt_quotidien") + '</option><option value="ceremonie" ' + (d.occasionMode === 'ceremonie' ? 'selected' : '') + '' + t("opt_ceremonie") + '</option><option value="soiree" ' + (d.occasionMode === 'soiree' ? 'selected' : '') + '' + t("opt_soiree") + '</option><option value="travail" ' + (d.occasionMode === 'travail' ? 'selected' : '') + '' + t("opt_travail") + '</option><option value="sport" ' + (d.occasionMode === 'sport' ? 'selected' : '') + '' + t("opt_sport") + '</option></select>';
-      typeFields += '<label class="field-label">' + t("sfield_etatElectro") + '</label><select class="input" data-bind="productDraft.etatMode"><option value="neuf" ' + (d.etatMode === 'neuf' ? 'selected' : '') + '' + t("new_condition") + '</option><option value="occasion" ' + (d.etatMode === 'occasion' ? 'selected' : '') + '' + t("used_condition") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_occasionMode") + '</label><select class="input" data-bind="productDraft.occasionMode"><option value="quotidien" ' + (d.occasionMode === 'quotidien' ? 'selected' : '') + '>' + t("opt_quotidien") + '</option><option value="ceremonie" ' + (d.occasionMode === 'ceremonie' ? 'selected' : '') + '>' + t("opt_ceremonie") + '</option><option value="soiree" ' + (d.occasionMode === 'soiree' ? 'selected' : '') + '>' + t("opt_soiree") + '</option><option value="travail" ' + (d.occasionMode === 'travail' ? 'selected' : '') + '>' + t("opt_travail") + '</option><option value="sport" ' + (d.occasionMode === 'sport' ? 'selected' : '') + '>' + t("opt_sport") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_etatElectro") + '</label><select class="input" data-bind="productDraft.etatMode"><option value="neuf" selected>' + t("new_condition") + '</option></select>';
     } else if (d.category === "Mode Enfant") {
       typeFields = '<label class="field-label">' + t("sfield_ageRecommande") + '</label><input class="input" placeholder="' + t("ph_age_enfant") + '" value="' + esc(d.ageRecommande || '') + '" data-bind="productDraft.ageRecommande" />';
-      typeFields += '<label class="field-label">' + t("sfield_genreEnfant") + '</label><select class="input" data-bind="productDraft.genreEnfant"><option value="mixte" ' + (d.genreEnfant === 'mixte' ? 'selected' : '') + '' + t("opt_mixte") + '</option><option value="fille" ' + (d.genreEnfant === 'fille' ? 'selected' : '') + '' + t("opt_fille") + '</option><option value="garcon" ' + (d.genreEnfant === 'garcon' ? 'selected' : '') + '' + t("opt_garcon") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_genreEnfant") + '</label><select class="input" data-bind="productDraft.genreEnfant"><option value="mixte" ' + (d.genreEnfant === 'mixte' ? 'selected' : '') + '>' + t("opt_mixte") + '</option><option value="fille" ' + (d.genreEnfant === 'fille' ? 'selected' : '') + '>' + t("opt_fille") + '</option><option value="garcon" ' + (d.genreEnfant === 'garcon' ? 'selected' : '') + '>' + t("opt_garcon") + '</option></select>';
       typeFields += '<label class="field-label">' + t("sfield_materiau") + '</label><input class="input" placeholder="' + t("ph_coton_wax_short") + '" value="' + esc(d.matiereMode || '') + '" data-bind="productDraft.matiereMode" />';
-      typeFields += '<label class="field-label">' + t("sfield_etatElectro") + '</label><select class="input" data-bind="productDraft.etatMode"><option value="neuf" ' + (d.etatMode === 'neuf' ? 'selected' : '') + '' + t("new_condition") + '</option><option value="occasion" ' + (d.etatMode === 'occasion' ? 'selected' : '') + '' + t("used_condition") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_etatElectro") + '</label><select class="input" data-bind="productDraft.etatMode"><option value="neuf" selected>' + t("new_condition") + '</option></select>';
     } else if (d.category === "Chaussures") {
       typeFields = '<label class="field-label">' + t("sfield_typeChaussure") + '</label><input class="input" placeholder="' + t("ph_sport_ville") + '" value="' + esc(d.typeChaussure || '') + '" data-bind="productDraft.typeChaussure" />';
       typeFields += '<label class="field-label">' + t("sfield_materiau") + '</label><input class="input" placeholder="' + t("ph_cuir_synth") + '" value="' + esc(d.matiereChaussure || '') + '" data-bind="productDraft.matiereChaussure" />';
-      typeFields += '<label class="field-label">' + t("sfield_etatElectro") + '</label><select class="input" data-bind="productDraft.etatChaussure"><option value="neuf" ' + (d.etatChaussure === 'neuf' ? 'selected' : '') + '' + t("new_condition") + '</option><option value="occasion" ' + (d.etatChaussure === 'occasion' ? 'selected' : '') + '' + t("used_condition") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_etatElectro") + '</label><select class="input" data-bind="productDraft.etatChaussure"><option value="neuf" selected>' + t("new_condition") + '</option></select>';
     } else if (d.category === "Solaire & Énergie") {
       typeFields = '<label class="field-label">' + t("sfield_typeChaussure") + '</label><input class="input" placeholder="' + t("ph_panneau_solaire") + '" value="' + esc(d.typeSolaire || '') + '" data-bind="productDraft.typeSolaire" />';
       typeFields += '<label class="field-label">' + t("sfield_puissanceSolaire") + '</label><input class="input" placeholder="' + t("ph_100w") + '" value="' + esc(d.puissanceSolaire || '') + '" data-bind="productDraft.puissanceSolaire" />';
@@ -25300,32 +25120,32 @@ function renderSellerProducts() {
       typeFields += '<label class="field-label">' + t("sfield_nb_pieces_lot") + '</label><input class="input" placeholder="' + t("ph_ex12") + '" value="' + esc(d.nbPiecesCuisine || '') + '" data-bind="productDraft.nbPiecesCuisine" />';
     } else if (d.category === "Alimentation & Épicerie") {
       typeFields = '<label class="field-label">' + t("sfield_provenance_opt") + '</label><input class="input" placeholder="' + t("ph_region_segou") + '" value="' + esc(d.origineAlim || '') + '" data-bind="productDraft.origineAlim" />';
-      typeFields += '<label class="field-label">' + t("sfield_etatFraicheur") + '</label><select class="input" data-bind="productDraft.etatFraicheur"><option value="" ' + (!d.etatFraicheur ? 'selected' : '') + '>—</option><option value="frais" ' + (d.etatFraicheur === 'frais' ? 'selected' : '') + '' + t("opt_frais") + '</option><option value="sec" ' + (d.etatFraicheur === 'sec' ? 'selected' : '') + '' + t("opt_sec") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_etatFraicheur") + '</label><select class="input" data-bind="productDraft.etatFraicheur"><option value="" ' + (!d.etatFraicheur ? 'selected' : '') + '>—</option><option value="frais" ' + (d.etatFraicheur === 'frais' ? 'selected' : '') + '>' + t("opt_frais") + '</option><option value="sec" ' + (d.etatFraicheur === 'sec' ? 'selected' : '') + '>' + t("opt_sec") + '</option></select>';
       typeFields += '<label class="field-label">' + t("sfield_ingr_comp_opt") + '</label><textarea class="input" rows="2" data-bind="productDraft.ingredientsAlim">' + esc(d.ingredientsAlim || '') + '</textarea>';
       typeFields += '<label class="field-label">' + t("sfield_datePeremption") + '</label><input class="input" placeholder="' + t("ph_date_exp") + '" value="' + esc(d.datePeremption || '') + '" data-bind="productDraft.datePeremption" />';
     } else if (d.category === "Boissons") {
       typeFields = '<label class="field-label">' + t("sfield_typeChaussure") + '</label><input class="input" placeholder="' + t("ph_jus_soda") + '" value="' + esc(d.typeBoisson || '') + '" data-bind="productDraft.typeBoisson" />';
-      typeFields += '<label class="field-label">' + t("sfield_contientAlcool") + '</label><select class="input" data-bind="productDraft.contientAlcool"><option value="non" ' + (d.contientAlcool === 'non' ? 'selected' : '') + '' + t("no") + '</option><option value="oui" ' + (d.contientAlcool === 'oui' ? 'selected' : '') + '' + t("yes") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_contientAlcool") + '</label><select class="input" data-bind="productDraft.contientAlcool"><option value="non" ' + (d.contientAlcool === 'non' ? 'selected' : '') + '>' + t("no") + '</option><option value="oui" ' + (d.contientAlcool === 'oui' ? 'selected' : '') + '>' + t("yes") + '</option></select>';
       typeFields += '<label class="field-label">' + t("sfield_datePeremption") + '</label><input class="input" placeholder="' + t("ph_date_exp") + '" value="' + esc(d.datePeremption || '') + '" data-bind="productDraft.datePeremption" />';
     } else if (d.category === "Bricolage & Outillage") {
       typeFields = '<label class="field-label">' + t("sfield_typeOutil") + '</label><input class="input" placeholder="' + t("ph_perceuse_marteau") + '" value="' + esc(d.typeOutil || '') + '" data-bind="productDraft.typeOutil" />';
-      typeFields += '<label class="field-label">' + t("sfield_alimentationOutil") + '</label><select class="input" data-bind="productDraft.alimentationOutil"><option value="manuel" ' + (d.alimentationOutil === 'manuel' ? 'selected' : '') + '' + t("opt_manuel") + '</option><option value="electrique" ' + (d.alimentationOutil === 'electrique' ? 'selected' : '') + '' + t("opt_electrique") + '</option><option value="batterie" ' + (d.alimentationOutil === 'batterie' ? 'selected' : '') + '' + t("opt_sur_batterie") + '</option></select>';
-      typeFields += '<label class="field-label">' + t("sfield_etatElectro") + '</label><select class="input" data-bind="productDraft.etatOutil"><option value="neuf" ' + (d.etatOutil === 'neuf' ? 'selected' : '') + '' + t("new_condition") + '</option><option value="occasion" ' + (d.etatOutil === 'occasion' ? 'selected' : '') + '' + t("used_condition") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_alimentationOutil") + '</label><select class="input" data-bind="productDraft.alimentationOutil"><option value="manuel" ' + (d.alimentationOutil === 'manuel' ? 'selected' : '') + '>' + t("opt_manuel") + '</option><option value="electrique" ' + (d.alimentationOutil === 'electrique' ? 'selected' : '') + '>' + t("opt_electrique") + '</option><option value="batterie" ' + (d.alimentationOutil === 'batterie' ? 'selected' : '') + '>' + t("opt_sur_batterie") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_etatElectro") + '</label><select class="input" data-bind="productDraft.etatOutil"><option value="neuf" selected>' + t("new_condition") + '</option></select>';
       typeFields += '<label class="field-label">' + t("sfield_garantieElectro") + '</label><input class="input" placeholder="' + t("ph_12mois_aucune") + '" value="' + esc(d.garantieOutil || '') + '" data-bind="productDraft.garantieOutil" />';
     } else if (d.category === "Sport & Loisirs") {
       typeFields = '<label class="field-label">' + t("sfield_typeActiviteSport") + '</label><input class="input" placeholder="' + t("ph_football_fitness") + '" value="' + esc(d.typeActiviteSport || '') + '" data-bind="productDraft.typeActiviteSport" />';
-      typeFields += '<label class="field-label">' + t("sfield_etatElectro") + '</label><select class="input" data-bind="productDraft.etatSport"><option value="neuf" ' + (d.etatSport === 'neuf' ? 'selected' : '') + '' + t("new_condition") + '</option><option value="occasion" ' + (d.etatSport === 'occasion' ? 'selected' : '') + '' + t("used_condition") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_etatElectro") + '</label><select class="input" data-bind="productDraft.etatSport"><option value="neuf" selected>' + t("new_condition") + '</option></select>';
     } else if (d.category === "Bébé & Puériculture") {
       typeFields = '<label class="field-label">' + t("sfield_ageRecommande") + '</label><input class="input" placeholder="' + t("ph_age_bebe") + '" value="' + esc(d.ageRecommande || '') + '" data-bind="productDraft.ageRecommande" />';
       typeFields += '<label class="field-label">' + t("sfield_matiere_textile") + '</label><input class="input" placeholder="' + t("ph_coton_seul") + '" value="' + esc(d.matiereMode || '') + '" data-bind="productDraft.matiereMode" />';
-      typeFields += '<label class="field-label">' + t("sfield_etatElectro") + '</label><select class="input" data-bind="productDraft.etatMode"><option value="neuf" ' + (d.etatMode === 'neuf' ? 'selected' : '') + '' + t("new_condition") + '</option><option value="occasion" ' + (d.etatMode === 'occasion' ? 'selected' : '') + '' + t("used_condition") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_etatElectro") + '</label><select class="input" data-bind="productDraft.etatMode"><option value="neuf" selected>' + t("new_condition") + '</option></select>';
     } else if (d.category === "Bureautique & Fournitures") {
       typeFields = '<label class="field-label">' + t("sfield_typeChaussure") + '</label><input class="input" placeholder="' + t("ph_papeterie") + '" value="' + esc(d.typeBureautique || '') + '" data-bind="productDraft.typeBureautique" />';
-      typeFields += '<label class="field-label">' + t("sfield_etatElectro") + '</label><select class="input" data-bind="productDraft.etatBureautique"><option value="neuf" ' + (d.etatBureautique === 'neuf' ? 'selected' : '') + '' + t("new_condition") + '</option><option value="occasion" ' + (d.etatBureautique === 'occasion' ? 'selected' : '') + '' + t("used_condition") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_etatElectro") + '</label><select class="input" data-bind="productDraft.etatBureautique"><option value="neuf" selected>' + t("new_condition") + '</option></select>';
     } else if (d.category === "Art & Artisanat local") {
       typeFields = '<label class="field-label">' + t("sfield_materiau") + '</label><input class="input" placeholder="' + t("ph_bois_bronze") + '" value="' + esc(d.matiereArtisanat || '') + '" data-bind="productDraft.matiereArtisanat" />';
       typeFields += '<label class="field-label">' + t("sfield_origineArtisanat") + '</label><input class="input" placeholder="' + t("ph_segou_dogon") + '" value="' + esc(d.origineArtisanat || '') + '" data-bind="productDraft.origineArtisanat" />';
-      typeFields += '<label class="field-label">' + t("sfield_faitMainArtisanat") + '</label><select class="input" data-bind="productDraft.faitMainArtisanat"><option value="oui" ' + (d.faitMainArtisanat === 'oui' ? 'selected' : '') + '' + t("yes") + '</option><option value="non" ' + (d.faitMainArtisanat === 'non' ? 'selected' : '') + '' + t("no") + '</option></select>';
+      typeFields += '<label class="field-label">' + t("sfield_faitMainArtisanat") + '</label><select class="input" data-bind="productDraft.faitMainArtisanat"><option value="oui" ' + (d.faitMainArtisanat === 'oui' ? 'selected' : '') + '>' + t("yes") + '</option><option value="non" ' + (d.faitMainArtisanat === 'non' ? 'selected' : '') + '>' + t("no") + '</option></select>';
     } else if (d.category === "Santé & Bien-être") {
       typeFields = '<label class="field-label">' + t("sfield_typeProduitSante") + '</label><input class="input" placeholder="' + t("ph_complement_alim") + '" value="' + esc(d.typeProduitSante || '') + '" data-bind="productDraft.typeProduitSante" />';
       typeFields += '<label class="field-label">' + t("sfield_usagePosologieSante") + '</label><input class="input" placeholder="' + t("ph_1comprime") + '" value="' + esc(d.usagePosologieSante || '') + '" data-bind="productDraft.usagePosologieSante" />';
@@ -32938,9 +32758,10 @@ root.addEventListener("click", function(e) {
       var contribAmountEl = document.getElementById('cagnotte-contribute-amount');
       var contribMsgEl = document.getElementById('cagnotte-contribute-message');
       var contribAmount = contribAmountEl ? parseFloat(contribAmountEl.value) : NaN;
-      var contribOk = contributeToCagnotte(state.cagnotteContributeId, state.profile.phone, contribAmount, contribMsgEl ? contribMsgEl.value.trim() : "");
-      if (contribOk) state.cagnotteContributeId = null;
-      render();
+      contributeToCagnotte(state.cagnotteContributeId, state.profile.phone, contribAmount, contribMsgEl ? contribMsgEl.value.trim() : "").then(function(contribOk) {
+        if (contribOk) state.cagnotteContributeId = null;
+        render();
+      });
       break;
     }
     case "share-cagnotte": {
@@ -32995,9 +32816,10 @@ root.addEventListener("click", function(e) {
       var chargePhoneEl = document.getElementById('charge-payment-phone');
       var chargeAmountEl = document.getElementById('charge-payment-amount');
       var chargeAmount = chargeAmountEl ? parseFloat(chargeAmountEl.value) : NaN;
-      var chargeOk = chargeWalletPayment(chargePhoneEl ? chargePhoneEl.value : "", state.profile.phone, chargeAmount);
-      if (chargeOk) state.showChargePayment = false;
-      render();
+      chargeWalletPayment(chargePhoneEl ? chargePhoneEl.value : "", state.profile.phone, chargeAmount).then(function(chargeOk) {
+        if (chargeOk) state.showChargePayment = false;
+        render();
+      });
       break;
     }
     case "noop": break;
@@ -33009,9 +32831,10 @@ root.addEventListener("click", function(e) {
       var diasporaAmountEl = document.getElementById('diaspora-amount');
       var diasporaMsgEl = document.getElementById('diaspora-message');
       var diasporaAmount = diasporaAmountEl ? parseFloat(diasporaAmountEl.value) : NaN;
-      var diasporaOk = sendDiasporaTransfer(diasporaPhoneEl ? diasporaPhoneEl.value : "", diasporaAmount, diasporaNameEl ? diasporaNameEl.value.trim() : "", diasporaMsgEl ? diasporaMsgEl.value.trim() : "");
-      if (diasporaOk) state.showDiaspora = false;
-      render();
+      sendDiasporaTransfer(diasporaPhoneEl ? diasporaPhoneEl.value : "", diasporaAmount, diasporaNameEl ? diasporaNameEl.value.trim() : "", diasporaMsgEl ? diasporaMsgEl.value.trim() : "").then(function(diasporaOk) {
+        if (diasporaOk) state.showDiaspora = false;
+        render();
+      });
       break;
     }
     case "submit-admin-wallet-search": render(); break;
@@ -33079,38 +32902,19 @@ root.addEventListener("click", function(e) {
     }
     case "admin-wallet-credit":
     case "admin-wallet-debit": {
-      var adjInput = document.getElementById('admin-wallet-adjust-' + value);
-      var adjAmount = adjInput ? parseFloat(adjInput.value) : NaN;
-      if (isNaN(adjAmount) || adjAmount <= 0) { showToast(t("toast_enter_valid_amount")); break; }
-      var adjPhone = btn.dataset.phone;
-      if (!adjPhone) { showToast(t("toast_phone_not_found")); break; }
-      if (action === "admin-wallet-credit") {
-        creditWallet(adjPhone, adjAmount, "Ajustement Admin", {});
-        showToast(t("dt_amount_added") + money(adjAmount) + t("dt_added_period"));
-      } else {
-        var ok = debitWallet(adjPhone, adjAmount, "Ajustement Admin", {});
-        if (!ok) { showToast(t("toast_insufficient_for_withdrawal")); break; }
-        showToast(t("dt_amount_added") + money(adjAmount) + t("dt_removed_period"));
-      }
-      render();
+      // Temporairement indisponible : le serveur (wallet-write) refuse
+      // cette opération tant qu'une authentification Admin séparée
+      // (distincte des comptes clients) n'est pas en place — voir la
+      // note dans wallet-write/index.ts.
+      showToast("🚧 Ajustement manuel temporairement indisponible — nécessite une authentification Admin séparée.");
       break;
     }
     case "admin-wallet-delete-txn": {
-      var walletToEdit = null;
-      for (var awi = 0; awi < state.wallets.length; awi++) {
-        if (state.wallets[awi].id === value) { walletToEdit = state.wallets[awi]; break; }
-      }
-      if (!walletToEdit) break;
-      var txnId = btn.dataset.txn;
-      walletToEdit.transactions = (walletToEdit.transactions || []).filter(function(t) { return t.id !== txnId; });
-      // Le solde se recalcule entièrement à partir de ce qui reste — jamais
-      // de dérive possible entre le solde affiché et l'historique réel.
-      walletToEdit.balance = walletToEdit.transactions.reduce(function(sum, t) {
-        return sum + (t.type === "credit" ? t.amount : -t.amount);
-      }, 0);
-      saveWallet(walletToEdit);
-      showToast(t("toast_transaction_deleted"));
-      render();
+      // Temporairement indisponible — même raison que l'ajustement
+      // manuel (admin-wallet-credit/debit) : le serveur n'a aucun moyen
+      // de vérifier qu'un vrai Admin appelle, tant qu'une authentification
+      // Admin séparée n'est pas en place.
+      showToast("🚧 Modification manuelle temporairement indisponible — nécessite une authentification Admin séparée.");
       break;
     }
     case "admin-delete-cagnotte": {
@@ -35569,6 +35373,14 @@ root.addEventListener("click", function(e) {
         } else {
           showToast(t("toast_enter_valid_rates"));
         }
+      }
+      break;
+    }
+    case "copy-referral-link": {
+      var code3 = getReferralCode();
+      if (code3 && navigator.clipboard) {
+        var fullLink = window.location.origin + '?ref=' + code3;
+        navigator.clipboard.writeText(fullLink).then(function() { showToast(t("toast_link_copied")); });
       }
       break;
     }
