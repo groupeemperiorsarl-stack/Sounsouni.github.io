@@ -4876,9 +4876,37 @@ function flushPendingSyncQueue() {
   if (navigator.onLine === false) return;
   var queue = state.pendingSyncQueue.slice();
   queue.forEach(function(entry) {
-    var request = entry.type === "delete"
-      ? sb.from("app_data").delete().eq("collection", entry.collection).eq("id", entry.id)
-      : sb.from("app_data").upsert({ collection: entry.collection, id: entry.id, data: entry.data, updated_at: new Date().toISOString() }, { onConflict: "collection,id" });
+    var request;
+    if (entry.collection === "orders" && entry.type !== "delete") {
+      // "orders" ne peut plus être écrit directement depuis le
+      // navigateur (voir le verrouillage de la base) — une commande
+      // restée en attente doit repasser par order-write comme
+      // n'importe quelle autre, sinon elle échouerait à coup sûr et
+      // resterait bloquée dans cette file indéfiniment.
+      request = fetch(supabaseConfig.url + "/functions/v1/order-write", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ docId: entry.id, data: entry.data, referralCode: localStorage.getItem('gems_referral') || null })
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(res) { return { error: res.success ? null : (res.error || "order_write_failed") }; })
+        .catch(function(err) { return { error: err }; });
+    } else if (["wallets", "earningsLedgers", "savedAddresses", "orderContacts"].indexOf(entry.collection) !== -1) {
+      // Ces collections ne devraient plus jamais atterrir ici du tout
+      // (tous leurs points d'entrée passent déjà par une fonction
+      // dédiée) — mais si une entrée obsolète traînait encore d'avant
+      // cette mise à jour, mieux vaut l'abandonner proprement que de
+      // la retenter indéfiniment pour rien : elle échouerait de toute
+      // façon contre la base désormais verrouillée.
+      pushDebugLog("info", "Entrée en attente abandonnée (collection protégée)", entry.collection + " / " + entry.id);
+      state.pendingSyncQueue = (state.pendingSyncQueue || []).filter(function(e) { return !(e.collection === entry.collection && e.id === entry.id); });
+      save();
+      return;
+    } else {
+      request = entry.type === "delete"
+        ? sb.from("app_data").delete().eq("collection", entry.collection).eq("id", entry.id)
+        : sb.from("app_data").upsert({ collection: entry.collection, id: entry.id, data: entry.data, updated_at: new Date().toISOString() }, { onConflict: "collection,id" });
+    }
     request.then(function(res) {
       if (!res.error) {
         state.pendingSyncQueue = (state.pendingSyncQueue || []).filter(function(e) { return !(e.collection === entry.collection && e.id === entry.id); });
@@ -14243,6 +14271,7 @@ function loginAccount(accountId) {
   saveDoc("accounts", account);
   fetchMyWalletState();
   fetchMyAddresses();
+  fetchMyOrderContacts();
   render();
 }
 
@@ -15273,6 +15302,20 @@ function finalizeOrder(order, opts) {
   
   save();
   secureOrderSaveDoc(order);
+  // Coordonnées GPS/repère/téléphones — envoyés à part, une seule fois
+  // ici (à la création), vers la collection protégée dédiée. Jamais
+  // dans "orders" lui-même, qui reste largement synchronisé.
+  if (order.buyerLat != null || order.buyerLng != null || order.repere || order.buyerPhone || order.contactPhone) {
+    callOrderContactOperation({
+      operation: "save_order_contact",
+      orderId: order.id,
+      buyerPhone: order.buyerPhone || null,
+      contactPhone: order.contactPhone || null,
+      repere: order.repere || null,
+      buyerLat: order.buyerLat != null ? order.buyerLat : null,
+      buyerLng: order.buyerLng != null ? order.buyerLng : null
+    });
+  }
   affectedProducts.forEach(function(p) { saveDoc("products", p); });
   render();
   pushDebugLog("info", "finalizeOrder() terminé", "view après=" + state.view + " taille panier après=" + state.cart.length);
@@ -16389,25 +16432,38 @@ function getWallet(phone) {
 // commande est créée ou modifiée (il y en avait 18, dispersés).
 function secureOrderSaveDoc(order) {
   if (!FIREBASE_ENABLED) return;
+  // Les 5 champs sensibles (GPS exact, repère, téléphones) ne partent
+  // jamais dans "orders" — collection largement synchronisée avec tout
+  // le monde. On envoie une COPIE nettoyée au serveur ; la copie locale
+  // (dans state.orders, utilisée pour les calculs en cours dans cette
+  // même session) garde tout, sans rien changer aux calculs de frais de
+  // livraison existants.
+  var cleaned = { ...order };
+  delete cleaned.buyerLat;
+  delete cleaned.buyerLng;
+  delete cleaned.repere;
+  delete cleaned.buyerPhone;
+  delete cleaned.contactPhone;
+
   if (navigator.onLine === false) {
-    queuePendingSync("orders", order);
+    queuePendingSync("orders", cleaned);
     return;
   }
   fetch(supabaseConfig.url + "/functions/v1/order-write", {
     method: "POST",
     headers: authHeaders(),
-    body: JSON.stringify({ docId: order.id, data: order, referralCode: localStorage.getItem('gems_referral') || null })
+    body: JSON.stringify({ docId: cleaned.id, data: cleaned, referralCode: localStorage.getItem('gems_referral') || null })
   })
     .then(function(r) { return r.json(); })
     .then(function(res) {
       if (!res.success) {
         console.error("Erreur order-write :", res.error);
-        queuePendingSync("orders", order);
+        queuePendingSync("orders", cleaned);
       }
     })
     .catch(function(err) {
       console.error("Erreur réseau order-write :", err);
-      queuePendingSync("orders", order);
+      queuePendingSync("orders", cleaned);
     });
 }
 
@@ -16427,6 +16483,57 @@ function callAddressesOperation(payload) {
       console.error("Erreur réseau addresses-write :", err);
       return { success: false, error: "network_error" };
     });
+}
+
+// Appelle une opération d'order-contact — fonction séparée, dédiée aux
+// coordonnées GPS/téléphones liés à chaque commande, jamais diffusés
+// en bloc à tout le monde.
+function callOrderContactOperation(payload) {
+  return fetch(supabaseConfig.url + "/functions/v1/order-contact", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(payload)
+  })
+    .then(function(r) { return r.json(); })
+    .catch(function(err) {
+      console.error("Erreur réseau order-contact :", err);
+      return { success: false, error: "network_error" };
+    });
+}
+
+// Récupère les coordonnées GPS/téléphones UNIQUEMENT pour les
+// commandes qui concernent réellement la personne connectée (ses
+// achats, sa boutique, ses livraisons) — jamais celles de qui que ce
+// soit d'autre. Fusionne le résultat directement dans state.orders,
+// pour que tout le code existant (calcul des frais de livraison,
+// affichage du détail...) continue de fonctionner sans rien changer
+// d'autre — comme si ces champs avaient toujours été là.
+function fetchMyOrderContacts() {
+  if (!state.profile) return Promise.resolve();
+  var myId = state.profile.id;
+  var relevantIds = state.orders.filter(function(o) {
+    if (o.buyerId === myId) return true;
+    if (Array.isArray(o.items) && o.items.some(function(it) { return it.sellerId === myId; })) return true;
+    if (o.livreurId === myId) return true;
+    if (o.relaisShopId === myId) return true;
+    return false;
+  }).map(function(o) { return o.id; });
+  if (relevantIds.length === 0) return Promise.resolve();
+  return callOrderContactOperation({ operation: "get_contact_batch", orderIds: relevantIds }).then(function(res) {
+    if (!res.success) return;
+    var contacts = res.contacts || {};
+    for (var i = 0; i < state.orders.length; i++) {
+      var c = contacts[state.orders[i].id];
+      if (c) {
+        state.orders[i].buyerLat = c.buyerLat;
+        state.orders[i].buyerLng = c.buyerLng;
+        state.orders[i].repere = c.repere;
+        state.orders[i].buyerPhone = c.buyerPhone;
+        state.orders[i].contactPhone = c.contactPhone;
+      }
+    }
+    save();
+  });
 }
 
 function callWalletOperation(payload) {
@@ -27815,6 +27922,9 @@ function renderAdminTest() {
   html += '<button class="btn-secondary" style="flex:1;" data-action="test-my-session"><i class="fa-solid fa-key"></i> Tester ma session</button>';
   html += '<button class="btn-secondary" style="flex:1;" data-action="test-app-state"><i class="fa-solid fa-info-circle"></i> Voir l\'état de l\'app</button>';
   html += '</div>';
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">';
+  html += '<button class="btn-primary" style="flex:1;background:#e08a00;" data-action="force-full-resync"><i class="fa-solid fa-rotate"></i> Forcer une resynchronisation complète</button>';
+  html += '</div>';
 
   var logs = state.debugLog || [];
   html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:8px;">' + logs.length + ' entrée(s)' + (logs.length >= 200 ? ' (limite atteinte, les plus anciennes sont retirées)' : '') + '</div>';
@@ -33315,6 +33425,17 @@ root.addEventListener("click", function(e) {
       render();
       break;
     }
+    case "force-full-resync": {
+      // Retire juste la marque "dernière synchro" — au prochain
+      // chargement, l'app ne pourra plus faire de synchro partielle
+      // (voir bootAppWithLocalData) et redemandera TOUT depuis le début,
+      // sans se fier à un cache local possiblement incomplet.
+      pushDebugLog("info", "Resynchronisation complète forcée", "comptes avant=" + state.accounts.length + " commandes avant=" + state.orders.length);
+      try { localStorage.removeItem("gems_last_sync_v2"); } catch (e) {}
+      showToast("Rechargement en cours pour tout resynchroniser…");
+      setTimeout(function() { window.location.reload(); }, 800);
+      break;
+    }
     case "test-my-session": {
       pushDebugLog("info", "Test session lancé", "sessionToken présent : " + (state.sessionToken ? "oui" : "NON — pas connecté ou jeton manquant"));
       callWalletOperation({ operation: "get_my_state" }).then(function(res) {
@@ -33331,6 +33452,8 @@ root.addEventListener("click", function(e) {
         jeton_session_present: !!state.sessionToken,
         taille_panier: (state.cart || []).length,
         nombre_commandes_locales: (state.orders || []).length,
+        nombre_comptes_locaux: (state.accounts || []).length,
+        adminCountryScope: state.adminCountryScope || "aucun (global)",
         en_ligne: navigator.onLine,
         derniere_synchro: localStorage.getItem("gems_last_sync_v2") || "jamais"
       };
@@ -37267,10 +37390,29 @@ function bootAppWithLocalData() {
     // syncProductsInitialBatch) — de très loin la plus grosse collection
     // à grande échelle, elle ne doit plus jamais être téléchargée en bloc
     // avec tout le reste pour chaque visiteur.
-    var query = sb.from("app_data").select("*").neq("collection", "products");
-    if (!needsFullSync) query = query.gt("updated_at", lastSyncAt);
 
-    query.then(function(res) {
+    var PAGE_SIZE = 900;
+    function fetchAllSyncPages(offset, accumulated) {
+      var pageQuery = sb.from("app_data").select("*").neq("collection", "products").range(offset, offset + PAGE_SIZE - 1);
+      if (!needsFullSync) pageQuery = pageQuery.gt("updated_at", lastSyncAt);
+      return pageQuery.then(function(res) {
+        if (res.error) return res;
+        var combined = accumulated.concat(res.data || []);
+        // Tant qu'une page revient pleine, il peut encore en rester —
+        // on continue. Sans cette boucle, une seule requête pouvait être
+        // silencieusement tronquée par la limite par défaut de Supabase
+        // dès que le total (commandes + comptes + tout le reste
+        // confondus) dépassait cette limite — et selon l'ordre renvoyé
+        // par la base, ce sont parfois les comptes qui manquaient à
+        // l'arrivée, pas les autres collections.
+        if (res.data && res.data.length === PAGE_SIZE) {
+          return fetchAllSyncPages(offset + PAGE_SIZE, combined);
+        }
+        return { error: null, data: combined };
+      });
+    }
+
+    fetchAllSyncPages(0, []).then(function(res) {
       if (res.error) {
         console.error("Erreur de connexion Supabase :", res.error);
         if (!hasCachedData) showToast(t("toast_supabase_unreachable"));
@@ -37297,6 +37439,8 @@ function bootAppWithLocalData() {
         localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
         refreshProfileFromAccounts();
         save();
+        pushDebugLog("info", "Synchronisation générale terminée", "lignes reçues au total=" + res.data.length + " · comptes en mémoire après=" + state.accounts.length + " · pages=" + Math.ceil(res.data.length / PAGE_SIZE));
+        if (state.profile) fetchMyOrderContacts();
       }
       _generalSyncReady = true;
       maybeSignalBootReady();
