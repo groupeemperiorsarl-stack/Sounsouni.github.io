@@ -7707,6 +7707,7 @@ function defaultState() {
     adminWalletSearchLoading: false,
     adminWalletDetail: null,
     adminDiasporaRequests: null,
+    debugLog: [],
   };
 }
 
@@ -7736,6 +7737,43 @@ function emptyProductDraft(profileForDefault) {
 }
 
 let state = defaultState();
+
+// ---------- CAPTURE D'ERREURS POUR L'ÉCRAN ADMIN > TEST ----------
+// Sans accès à un ordinateur, impossible d'ouvrir la Console du
+// navigateur pour voir ce qui plante — donc l'app capte elle-même tout
+// ce qui se passe (erreurs JS, promesses rejetées, console.error) et le
+// garde en mémoire, consultable et copiable depuis Admin > Test.
+function pushDebugLog(type, message, detail) {
+  try {
+    state.debugLog = state.debugLog || [];
+    state.debugLog.unshift({ type: type, message: String(message || ""), detail: detail ? String(detail) : "", at: Date.now() });
+    // Jamais plus de 200 entrées — sinon ça grossirait indéfiniment dans
+    // le stockage local d'un téléphone qui reste connecté des jours.
+    if (state.debugLog.length > 200) state.debugLog.length = 200;
+    save();
+    if (state.view === "admin" && state.adminTab === "test") render();
+  } catch (e) { /* la capture elle-même ne doit jamais faire planter l'app */ }
+}
+window.addEventListener("error", function(e) {
+  pushDebugLog("error", e.message, (e.error && e.error.stack) || (e.filename + ":" + e.lineno + ":" + e.colno));
+});
+window.addEventListener("unhandledrejection", function(e) {
+  var reason = e.reason;
+  pushDebugLog("promise", (reason && reason.message) || String(reason), reason && reason.stack);
+});
+(function() {
+  var origConsoleError = console.error;
+  console.error = function() {
+    origConsoleError.apply(console, arguments);
+    try {
+      var parts = Array.prototype.slice.call(arguments).map(function(a) {
+        if (typeof a === "string") return a;
+        try { return JSON.stringify(a); } catch (e2) { return String(a); }
+      });
+      pushDebugLog("console.error", parts.join(" "));
+    } catch (e3) { /* ignore */ }
+  };
+})();
 
 // Le "profil" affiché à l'écran est une COPIE séparée du compte, prise au
 // moment de la connexion — elle ne se met pas à jour toute seule quand un
@@ -26407,7 +26445,8 @@ var ADMIN_MODULES_META = {
   international:      { icon: "fa-earth-africa",        get name() { return t("admin_mod_international"); },get sub() { return t("admin_mod_international_sub"); } },
   security:           { icon: "fa-shield-halved",       get name() { return t("admin_mod_security"); },     get sub() { return t("admin_mod_security_sub"); } },
   reviews:            { icon: "fa-star",                 get name() { return t("admin_mod_reviews"); },      get sub() { return t("admin_mod_reviews_sub"); } },
-  filature:           { icon: "fa-user-secret",           get name() { return t("admin_mod_filature"); },     get sub() { return t("admin_mod_filature_sub"); } }
+  filature:           { icon: "fa-user-secret",           get name() { return t("admin_mod_filature"); },     get sub() { return t("admin_mod_filature_sub"); } },
+  test:               { icon: "fa-bug",                    name: "Test", sub: "Journaux d'erreurs et diagnostics" }
 };
 
 // Nombre d'éléments en attente pour chaque module — utilisé pour le badge
@@ -26642,6 +26681,7 @@ function renderAdmin() {
   else if (state.adminTab === "security") html += renderAdminSecurity();
   else if (state.adminTab === "reviews") html += renderAdminReviews();
   else if (state.adminTab === "filature" && currentAdminHasFilatureAccess()) html += renderAdminFilature();
+  else if (state.adminTab === "test") html += renderAdminTest();
 
   html += '</div></div>';
   return html;
@@ -27647,6 +27687,85 @@ function currentAdminHasFilatureAccess() {
   return false;
 }
 
+// ---------- ADMIN > TEST — diagnostic sans avoir besoin d'un ordinateur ----------
+// Montre tout ce que l'app a capté toute seule (erreurs JS, promesses
+// rejetées, console.error) + quelques boutons pour déclencher des
+// vérifications précises à la demande — avec un bouton "Copier" pour
+// coller directement le résultat dans la conversation.
+function renderAdminTest() {
+  var html = '<div class="glass-card" style="padding:14px;margin-bottom:14px;">';
+  html += '<div class="section-title" style="margin-bottom:10px;"><i class="fa-solid fa-bug"></i> Test & diagnostic</div>';
+  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:12px;">Cette page capte automatiquement les erreurs de l\'app. Reproduis le problème (ex : passer une commande), reviens ici, puis appuie sur "Copier" et colle le résultat dans la conversation.</div>';
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">';
+  html += '<button class="btn-primary" style="flex:1;" data-action="copy-debug-log"><i class="fa-solid fa-copy"></i> Copier tout</button>';
+  html += '<button class="btn-secondary" style="flex:0;" data-action="clear-debug-log"><i class="fa-solid fa-trash"></i> Vider</button>';
+  html += '</div>';
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">';
+  html += '<button class="btn-secondary" style="flex:1;" data-action="test-my-session"><i class="fa-solid fa-key"></i> Tester ma session</button>';
+  html += '<button class="btn-secondary" style="flex:1;" data-action="test-app-state"><i class="fa-solid fa-info-circle"></i> Voir l\'état de l\'app</button>';
+  html += '</div>';
+
+  var logs = state.debugLog || [];
+  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:8px;">' + logs.length + ' entrée(s)' + (logs.length >= 200 ? ' (limite atteinte, les plus anciennes sont retirées)' : '') + '</div>';
+  if (logs.length === 0) {
+    html += '<div class="empty-state"><i class="fa-solid fa-check"></i><div class="title">Aucune erreur capturée pour l\'instant</div></div>';
+  } else {
+    for (var i = 0; i < logs.length; i++) {
+      var entry = logs[i];
+      var color = entry.type === "error" ? "var(--danger)" : entry.type === "promise" ? "#e08a00" : "var(--text-dim)";
+      html += '<div style="border-left:3px solid ' + color + ';padding:8px 10px;margin-bottom:8px;background:var(--bg-body);border-radius:6px;">';
+      html += '<div style="font-size:10px;color:var(--text-dim);margin-bottom:2px;">' + fmtDateTime(entry.at) + ' · ' + esc(entry.type) + '</div>';
+      html += '<div style="font-size:12px;font-weight:600;word-break:break-word;">' + esc(entry.message) + '</div>';
+      if (entry.detail) html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;white-space:pre-wrap;word-break:break-word;">' + esc(entry.detail) + '</div>';
+      html += '</div>';
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
+// Construit le texte complet à copier — tout ce qui est affiché à
+// l'écran, dans un format simple à coller tel quel dans la conversation.
+function buildDebugLogText() {
+  var logs = state.debugLog || [];
+  if (logs.length === 0) return "Aucune erreur capturée.";
+  var lines = ["=== Journal de diagnostic Sounsouni (" + logs.length + " entrée(s)) ==="];
+  for (var i = 0; i < logs.length; i++) {
+    var entry = logs[i];
+    lines.push("");
+    lines.push("[" + fmtDateTime(entry.at) + "] (" + entry.type + ") " + entry.message);
+    if (entry.detail) lines.push(entry.detail);
+  }
+  return lines.join("\n");
+}
+
+// Copie robuste sur téléphone : essaie l'API moderne, et si elle n'est
+// pas disponible (ancien navigateur, contexte non sécurisé...), reprend
+// avec la vieille méthode du textarea invisible + sélection manuelle.
+function copyTextToClipboard(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text).then(function() { return true; }).catch(function() { return copyTextToClipboardFallback(text); });
+  }
+  return Promise.resolve(copyTextToClipboardFallback(text));
+}
+function copyTextToClipboardFallback(text) {
+  try {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    var ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+
 function renderAdminFilature() {
   var watchlist = getFilatureWatchlist();
   // Un admin national voit seulement les comptes DE SON PAYS, même s'il a
@@ -28098,7 +28217,7 @@ function renderAdminDashboard(stats) {
 
   // ---- Grille des modules — cœur de la navigation du centre de contrôle ----
   var tileList = state.adminIsOwner
-    ? ["comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews"]
+    ? ["comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","test"]
     : ["comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","pub","reviews","partenaires"];
   html += '<div class="section-head" style="display:flex;align-items:baseline;justify-content:space-between;margin:20px 0 12px;"><h2 style="font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--mc-dim);font-weight:700;margin:0;">' + t("ad_modules_title") + '</h2></div>';
   html += renderAdminTileGrid(tileList);
@@ -33092,6 +33211,42 @@ root.addEventListener("click", function(e) {
           render();
         });
       });
+      break;
+    }
+    case "copy-debug-log": {
+      copyTextToClipboard(buildDebugLogText()).then(function(ok) {
+        showToast(ok ? "✅ Copié — colle-le dans la conversation." : "❌ Impossible de copier, réessaie.");
+      });
+      break;
+    }
+    case "clear-debug-log": {
+      state.debugLog = [];
+      save();
+      showToast("Journal vidé.");
+      render();
+      break;
+    }
+    case "test-my-session": {
+      pushDebugLog("info", "Test session lancé", "sessionToken présent : " + (state.sessionToken ? "oui" : "NON — pas connecté ou jeton manquant"));
+      callWalletOperation({ operation: "get_my_state" }).then(function(res) {
+        pushDebugLog("info", "Résultat get_my_state", JSON.stringify(res));
+        render();
+      });
+      render();
+      break;
+    }
+    case "test-app-state": {
+      var summary = {
+        vue_actuelle: state.view,
+        profil_connecte: state.profile ? (state.profile.name + " (" + state.profile.role + ")") : "aucun",
+        jeton_session_present: !!state.sessionToken,
+        taille_panier: (state.cart || []).length,
+        nombre_commandes_locales: (state.orders || []).length,
+        en_ligne: navigator.onLine,
+        derniere_synchro: state.lastSyncAt || "jamais"
+      };
+      pushDebugLog("info", "État de l'app", JSON.stringify(summary, null, 2));
+      render();
       break;
     }
     case "admin-approve-diaspora":
