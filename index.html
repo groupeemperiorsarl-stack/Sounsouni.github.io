@@ -21017,16 +21017,13 @@ function renderAddressBookSection() {
 }
 
 // Distingue "ouvert depuis le site, dans un navigateur normal" de
-// "ouvert depuis l'app installée sur l'écran d'accueil" — le même
-// fichier sert les deux, seul ce réglage du navigateur permet de les
-// différencier. Sert à cacher certains liens (ex: Réseau International)
-// uniquement pour les gens qui utilisent l'app installée.
+// "ouvert depuis l'app mobile" — même méthode que le rappel de
+// téléchargement et le masquage du numéro WhatsApp ailleurs dans ce
+// fichier (voir triggerDownloadNudgeIfAllowed) : l'app mobile est
+// construite avec Capacitor, donc c'est ÇA qu'il faut vérifier, pas un
+// simple mode d'affichage de navigateur.
 function isStandaloneApp() {
-  try {
-    return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
-  } catch (e) {
-    return false;
-  }
+  return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 }
 
 function renderProfileModal() {
