@@ -4815,9 +4815,14 @@ const SHARED_KEYS = [
   "relaisApplications", "livreurApplications", "autreQuartierApplications",
   "relaisEditRequests", "externalParcels", "webhookPartners", "dashboardPartners",
   "apiPartners", "platformCommissions", "externalParcelChangeRequests",
-  "verificationRequests", "wallets", "cagnottes",
+  "verificationRequests", "cagnottes",
   "passwordRecoveryRequests", "nationalAdmins", "internationalCities", "pushSubscriptions", "pendingPayments", "fcmTokens", "group2GlobalWhitelist", "sourcingAgentWhitelist"
 ];
+// "wallets" et "earningsLedgers" ne sont volontairement PAS dans cette
+// liste : avant, chaque téléphone téléchargeait le solde et l'historique
+// de TOUT LE MONDE. Désormais, seul SON PROPRE solde/historique est
+// récupéré (voir fetchMyWalletState) — jamais celui de qui que ce soit
+// d'autre.
 
 // Enregistre UN SEUL document (ex: saveDoc("products", p)). C'est la
 // brique de base : chaque fonction qui modifie un produit/une commande/etc.
@@ -7648,6 +7653,8 @@ function defaultState() {
     giftCardPayment: "paiement_livraison",
     showCarte: false,
     showChargePayment: false,
+    showPaymentCode: false,
+    myPaymentCode: null,
     showDiaspora: false,
     adminWalletSearch: "",
     adminWalletOpenId: null,
@@ -7691,6 +7698,15 @@ function defaultState() {
     // oublié" : passwordResetToken, effacé dès qu'il a servi une fois.
     sessionToken: null,
     passwordResetToken: null,
+    // Cache local du SEUL portefeuille/gains de la personne connectée —
+    // rempli par fetchMyWalletState(), jamais par la synchronisation
+    // générale (voir la note sur SHARED_KEYS).
+    myWallet: null,
+    myEarnings: null,
+    adminWalletSearchResults: [],
+    adminWalletSearchLoading: false,
+    adminWalletDetail: null,
+    adminDiasporaRequests: null,
   };
 }
 
@@ -13855,7 +13871,26 @@ function registerAccount() {
     saveDoc("accounts", state.profile);
   } else {
     save();
-    saveDoc("accounts", account);
+    createAccountSecurely(account).then(function(res) {
+      if (!res.success) {
+        // Le serveur a refusé (numéro déjà utilisé, détecté avec les
+        // VRAIES données — pas le cache local) : on retire le compte
+        // optimiste créé en local pour ne pas laisser l'app dans un état
+        // où la personne SEMBLE connectée alors que rien n'a été retenu.
+        state.accounts = state.accounts.filter(function(a) { return a.id !== account.id; });
+        if (state.profile && state.profile.id === account.id) state.profile = null;
+        var reasonMsg = res.error === "phone_already_used" ? "Ce numéro a déjà un compte."
+          : res.error === "phone_already_seller" ? "Ce numéro a déjà un compte vendeur."
+          : "Impossible de créer le compte, réessayez.";
+        showToast("❌ " + reasonMsg);
+        save();
+        render();
+        return;
+      }
+      state.sessionToken = res.sessionToken;
+      save();
+      render();
+    });
   }
   console.log("Après save()");
   render();
@@ -14159,6 +14194,7 @@ function loginAccount(accountId) {
   state.showRoleMenu = false;
   save();
   saveDoc("accounts", account);
+  fetchMyWalletState();
   render();
 }
 
@@ -14176,15 +14212,14 @@ function deleteAccountCompletely(accountId) {
     return true;
   });
   if (acc.phone) {
-    var delWid = normalizeWalletPhone(acc.phone);
-    state.wallets = (state.wallets || []).filter(function(w) {
-      if (w.id === delWid) { deleteRemoteDoc("wallets", w.id); return false; }
-      return true;
-    });
-    state.earningsLedgers = (state.earningsLedgers || []).filter(function(e) {
-      if (e.id === delWid) { deleteRemoteDoc("earningsLedgers", e.id); return false; }
-      return true;
-    });
+    // ⚠️ Le portefeuille et les gains ne peuvent plus être supprimés
+    // directement depuis ici : ces deux collections n'acceptent plus
+    // aucune écriture directe du navigateur (voir le verrouillage de la
+    // base), et ne sont plus téléchargées en bloc non plus (voir
+    // SHARED_KEYS) — donc rien à filtrer localement ici. Le solde du
+    // compte supprimé reste tel quel côté serveur pour l'instant ; une
+    // vraie suppression demanderait une opération dédiée dans
+    // wallet-write, réservée à un Admin authentifié (pas encore en place).
   }
   state.fcmTokens = (state.fcmTokens || []).filter(function(t) {
     if (t.accountId === accountId) { deleteRemoteDoc("fcmTokens", t.id); return false; }
@@ -15013,6 +15048,7 @@ function placeOrder() {
         showToast(t("toast_wallet_insufficient_order"));
         return;
       }
+      fetchMyWalletState();
       orderDraft.paymentStatus = "paid";
       finalizeOrder(orderDraft, { simulated: false });
     });
@@ -15199,7 +15235,8 @@ function finalizeOrder(order, opts) {
 // montant lui-même.
 function settleOrderPayouts(order) {
   callWalletOperation({ operation: "settle_order_payouts", orderId: order.id }).then(function(res) {
-    if (!res.success) console.error("Erreur settle_order_payouts :", res.error);
+    if (!res.success) { console.error("Erreur settle_order_payouts :", res.error); return; }
+    fetchMyWalletState();
   });
 }
 
@@ -16237,11 +16274,31 @@ function normalizeWalletPhone(phone) {
   return (phone || "").replace(/[\s.\-()]/g, "");
 }
 
+// Récupère UNIQUEMENT le portefeuille et les gains de la personne
+// actuellement connectée — jamais ceux de qui que ce soit d'autre.
+// Remplace l'ancien téléchargement en bloc de "wallets"/"earningsLedgers"
+// (qui donnait à chaque téléphone une copie du solde de tout le monde).
+// Appelée au démarrage/connexion, et après toute opération qui change le
+// solde (settleOrderPayouts, transferWallet, etc.) pour rester à jour.
+function fetchMyWalletState() {
+  if (!state.profile || !state.profile.phone) return Promise.resolve();
+  return callWalletOperation({ operation: "get_my_state" }).then(function(res) {
+    if (res.success) {
+      state.myWallet = res.wallet || { balance: 0, transactions: [] };
+      state.myEarnings = res.earnings || { total: 0, transactions: [] };
+      save();
+    }
+  });
+}
+
 function getWallet(phone) {
   var wid = normalizeWalletPhone(phone);
   if (!wid) return { id: "", phone: "", balance: 0, transactions: [] };
-  for (var i = 0; i < state.wallets.length; i++) {
-    if (state.wallets[i].id === wid) return state.wallets[i];
+  // On ne connaît plus jamais que SON PROPRE portefeuille localement —
+  // demander celui d'un autre numéro ne renvoie rien (voir la note sur
+  // le badge public "ventes vérifiées", qui ne dépend plus de ça).
+  if (state.profile && normalizeWalletPhone(state.profile.phone) === wid && state.myWallet) {
+    return state.myWallet;
   }
   return { id: wid, phone: phone, balance: 0, transactions: [] };
 }
@@ -16329,8 +16386,8 @@ function logFilatureEventForPhone(phone, type, detail, accountName) {
 function getEarnings(phone) {
   var eid = normalizeWalletPhone(phone);
   if (!eid) return { id: "", phone: "", total: 0, transactions: [] };
-  for (var i = 0; i < state.earningsLedgers.length; i++) {
-    if (state.earningsLedgers[i].id === eid) return state.earningsLedgers[i];
+  if (state.profile && normalizeWalletPhone(state.profile.phone) === eid && state.myEarnings) {
+    return state.myEarnings;
   }
   return { id: eid, phone: phone, total: 0, transactions: [] };
 }
@@ -16379,6 +16436,7 @@ function transferWallet(fromPhone, toPhoneRaw, amount, message) {
       showToast(res.error === "insufficient_balance" ? t("toast_insufficient_balance") : "❌ Une erreur est survenue, réessayez.");
       return false;
     }
+    fetchMyWalletState();
     addNotification("whatsapp", "💸 Vous avez reçu " + money(amount) + " de " + senderName + " sur votre Sounsouni Portefeuille.", recipient.id, "wallet");
     showToast(t("dt_amount_added") + money(amount) + t("dt_sent_to") + recipientName + t("dt_period"));
     return true;
@@ -16439,6 +16497,7 @@ function contributeToCagnotte(cagnotteId, contributorPhone, amount, message) {
   if (isNaN(amount) || amount <= 0) { showToast(t("toast_enter_valid_amount")); return Promise.resolve(false); }
   return callWalletOperation({ operation: "contribute_to_cagnotte", cagnotteId: cagnotteId, amount: amount, message: message || "" }).then(function(res) {
     if (!res.success) { showToast(t("toast_insufficient_wallet_balance")); return false; }
+    fetchMyWalletState();
     var contributorAcc = findAccountByPhone(contributorPhone);
     addNotification("whatsapp", "🎉 " + (contributorAcc ? (contributorAcc.shopName || contributorAcc.name) : "Quelqu'un") + " a cotisé " + money(amount) + " à votre cagnotte \"" + cagnotte.title + "\" !", cagnotte.creatorId, "wallet");
     showToast(t("dt_thanks_contribution") + money(amount) + t("dt_exclaim"));
@@ -16453,56 +16512,74 @@ function closeCagnotte(cagnotteId) {
   if (!state.profile || cagnotte.creatorId !== state.profile.id) { showToast(t("toast_only_creator_can_close")); return Promise.resolve(false); }
   return callWalletOperation({ operation: "withdraw_cagnotte", cagnotteId: cagnotteId }).then(function(res) {
     if (!res.success) { showToast("❌ Une erreur est survenue, réessayez."); return false; }
+    fetchMyWalletState();
     showToast(t("dt_pot_closed") + money(res.amount || 0) + t("dt_transferred_wallet"));
     return true;
   });
 }
 
 // ---------- BON CADEAU ----------
-// ⚠️ Temporairement désactivé : dans sa forme actuelle, cette
-// fonctionnalité créditait de l'ARGENT NEUF sans qu'aucune somme
-// équivalente n'ait été débitée nulle part — un problème que la
-// sécurisation du serveur ne pouvait pas corriger sans decision produit
-// (fallait-il une vraie passerelle de paiement, ou débiter l'expéditeur
-// depuis son propre portefeuille ?). Le serveur (wallet-write) refuse
-// désormais cette opération — voir la note en tête de ce fichier.
+// Devenu un vrai transfert : débite réellement l'expéditeur, comme un
+// transfert classique — fini l'argent créé du néant. Contrepartie
+// assumée : ça ne marche que si le destinataire a déjà un compte
+// Sounsouni (avant, l'argent pouvait attendre un numéro pas encore
+// inscrit — ce n'est plus le cas).
 function sendGiftCard(fromPhone, toPhoneRaw, amount, message) {
   var toPhone = (toPhoneRaw || "").trim();
   var toDigits = toPhone.replace(/\D/g, "");
   if (toDigits.length < 8) { showToast(t("toast_enter_valid_phone1")); return Promise.resolve(false); }
   if (isNaN(amount) || amount <= 0) { showToast(t("toast_enter_valid_amount")); return Promise.resolve(false); }
-  showToast("🚧 Bon cadeau temporairement indisponible — en attente d'une vraie passerelle de paiement.");
-  return Promise.resolve(false);
+  var recipient = findAccountByPhone(toPhone);
+  if (!recipient) { showToast("❌ Cette personne n'a pas encore de compte Sounsouni — elle doit d'abord s'inscrire."); return Promise.resolve(false); }
+  var recipientName = recipient.shopName || recipient.name;
+  return callWalletOperation({ operation: "transfer", toAccountId: recipient.id, amount: amount, reason: "bon_cadeau", meta: { message: message || "" } }).then(function(res) {
+    if (!res.success) {
+      showToast(res.error === "insufficient_balance" ? t("toast_insufficient_balance") : "❌ Une erreur est survenue, réessayez.");
+      return false;
+    }
+    fetchMyWalletState();
+    addNotification("whatsapp", "🎁 Vous avez reçu un bon cadeau de " + money(amount) + " sur votre Sounsouni Portefeuille !", recipient.id, "wallet");
+    showToast(t("dt_giftcard_sent_to") + money(amount) + t("dt_giftcard_sent_to_end") + recipientName + t("dt_exclaim"));
+    return true;
+  });
 }
 
-// ---------- SOUNSOUNI CARTE (paiement QR en boutique) ----------
-// ⚠️ Temporairement désactivé : ici, c'est le VENDEUR qui est connecté
-// et qui déclenchait un débit sur le portefeuille de l'ACHETEUR scanné
-// — l'inverse de toutes les autres opérations (où l'appelant ne peut
-// débiter que son propre portefeuille). Rouvrir ça en sécurité demande
-// une vraie preuve de consentement de l'acheteur (ex : un code à usage
-// unique que l'acheteur montre et que le vendeur saisit, vérifié côté
-// serveur) — pas encore conçue. Décision à prendre ensemble.
-function chargeWalletPayment(buyerPhone, sellerPhone, amount) {
-  if (normalizeWalletPhone(buyerPhone) === normalizeWalletPhone(sellerPhone)) {
-    showToast(t("toast_own_qr")); return Promise.resolve(false);
-  }
+// ---------- SOUNSOUNI CARTE (paiement en boutique) ----------
+// Le vendeur n'a plus jamais le pouvoir de débiter qui que ce soit
+// unilatéralement : il ne peut qu'échanger un CODE que l'acheteur a
+// généré lui-même, depuis sa propre session (voir generate-payment-code
+// / renderPaymentCodeModal) — la vraie preuve de consentement qui
+// manquait avant.
+function redeemPaymentCode(code, amount) {
+  if (!code || code.length < 4) { showToast("Entrez le code montré par le client."); return Promise.resolve(false); }
   if (isNaN(amount) || amount <= 0) { showToast(t("toast_enter_valid_amount")); return Promise.resolve(false); }
-  showToast("🚧 Paiement Sounsouni Carte temporairement indisponible — nécessite une nouvelle conception sécurisée.");
-  return Promise.resolve(false);
+  return callWalletOperation({ operation: "redeem_payment_code", code: code, amount: amount }).then(function(res) {
+    if (!res.success) {
+      var msg = res.error === "code_expired" ? "Ce code a expiré, demandez-en un nouveau."
+        : res.error === "code_not_found" ? "Code invalide."
+        : res.error === "insufficient_balance" ? t("toast_insufficient_customer_wallet")
+        : "❌ Paiement refusé.";
+      showToast(msg);
+      return false;
+    }
+    fetchMyWalletState();
+    showToast(t("dt_collected_from_wallet") + money(amount) + t("dt_collected_from_wallet_mid") + (res.buyerName || "") + t("dt_period"));
+    return true;
+  });
 }
 
 // ---------- DIASPORA ----------
-// ⚠️ Temporairement désactivé — même raison que "Bon cadeau" : de
-// l'argent neuf sans source vérifiable. Le serveur refuse cette
-// opération jusqu'à décision (vraie passerelle de paiement internationale).
+// Ne crédite plus rien directement — enregistre une demande qu'un Admin
+// devra approuver après avoir vérifié le paiement externe (mobile
+// money, virement...). Ferme la porte "argent neuf" sans passerelle de
+// paiement internationale.
 function sendDiasporaTransfer(toPhoneRaw, amount, senderName, message) {
-  var toPhone = (toPhoneRaw || "").trim();
-  var toDigits = toPhone.replace(/\D/g, "");
-  if (toDigits.length < 8) { showToast(t("toast_enter_valid_phone1")); return Promise.resolve(false); }
   if (isNaN(amount) || amount <= 0) { showToast(t("toast_enter_valid_amount")); return Promise.resolve(false); }
-  showToast("🚧 Transfert Diaspora temporairement indisponible — en attente d'une vraie passerelle de paiement.");
-  return Promise.resolve(false);
+  return callWalletOperation({ operation: "request_diaspora_credit", amount: amount, senderName: senderName || "", message: message || "" }).then(function(res) {
+    if (!res.success) { showToast("❌ Une erreur est survenue, réessayez."); return false; }
+    showToast("✅ Demande envoyée — un membre de l'équipe va vérifier le paiement et créditer votre Portefeuille sous peu.");
+    return true;
+  });
 }
 
 function getCommissionConfig() {
@@ -16746,22 +16823,19 @@ function computeSellerReputation(sellerId) {
     else label = "À surveiller";
   }
 
-  // Historique bancaire informel — l'argent réellement encaissé et vérifié
-  // par le portefeuille, pas juste un décompte de commandes. C'est cette
-  // donnée-là qui fait de la réputation une vraie "carte de confiance",
-  // vérifiable, pas juste déclarative.
-  var walletVerifiedTotal = 0, walletVerifiedCount = 0;
+  // Historique bancaire informel — l'argent réellement encaissé et vérifié,
+  // pas juste un décompte de commandes. C'est cette donnée-là qui fait de
+  // la réputation une vraie "carte de confiance", vérifiable, pas juste
+  // déclarative. Ces deux nombres sont désormais calculés et maintenus
+  // par le serveur (wallet-write, à chaque vente réglée) — jamais en
+  // scannant l'historique complet du portefeuille de quelqu'un d'autre,
+  // qui n'a plus à être téléchargé sur chaque téléphone pour ça.
   var sellerAccForWallet = null;
   for (var wai = 0; wai < state.accounts.length; wai++) {
     if (state.accounts[wai].id === sellerId) { sellerAccForWallet = state.accounts[wai]; break; }
   }
-  if (sellerAccForWallet && sellerAccForWallet.phone) {
-    var sellerWallet = getWallet(sellerAccForWallet.phone);
-    for (var wti = 0; wti < (sellerWallet.transactions || []).length; wti++) {
-      var wtx = sellerWallet.transactions[wti];
-      if (wtx.type === "credit" && wtx.reason === "vente") { walletVerifiedTotal += wtx.amount; walletVerifiedCount++; }
-    }
-  }
+  var walletVerifiedTotal = (sellerAccForWallet && sellerAccForWallet.verifiedSalesTotal) || 0;
+  var walletVerifiedCount = (sellerAccForWallet && sellerAccForWallet.verifiedSalesCount) || 0;
 
   return {
     score100: score100,
@@ -18847,6 +18921,7 @@ var OVERLAY_REGISTRY = [
   { key: "cagnottesList", isOpen: function () { return state.showCagnottesList; }, close: function () { state.showCagnottesList = false; state.showWallet = true; } },
   { key: "carte", isOpen: function () { return state.showCarte; }, close: function () { state.showCarte = false; } },
   { key: "chargePayment", isOpen: function () { return state.showChargePayment; }, close: function () { state.showChargePayment = false; } },
+  { key: "paymentCode", isOpen: function () { return state.showPaymentCode; }, close: function () { state.showPaymentCode = false; } },
   { key: "diaspora", isOpen: function () { return state.showDiaspora; }, close: function () { state.showDiaspora = false; state.showWallet = true; } },
   { key: "giftCard", isOpen: function () { return state.showGiftCard; }, close: function () { state.showGiftCard = false; state.showWallet = true; } },
   { key: "walletTransfer", isOpen: function () { return state.showWalletTransfer; }, close: function () { state.showWalletTransfer = false; state.showWallet = true; } },
@@ -19445,6 +19520,7 @@ function buildHTML() {
   if (state.showGiftCard) html += renderGiftCardModal();
   if (state.showCarte) html += renderSounsouniCarteModal();
   if (state.showChargePayment) html += renderChargePaymentModal();
+  if (state.showPaymentCode) html += renderPaymentCodeModal();
   if (state.showDiaspora) html += renderDiasporaModal();
   if (state.showLeavePublishConfirm) html += renderLeavePublishConfirmModal();
   if (state.showVendorConsentGate) html += renderVendorConsentGateModal();
@@ -21114,22 +21190,47 @@ function renderSounsouniCarteModal() {
   return html;
 }
 
-// Côté vendeur — scanner le code QR d'un client (ou saisir son numéro à la
-// main) pour encaisser un paiement en boutique.
+// Côté vendeur — saisir (ou scanner) le code à usage unique que le
+// client vient de générer sur SON PROPRE téléphone, pour encaisser un
+// paiement en boutique. Contrairement à l'ancienne version, le vendeur
+// ne peut plus débiter un numéro qu'il aurait juste scanné : il lui
+// faut ce code, que seul l'acheteur peut produire depuis sa session.
 function renderChargePaymentModal() {
   var html = '<div class="modal-overlay" id="charge-payment-overlay" data-action="close-charge-payment">';
   html += '<div class="modal-sheet">';
   html += '<button class="modal-close" data-action="close-charge-payment"><i class="fa-solid fa-xmark"></i></button>';
   html += '<button class="link-btn wallet-back-btn" style="margin-bottom:10px;" data-action="close-charge-payment"><i class="fa-solid fa-arrow-left"></i> ' + t("wallet_back") + '</button>';
   html += '<div class="section-title" style="margin-bottom:14px;"><i class="fa-solid fa-cash-register"></i> ' + t("charge_title") + '</div>';
-  html += '<label class="field-label" style="margin-top:0;">' + t("charge_customer_phone") + '</label>';
+  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;">Demandez au client d\'ouvrir "Payer en boutique" dans son Portefeuille et de vous montrer son code — ce code prouve que c\'est bien lui qui autorise ce paiement.</div>';
+  html += '<label class="field-label" style="margin-top:0;">Code du client</label>';
   html += '<div style="display:flex;gap:8px;">';
-  html += '<input class="input" id="charge-payment-phone" style="flex:1;" placeholder="Ex : 70 00 00 00" data-format="phone" />';
-  html += '<button class="btn-secondary" style="flex:0;padding:10px 12px;" data-action="open-scanner" data-target="charge-payment-phone"><i class="fa-solid fa-qrcode"></i></button>';
+  html += '<input class="input" id="charge-payment-code" style="flex:1;" placeholder="Ex : 123456" maxlength="6" inputmode="numeric" />';
+  html += '<button class="btn-secondary" style="flex:0;padding:10px 12px;" data-action="open-scanner" data-target="charge-payment-code"><i class="fa-solid fa-qrcode"></i></button>';
   html += '</div>';
   html += '<label class="field-label">' + t("charge_amount") + '</label>';
   html += '<input class="input" type="number" id="charge-payment-amount" placeholder="Ex : 3000" />';
   html += '<button class="btn-primary" style="margin-top:16px;" data-action="confirm-charge-payment"><i class="fa-solid fa-check"></i> ' + t("charge_submit") + '</button>';
+  html += '</div></div>';
+  return html;
+}
+
+// Côté ACHETEUR — génère le code à usage unique (valable 2 minutes) à
+// montrer au vendeur. C'est cet écran-ci qui remplace l'ancien scan
+// unilatéral : personne ne peut être débité sans être passé par ici.
+function renderPaymentCodeModal() {
+  var html = '<div class="modal-overlay" id="payment-code-overlay" data-action="close-payment-code">';
+  html += '<div class="modal-sheet" style="text-align:center;">';
+  html += '<button class="modal-close" data-action="close-payment-code"><i class="fa-solid fa-xmark"></i></button>';
+  html += '<div class="section-title" style="margin-bottom:14px;justify-content:center;"><i class="fa-solid fa-qrcode"></i> Payer en boutique</div>';
+  if (!state.myPaymentCode) {
+    html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:16px;">Montrez ce code au vendeur pour qu\'il encaisse depuis votre Portefeuille.</div>';
+    html += '<button class="btn-primary" data-action="generate-payment-code"><i class="fa-solid fa-key"></i> Générer mon code</button>';
+  } else {
+    var secondsLeft = Math.max(0, Math.round((state.myPaymentCode.expiresAt - Date.now()) / 1000));
+    html += '<div style="font-size:36px;font-weight:800;letter-spacing:6px;margin:16px 0;">' + esc(state.myPaymentCode.code) + '</div>';
+    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:16px;">' + (secondsLeft > 0 ? ("Valable encore " + secondsLeft + " secondes") : "Code expiré") + '</div>';
+    html += '<button class="btn-secondary" data-action="generate-payment-code"><i class="fa-solid fa-rotate"></i> Régénérer</button>';
+  }
   html += '</div></div>';
   return html;
 }
@@ -21205,6 +21306,7 @@ function renderWalletModal() {
   html += '<div style="font-size:10.5px;color:rgba(255,255,255,0.75);margin-top:6px;">' + t("wallet_balance_hint") + '</div>';
   html += '</div>';
   html += '<button class="btn-primary" style="margin-bottom:10px;" data-action="open-wallet-transfer"><i class="fa-solid fa-paper-plane"></i> ' + t("wallet_send_money") + '</button>';
+  html += '<button class="btn-secondary" style="margin-bottom:16px;" data-action="open-payment-code"><i class="fa-solid fa-qrcode"></i> Payer en boutique</button>';
   html += '<button class="btn-secondary" style="margin-bottom:16px;" data-action="open-cagnottes-list"><i class="fa-solid fa-hand-holding-heart"></i> ' + t("wallet_pots") + '</button>';
   html += '<button class="btn-secondary" style="margin-bottom:16px;" data-action="open-giftcard"><i class="fa-solid fa-gift"></i> ' + t("wallet_gift_card") + '</button>';
   html += '<button class="btn-secondary" style="margin-bottom:16px;" data-action="open-diaspora"><i class="fa-solid fa-earth-africa"></i> ' + t("wallet_from_abroad") + '</button>';
@@ -21774,6 +21876,21 @@ function authHeaders(extra) {
   var h = Object.assign({ "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey }, extra || {});
   if (state.sessionToken) h["X-Session-Token"] = state.sessionToken;
   return h;
+}
+
+// Seul chemin autorisé pour créer un nouveau compte — le serveur
+// vérifie pour de vrai l'unicité du numéro (jamais fiable si on ne
+// fait confiance qu'au cache local du téléphone) et délivre aussitôt
+// un jeton de session, pour que le compte tout neuf puisse déjà
+// utiliser les actions sensibles (dont son tout premier mot de passe).
+function createAccountSecurely(account) {
+  return fetch(supabaseConfig.url + "/functions/v1/create-account", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+    body: JSON.stringify({ account: account })
+  })
+    .then(function(r) { return r.json(); })
+    .catch(function() { return { success: false, error: "network_error" }; });
 }
 
 function verifyAccountPassword(accountId, password) {
@@ -27598,8 +27715,32 @@ function renderAdminFilature() {
 }
 
 function renderAdminWallets() {
+  // Demandes Diaspora en attente — chargées une seule fois par ouverture
+  // de l'écran (pas de téléchargement en bloc, juste cette liste précise).
+  if (state.adminDiasporaRequests === null && !state._diasporaFetchInFlight) {
+    state._diasporaFetchInFlight = true;
+    callWalletOperation({ operation: "admin_list_diaspora_requests" }).then(function(res) {
+      state._diasporaFetchInFlight = false;
+      state.adminDiasporaRequests = res.success ? (res.requests || []) : [];
+      render();
+    });
+  }
+  var diasporaHtml = '';
+  if (state.adminDiasporaRequests && state.adminDiasporaRequests.length > 0) {
+    diasporaHtml += '<div class="section-title" style="font-size:14px;margin-bottom:10px;"><i class="fa-solid fa-earth-africa"></i> Demandes Diaspora en attente (' + state.adminDiasporaRequests.length + ')</div>';
+    for (var di = 0; di < state.adminDiasporaRequests.length; di++) {
+      var dreq = state.adminDiasporaRequests[di];
+      diasporaHtml += '<div class="card-row" style="margin-bottom:8px;">';
+      diasporaHtml += '<div style="flex:1;"><div style="font-weight:700;font-size:13px;">' + esc(dreq.accountName) + ' (' + esc(dreq.accountPhone) + ')</div><div style="font-size:11px;color:var(--text-dim);">De : ' + esc(dreq.senderName || "?") + (dreq.message ? ' — "' + esc(dreq.message) + '"' : '') + '</div></div>';
+      diasporaHtml += '<div style="font-weight:800;font-size:13px;margin-right:8px;">' + money(dreq.amount) + '</div>';
+      diasporaHtml += '<button class="btn-secondary" style="padding:6px 10px;margin-right:6px;" data-action="admin-approve-diaspora" data-value="' + esc(dreq.id) + '"><i class="fa-solid fa-check"></i></button>';
+      diasporaHtml += '<button class="link-btn" style="color:var(--danger);" data-action="admin-reject-diaspora" data-value="' + esc(dreq.id) + '"><i class="fa-solid fa-xmark"></i></button>';
+      diasporaHtml += '</div>';
+    }
+  }
+
   var query = (state.adminWalletSearch || "").toLowerCase().trim();
-  var html = '<div class="glass-card" style="padding:12px;margin-bottom:14px;">';
+  var html = diasporaHtml + '<div class="glass-card" style="padding:12px;margin-bottom:14px;">';
   html += '<div style="display:flex;gap:8px;">';
   html += '<div style="position:relative;flex:1;"><i class="fa-solid fa-magnifying-glass" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-dim);font-size:13px;"></i>';
   html += '<input class="input" id="admin-wallet-search-input" style="padding-left:34px;" placeholder="Rechercher un compte, un numéro..." value="' + esc(state.adminWalletSearch || "") + '" data-bind="adminWalletSearch" data-enter-action="submit-admin-wallet-search" />';
@@ -27607,64 +27748,52 @@ function renderAdminWallets() {
   html += '<button class="btn-primary" style="flex:0;padding:0 16px;" data-action="submit-admin-wallet-search"><i class="fa-solid fa-magnifying-glass"></i></button>';
   html += '</div></div>';
 
-  // On part des COMPTES (pas seulement des portefeuilles déjà créés) pour
-  // que la recherche par nom fonctionne même avant le tout premier
-  // mouvement d'argent d'une personne. Table de correspondance construite
-  // une seule fois (au lieu d'appeler getWallet — qui rescanne tous les
-  // portefeuilles — pour CHAQUE compte) : à grande échelle, cette liste
-  // pouvait prendre plusieurs centaines de millisecondes à s'ouvrir.
-  var walletsById = {};
-  for (var wbi = 0; wbi < state.wallets.length; wbi++) walletsById[state.wallets[wbi].id] = state.wallets[wbi];
-  var seenPhones = {};
-  var rows = [];
-  for (var i = 0; i < state.accounts.length; i++) {
-    var acc = state.accounts[i];
-    if (!inAdminScope(acc)) continue;
-    var wid = normalizeWalletPhone(acc.phone);
-    if (!wid || seenPhones[wid]) continue;
-    seenPhones[wid] = true;
-    var wallet = walletsById[wid] || { id: wid, phone: acc.phone, balance: 0, transactions: [] };
-    if (query) {
-      var haystack = ((acc.name || "") + " " + (acc.shopName || "") + " " + (acc.phone || "")).toLowerCase();
-      if (haystack.indexOf(query) === -1) continue;
+  // Recherche CIBLÉE côté serveur (voir adminSearchWallets) — jamais un
+  // téléchargement de tout le monde comme avant. Les résultats déjà
+  // reçus sont mis en cache dans state.adminWalletSearchResults.
+  var rows = state.adminWalletSearchResults || [];
+  if (!query) {
+    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;">Tapez un nom ou un numéro pour rechercher un portefeuille.</div>';
+  } else if (state.adminWalletSearchLoading) {
+    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;">Recherche en cours…</div>';
+  } else {
+    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;">' + rows.length + ' résultat(s)</div>';
+    if (rows.length === 0) {
+      html += '<div class="empty-state"><i class="fa-solid fa-wallet"></i><div class="title">Aucun résultat</div></div>';
     }
-    rows.push({ account: acc, wallet: wallet });
-  }
-  rows.sort(function(a, b) { return (b.wallet.balance || 0) - (a.wallet.balance || 0); });
-
-  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;">' + rows.length + ' compte(s)' + (query ? ' correspondant(s)' : '') + '</div>';
-
-  if (rows.length === 0) {
-    html += '<div class="empty-state"><i class="fa-solid fa-wallet"></i><div class="title">Aucun résultat</div></div>';
-    return html;
   }
 
   for (var r = 0; r < rows.length; r++) {
     var row = rows[r];
-    var isOpen = state.adminWalletOpenId === row.wallet.id;
+    var isOpen = state.adminWalletOpenId === row.accountId;
     html += '<div class="card-row" style="flex-direction:column;align-items:stretch;margin-bottom:8px;">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" data-action="toggle-admin-wallet" data-value="' + esc(row.wallet.id) + '">';
-    html += '<div><div style="font-weight:700;font-size:13px;">' + esc(row.account.shopName || row.account.name) + '</div><div style="font-size:11px;color:var(--text-dim);">' + esc(row.account.phone || "") + '</div></div>';
-    html += '<div style="display:flex;align-items:center;gap:8px;"><div style="font-weight:800;font-size:14px;color:var(--accent);">' + money(row.wallet.balance) + '</div><i class="fa-solid ' + (isOpen ? 'fa-chevron-up' : 'fa-chevron-down') + '" style="color:var(--text-dim);font-size:11px;"></i></div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" data-action="toggle-admin-wallet" data-value="' + esc(row.accountId) + '">';
+    html += '<div><div style="font-weight:700;font-size:13px;">' + esc(row.name || "") + '</div><div style="font-size:11px;color:var(--text-dim);">' + esc(row.phone || "") + '</div></div>';
+    html += '<div style="display:flex;align-items:center;gap:8px;"><div style="font-weight:800;font-size:14px;color:var(--accent);">' + money(row.balance) + '</div><i class="fa-solid ' + (isOpen ? 'fa-chevron-up' : 'fa-chevron-down') + '" style="color:var(--text-dim);font-size:11px;"></i></div>';
     html += '</div>';
     if (isOpen) {
       html += '<div style="margin-top:10px;border-top:1px solid var(--border-color);padding-top:10px;">';
       html += '<div style="display:flex;gap:8px;margin-bottom:10px;">';
-      html += '<input class="input" style="flex:1;" type="number" placeholder="Montant" id="admin-wallet-adjust-' + esc(row.wallet.id) + '" />';
-      html += '<button class="btn-secondary" style="flex:0;padding:10px 12px;" data-action="admin-wallet-credit" data-value="' + esc(row.wallet.id) + '" data-phone="' + esc(row.account.phone) + '"><i class="fa-solid fa-plus"></i></button>';
-      html += '<button class="btn-secondary" style="flex:0;padding:10px 12px;color:var(--danger);" data-action="admin-wallet-debit" data-value="' + esc(row.wallet.id) + '" data-phone="' + esc(row.account.phone) + '"><i class="fa-solid fa-minus"></i></button>';
+      html += '<input class="input" style="flex:1;" type="number" placeholder="Montant" id="admin-wallet-adjust-' + esc(row.accountId) + '" />';
+      html += '<button class="btn-secondary" style="flex:0;padding:10px 12px;" data-action="admin-wallet-credit" data-value="' + esc(row.accountId) + '"><i class="fa-solid fa-plus"></i></button>';
+      html += '<button class="btn-secondary" style="flex:0;padding:10px 12px;color:var(--danger);" data-action="admin-wallet-debit" data-value="' + esc(row.accountId) + '"><i class="fa-solid fa-minus"></i></button>';
       html += '</div>';
-      var txns = (row.wallet.transactions || []).slice().reverse();
-      if (txns.length === 0) {
-        html += '<div style="font-size:11.5px;color:var(--text-dim);">Aucun mouvement.</div>';
+      var detail = state.adminWalletDetail && state.adminWalletDetail.accountId === row.accountId ? state.adminWalletDetail : null;
+      if (!detail) {
+        html += '<div style="font-size:11.5px;color:var(--text-dim);">Chargement du détail…</div>';
       } else {
-        for (var t = 0; t < txns.length; t++) {
-          var tx = txns[t];
-          html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed var(--border-color);font-size:11.5px;">';
-          html += '<div><div style="font-weight:700;">' + esc(walletReasonLabel(tx)) + '</div><div style="color:var(--text-dim);">' + fmtDateTime(tx.createdAt) + (tx.message ? ' — "' + esc(tx.message) + '"' : '') + '</div></div>';
-          html += '<div style="display:flex;align-items:center;gap:8px;"><span style="font-weight:800;color:' + (tx.type === "credit" ? 'var(--success)' : 'var(--danger)') + ';">' + (tx.type === "credit" ? '+' : '−') + money(tx.amount) + '</span>';
-          html += '<button class="link-btn" style="color:var(--danger);padding:2px;" data-action="admin-wallet-delete-txn" data-value="' + esc(row.wallet.id) + '" data-txn="' + esc(tx.id) + '"><i class="fa-solid fa-trash"></i></button></div>';
-          html += '</div>';
+        var txns = (detail.wallet.transactions || []).slice().reverse();
+        if (txns.length === 0) {
+          html += '<div style="font-size:11.5px;color:var(--text-dim);">Aucun mouvement.</div>';
+        } else {
+          for (var t = 0; t < txns.length; t++) {
+            var tx = txns[t];
+            html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed var(--border-color);font-size:11.5px;">';
+            html += '<div><div style="font-weight:700;">' + esc(walletReasonLabel(tx)) + '</div><div style="color:var(--text-dim);">' + fmtDateTime(tx.createdAt) + (tx.message ? ' — "' + esc(tx.message) + '"' : '') + '</div></div>';
+            html += '<div style="display:flex;align-items:center;gap:8px;"><span style="font-weight:800;color:' + (tx.type === "credit" ? 'var(--success)' : 'var(--danger)') + ';">' + (tx.type === "credit" ? '+' : '−') + money(tx.amount) + '</span>';
+            html += '<button class="link-btn" style="color:var(--danger);padding:2px;" data-action="admin-wallet-delete-txn" data-value="' + esc(row.accountId) + '" data-txn="' + esc(tx.id) + '"><i class="fa-solid fa-trash"></i></button></div>';
+            html += '</div>';
+          }
         }
       }
       html += '</div>';
@@ -32812,11 +32941,21 @@ root.addEventListener("click", function(e) {
     case "close-carte": state.showCarte = false; render(); break;
     case "open-charge-payment": state.showChargePayment = true; render(); break;
     case "close-charge-payment": state.showChargePayment = false; render(); break;
+    case "open-payment-code": state.showPaymentCode = true; state.myPaymentCode = null; render(); break;
+    case "close-payment-code": state.showPaymentCode = false; render(); break;
+    case "generate-payment-code": {
+      callWalletOperation({ operation: "generate_payment_code" }).then(function(res) {
+        if (!res.success) { showToast("❌ Impossible de générer un code, réessayez."); return; }
+        state.myPaymentCode = { code: res.code, expiresAt: res.expiresAt };
+        render();
+      });
+      break;
+    }
     case "confirm-charge-payment": {
-      var chargePhoneEl = document.getElementById('charge-payment-phone');
+      var chargeCodeEl = document.getElementById('charge-payment-code');
       var chargeAmountEl = document.getElementById('charge-payment-amount');
       var chargeAmount = chargeAmountEl ? parseFloat(chargeAmountEl.value) : NaN;
-      chargeWalletPayment(chargePhoneEl ? chargePhoneEl.value : "", state.profile.phone, chargeAmount).then(function(chargeOk) {
+      redeemPaymentCode(chargeCodeEl ? chargeCodeEl.value.trim() : "", chargeAmount).then(function(chargeOk) {
         if (chargeOk) state.showChargePayment = false;
         render();
       });
@@ -32837,7 +32976,19 @@ root.addEventListener("click", function(e) {
       });
       break;
     }
-    case "submit-admin-wallet-search": render(); break;
+    case "submit-admin-wallet-search": {
+      var awsQuery = (state.adminWalletSearch || "").trim();
+      if (!awsQuery) { state.adminWalletSearchResults = []; render(); break; }
+      state.adminWalletSearchLoading = true;
+      render();
+      callWalletOperation({ operation: "admin_search_wallets", query: awsQuery }).then(function(res) {
+        state.adminWalletSearchLoading = false;
+        if (res.success) state.adminWalletSearchResults = res.results || [];
+        else showToast("❌ Recherche impossible (accès Admin non reconnu ?).");
+        render();
+      });
+      break;
+    }
     case "submit-admin-account-search": render(); break;
     case "add-filature-watch": {
       var addPhoneEl = document.getElementById('filature-add-phone');
@@ -32896,25 +33047,62 @@ root.addEventListener("click", function(e) {
       break;
     }
     case "toggle-admin-wallet": {
-      state.adminWalletOpenId = state.adminWalletOpenId === value ? null : value;
+      if (state.adminWalletOpenId === value) {
+        state.adminWalletOpenId = null;
+        render();
+        break;
+      }
+      state.adminWalletOpenId = value;
+      state.adminWalletDetail = null;
       render();
+      callWalletOperation({ operation: "admin_get_wallet_detail", targetAccountId: value }).then(function(res) {
+        if (res.success) state.adminWalletDetail = { accountId: value, wallet: res.wallet };
+        else showToast("❌ Détail indisponible (accès Admin non reconnu ?).");
+        render();
+      });
       break;
     }
     case "admin-wallet-credit":
     case "admin-wallet-debit": {
-      // Temporairement indisponible : le serveur (wallet-write) refuse
-      // cette opération tant qu'une authentification Admin séparée
-      // (distincte des comptes clients) n'est pas en place — voir la
-      // note dans wallet-write/index.ts.
-      showToast("🚧 Ajustement manuel temporairement indisponible — nécessite une authentification Admin séparée.");
+      var adjInput = document.getElementById('admin-wallet-adjust-' + value);
+      var adjAmount = adjInput ? parseFloat(adjInput.value) : NaN;
+      if (isNaN(adjAmount) || adjAmount <= 0) { showToast(t("toast_enter_valid_amount")); break; }
+      var signedAmount = action === "admin-wallet-credit" ? adjAmount : -adjAmount;
+      callWalletOperation({ operation: "admin_adjust", targetAccountId: value, amount: signedAmount, reason: "Ajustement Admin" }).then(function(res) {
+        if (!res.success) { showToast(res.error === "insufficient_balance" ? t("toast_insufficient_for_withdrawal") : "❌ Ajustement refusé."); return; }
+        showToast(action === "admin-wallet-credit" ? (t("dt_amount_added") + money(adjAmount) + t("dt_added_period")) : (t("dt_amount_added") + money(adjAmount) + t("dt_removed_period")));
+        // Rafraîchit le détail affiché et, si c'est SON PROPRE compte
+        // (rare mais possible), son propre solde aussi.
+        callWalletOperation({ operation: "admin_get_wallet_detail", targetAccountId: value }).then(function(detailRes) {
+          if (detailRes.success) state.adminWalletDetail = { accountId: value, wallet: detailRes.wallet };
+          var updatedRow = (state.adminWalletSearchResults || []).find(function(rw) { return rw.accountId === value; });
+          if (updatedRow) updatedRow.balance = detailRes.wallet ? detailRes.wallet.balance : updatedRow.balance;
+          render();
+        });
+      });
       break;
     }
     case "admin-wallet-delete-txn": {
-      // Temporairement indisponible — même raison que l'ajustement
-      // manuel (admin-wallet-credit/debit) : le serveur n'a aucun moyen
-      // de vérifier qu'un vrai Admin appelle, tant qu'une authentification
-      // Admin séparée n'est pas en place.
-      showToast("🚧 Modification manuelle temporairement indisponible — nécessite une authentification Admin séparée.");
+      var txnIdToDelete = btn.dataset.txn;
+      callWalletOperation({ operation: "admin_delete_wallet_txn", targetAccountId: value, txnId: txnIdToDelete }).then(function(res) {
+        if (!res.success) { showToast("❌ Suppression refusée."); return; }
+        showToast(t("toast_transaction_deleted"));
+        callWalletOperation({ operation: "admin_get_wallet_detail", targetAccountId: value }).then(function(detailRes) {
+          if (detailRes.success) state.adminWalletDetail = { accountId: value, wallet: detailRes.wallet };
+          render();
+        });
+      });
+      break;
+    }
+    case "admin-approve-diaspora":
+    case "admin-reject-diaspora": {
+      var approveIt = action === "admin-approve-diaspora";
+      callWalletOperation({ operation: "admin_settle_diaspora_request", requestId: value, approve: approveIt }).then(function(res) {
+        if (!res.success) { showToast("❌ Action refusée."); return; }
+        state.adminDiasporaRequests = (state.adminDiasporaRequests || []).filter(function(r) { return r.id !== value; });
+        showToast(approveIt ? "✅ Demande approuvée et créditée." : "Demande rejetée.");
+        render();
+      });
       break;
     }
     case "admin-delete-cagnotte": {
@@ -36506,6 +36694,10 @@ function maybeSignalBootReady() {
     if (!bootDone) {
       bootDone = true;
       _splashAppDataReady = true;
+      // Si quelqu'un est déjà connecté (session restaurée depuis
+      // l'appareil), on récupère son propre solde une seule fois ici —
+      // jamais celui de personne d'autre (voir fetchMyWalletState).
+      if (state.profile) fetchMyWalletState();
       trySplashFinish();
     } else if (_splashFinished) {
       render();
