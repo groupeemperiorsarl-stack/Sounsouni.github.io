@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="fr" class="show-fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sounsouni Network — Infrastructure logistique du dernier kilomètre au Mali</title>
+<meta name="description" content="Sounsouni construit l'infrastructure locale permettant aux marketplaces, fournisseurs et logisticiens internationaux d'atteindre leurs clients au Mali, en commençant par Bamako. Sounsouni is building the local infrastructure enabling international marketplaces and suppliers to reach customers in Mali, starting in Bamako.">
+<meta name="keywords" content="Mali logistics partner, Bamako last mile delivery, West Africa marketplace infrastructure, partenaire logistique Mali, livraison Bamako, UEMOA logistics network">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --primary:#2e7d32;
+    --primary-light:#7bcb3a;
+    --primary-dark:#1b4d1f;
+    --gold:#f6c343;
+    --bg-body:#f7f7f7;
+    --bg-card:#ffffff;
+    --text-primary:#1a1a2e;
+    --text-secondary:#4a4a6a;
+    --text-dim:#8a8aaa;
+    --border-color:#e8e8f0;
+    --tint-green:rgba(46,125,50,0.08);
+    --tint-gold:rgba(246,195,67,0.16);
+    --maxw:1180px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg-body);
+    color:var(--text-primary);
+    font-family:'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  h1,h2,h3,.num,.logo-word{
+    font-family:'Space Grotesk', 'IBM Plex Sans', sans-serif;
+    font-weight:600;
+    letter-spacing:-0.01em;
+  }
+  a{color:inherit;}
+  .en{display:none;}
+  html.show-en .en{display:inline;}
+  html.show-en .fr{display:none;}
+  html.show-fr .fr{display:inline;}
+  .block-en, .block-fr{display:block;}
+  html.show-en .block-fr{display:none;}
+  html.show-fr .block-en{display:none;}
+
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 28px;}
+
+  /* ---------- NAV ---------- */
+  nav{
+    position:sticky; top:0; z-index:50;
+    background:rgba(255,255,255,0.92);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--border-color);
+  }
+  nav .wrap{display:flex; align-items:center; justify-content:space-between; height:66px;}
+  .logo{display:flex; align-items:center; gap:10px; font-size:17px;}
+  .logo-mark{width:24px; height:24px; flex-shrink:0;}
+  .logo-word span{color:var(--primary);}
+  .lang-toggle{
+    display:flex; border:1px solid var(--border-color); border-radius:999px; overflow:hidden;
+    font-size:12.5px;
+  }
+  .lang-toggle button{
+    background:none; border:none; color:var(--text-dim); padding:7px 15px; cursor:pointer;
+    font-family:inherit; font-size:inherit; transition:color .15s, background .15s;
+  }
+  .lang-toggle button.active{background:var(--primary); color:#fff; font-weight:600;}
+
+  /* ---------- HERO ---------- */
+  .hero{position:relative; padding:96px 0 88px; overflow:hidden; background:var(--primary-dark); color:#fff;}
+  .hero-routes{position:absolute; inset:0; opacity:0.5; pointer-events:none;}
+  .hero-routes path{fill:none; stroke:var(--primary-light); stroke-width:1; stroke-dasharray:2 8; opacity:0.4;}
+  .hero-routes path.p2{stroke:var(--gold); stroke-dasharray:1 7;}
+  .hero-routes path.p3{stroke:#ffffff; stroke-dasharray:1 9; opacity:0.2;}
+  @media (prefers-reduced-motion: no-preference){
+    .hero-routes path{animation:dashmove 26s linear infinite;}
+  }
+  @keyframes dashmove{ to{ stroke-dashoffset:-400; } }
+  .hero-inner{position:relative; z-index:2; max-width:760px;}
+  .eyebrow-tag{
+    display:inline-flex; align-items:center; gap:8px;
+    font-size:12.5px; color:var(--primary-light); border:1px solid rgba(123,203,58,0.4);
+    background:rgba(123,203,58,0.12); padding:5px 12px; border-radius:999px; margin-bottom:26px;
+  }
+  .eyebrow-tag i{width:6px; height:6px; border-radius:50%; background:var(--primary-light); display:inline-block;}
+  h1.hero-title{font-size:44px; line-height:1.12; margin:0 0 22px; max-width:15ch; color:#fff;}
+  .hero-lede{font-size:17px; color:rgba(255,255,255,0.78); max-width:56ch; margin:0 0 34px;}
+  .hero-actions{display:flex; gap:14px; flex-wrap:wrap;}
+  .btn{
+    display:inline-block; padding:13px 24px; border-radius:8px; font-size:14.5px; font-weight:600;
+    text-decoration:none; cursor:pointer; border:1px solid transparent; font-family:inherit;
+  }
+  .btn-primary{background:var(--gold); color:#3a2c00;}
+  .btn-ghost{background:transparent; color:#fff; border-color:rgba(255,255,255,0.4);}
+
+  /* ---------- MARKET STRIP ---------- */
+  .market-strip{border-bottom:1px solid var(--border-color); background:var(--bg-card);}
+  .market-strip .wrap{display:flex; flex-wrap:wrap; gap:44px; padding:30px 28px;}
+  .market-fact .num{font-size:26px; color:var(--primary-dark); display:block;}
+  .market-fact .lbl{font-size:12.5px; color:var(--text-dim); margin-top:2px;}
+
+  /* ---------- CATEGORY RAIL SECTIONS ---------- */
+  .cat-section{position:relative; padding:70px 0 74px; border-bottom:1px solid var(--border-color);}
+  .cat-rail{position:absolute; left:0; top:70px; bottom:74px; width:3px;}
+  .cat-section.actuel .cat-rail{background:var(--primary);}
+  .cat-section.deploiement .cat-rail{background:var(--gold);}
+  .cat-section.cible .cat-rail{background:var(--primary-light); }
+  .cat-section.vision .cat-rail{background:var(--border-color); }
+  .cat-head{display:flex; align-items:baseline; gap:14px; margin-bottom:10px; flex-wrap:wrap;}
+  .cat-chip{font-size:11.5px; padding:4px 10px; border-radius:4px; font-weight:600;}
+  .actuel .cat-chip{background:var(--tint-green); color:var(--primary);}
+  .deploiement .cat-chip{background:var(--tint-gold); color:#8a6600;}
+  .cible .cat-chip{background:var(--tint-green); color:var(--primary-dark); border:1px dashed var(--primary-light);}
+  .vision .cat-chip{background:#f1f1f4; color:var(--text-dim); border:1px dotted var(--text-dim);}
+  .cat-section h2{font-size:26px; margin:0; color:var(--text-primary);}
+  .cat-note{color:var(--text-secondary); font-size:14.5px; max-width:62ch; margin:14px 0 34px;}
+
+  .stat-grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:1px; background:var(--border-color); border:1px solid var(--border-color);}
+  .stat-card{background:var(--bg-card); padding:26px 24px; border-left:3px solid transparent;}
+  .actuel .stat-card{border-left-color:var(--primary);}
+  .deploiement .stat-card{border-left-color:var(--gold);}
+  .cible .stat-card{border-left:3px dashed var(--primary-light); background:var(--tint-green);}
+  .vision .stat-card{border-left:3px dotted var(--text-dim); background:#f6f6f8;}
+  .stat-card .num{font-size:34px; display:block; margin-bottom:6px; color:var(--text-primary);}
+  .stat-card .num small{font-size:14px; color:var(--text-dim); font-weight:400; margin-left:4px;}
+  .stat-card .lbl{font-size:13.5px; color:var(--text-secondary);}
+  .stat-card .status{font-size:11px; color:var(--text-dim); margin-top:10px;}
+
+  .phase-row{display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--border-color); border:1px solid var(--border-color); margin-top:2px;}
+  .phase-cell{background:var(--tint-green); padding:22px 22px; border-top:3px dashed var(--primary-light);}
+  .phase-cell .phase-name{font-size:12.5px; color:var(--primary-dark); font-weight:600; margin-bottom:8px;}
+  .phase-cell .num{font-size:22px;}
+
+  .qual-block{display:grid; grid-template-columns:1fr 1fr; gap:40px;}
+  .qual-block p{color:var(--text-secondary); font-size:15px; max-width:44ch;}
+  .qual-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:14px;}
+  .qual-list li{display:flex; gap:12px; align-items:flex-start; font-size:14.5px; color:var(--text-secondary);}
+  .qual-list li i{width:7px; height:7px; border-radius:50%; background:var(--primary); margin-top:7px; flex-shrink:0;}
+
+  .calc-note{
+    font-size:12.5px; color:var(--text-dim); margin-top:18px; padding:12px 16px;
+    background:#f6f6f8; border-left:3px solid var(--border-color); max-width:70ch;
+  }
+
+  /* ---------- WHY SECTION ---------- */
+  .why{padding:80px 0; border-bottom:1px solid var(--border-color); background:var(--bg-card);}
+  .why h2{font-size:28px; max-width:20ch; margin:0 0 44px;}
+  .why-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:1px; background:var(--border-color); border:1px solid var(--border-color);}
+  .why-card{background:var(--bg-card); padding:30px 28px;}
+  .why-card h3{font-size:17px; margin:0 0 10px; color:var(--primary);}
+  .why-card p{font-size:14.5px; color:var(--text-secondary); margin:0; max-width:46ch;}
+
+  /* ---------- FLOW DIAGRAM ---------- */
+  .flow{padding:80px 0; border-bottom:1px solid var(--border-color);}
+  .flow h2{font-size:26px; margin:0 0 10px;}
+  .flow .cat-note{margin-bottom:46px;}
+  .flow-chain{display:flex; flex-direction:column; gap:0;}
+  .flow-node{
+    display:flex; align-items:center; gap:16px; padding:16px 20px;
+    border:1px solid var(--border-color); background:var(--bg-card); border-radius:10px;
+  }
+  .flow-node .dot{width:10px; height:10px; border-radius:50%; background:var(--gold); flex-shrink:0;}
+  .flow-node span.t{font-size:14.5px; font-weight:500;}
+  .flow-node span.sub{font-size:12.5px; color:var(--text-dim); display:block;}
+  .flow-connector{
+    height:34px; width:1px; position:relative; margin-left:25px;
+    border-left:2px dashed var(--primary-light); opacity:0.7;
+  }
+  @media (prefers-reduced-motion: no-preference){
+    .flow-connector{ background-image:linear-gradient(var(--primary-light), var(--primary-light)); background-size:2px 10px; background-repeat:repeat-y; animation:flowmove 1.4s linear infinite; border-left:none; }
+  }
+  @keyframes flowmove{ to{ background-position:0 -20px; } }
+
+  /* ---------- MAPS ---------- */
+  .maps{padding:80px 0; border-bottom:1px solid var(--border-color); background:var(--bg-card);}
+  .maps h2{font-size:26px; margin:0 0 10px;}
+  .maps-grid{display:grid; grid-template-columns:1fr 1fr; gap:28px; margin-top:40px;}
+  .map-panel{border:1px solid var(--border-color); background:var(--bg-body); padding:24px; border-radius:12px;}
+  .map-panel h3{font-size:14.5px; margin:0 0 4px; color:var(--text-primary);}
+  .map-panel .map-caption{font-size:12px; color:var(--text-dim); margin-bottom:18px;}
+  .map-panel svg{width:100%; height:auto; display:block;}
+  .legend{display:flex; flex-wrap:wrap; gap:16px; margin-top:16px;}
+  .legend span{font-size:11.5px; color:var(--text-dim); display:flex; align-items:center; gap:6px;}
+  .legend i{width:8px; height:8px; border-radius:50%; display:inline-block;}
+
+  /* ---------- INFRA STATEMENT ---------- */
+  .statement{padding:90px 0; text-align:left; border-bottom:1px solid var(--border-color); background:var(--primary-dark); color:#fff;}
+  .statement .cat-chip{margin-bottom:22px; display:inline-block; background:rgba(255,255,255,0.12); color:var(--gold);}
+  .statement blockquote{
+    font-family:'Space Grotesk', sans-serif; font-size:28px; line-height:1.35;
+    margin:0; max-width:22ch; color:#fff; font-weight:500;
+  }
+  .statement blockquote .muted-line{display:block; color:rgba(255,255,255,0.72); font-weight:400; font-size:20px; margin-top:16px;}
+
+  /* ---------- CONTACT ---------- */
+  .contact{padding:80px 0 100px;}
+  .contact h2{font-size:26px; margin:0 0 14px;}
+  .contact p{color:var(--text-secondary); font-size:15px; max-width:52ch; margin:0 0 30px;}
+  .contact-actions{display:flex; gap:14px; flex-wrap:wrap;}
+  .contact .btn-primary{background:var(--primary); color:#fff;}
+  .contact .btn-ghost{background:transparent; color:var(--primary-dark); border-color:var(--border-color);}
+
+  footer{border-top:1px solid var(--border-color); padding:26px 0; font-size:12.5px; color:var(--text-dim); background:var(--bg-card);}
+  footer .wrap{display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px;}
+
+  @media (max-width: 860px){
+    h1.hero-title{font-size:32px;}
+    .stat-grid, .phase-row, .why-grid, .qual-block{grid-template-columns:1fr;}
+    .maps-grid{grid-template-columns:1fr;}
+    .cat-rail{display:none;}
+    .cat-section{padding-left:0;}
+    .market-strip .wrap{gap:26px;}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <div class="logo">
+      <svg class="logo-mark" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#2e7d32" stroke-width="1.8"/><path d="M6 12h12M12 6v12" stroke="#2e7d32" stroke-width="1.5"/></svg>
+      <span class="logo-word">Sounsouni <span>Network</span></span>
+    </div>
+    <div class="lang-toggle">
+      <button id="btn-fr" class="active" onclick="setLang('fr')">FR</button>
+      <button id="btn-en" onclick="setLang('en')">EN</button>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <svg class="hero-routes" viewBox="0 0 1180 420" preserveAspectRatio="none">
+    <path class="p1" d="M -50 80 C 250 40, 500 160, 1230 60"/>
+    <path class="p2" d="M -50 220 C 300 260, 600 140, 1230 240"/>
+    <path class="p3" d="M -50 350 C 350 300, 700 400, 1230 330"/>
+  </svg>
+  <div class="wrap hero-inner">
+    <div class="eyebrow-tag"><i></i>
+      <span class="fr">Sounsouni Network — partenaires internationaux</span>
+      <span class="en">Sounsouni Network — international partners</span>
+    </div>
+    <h1 class="hero-title">
+      <span class="fr">L'infrastructure locale pour atteindre le marché malien</span>
+      <span class="en">The local infrastructure to reach the Malian market</span>
+    </h1>
+    <p class="hero-lede">
+      <span class="fr">Sounsouni opère déjà un réseau commercial et logistique à Bamako, conçu pour permettre à des marketplaces, fournisseurs et logisticiens internationaux d'accéder progressivement au Mali — puis à l'Afrique de l'Ouest.</span>
+      <span class="en">Sounsouni already operates a commercial and logistics network in Bamako, designed to give international marketplaces, suppliers and logistics companies progressive access to Mali — and, from there, West Africa.</span>
+    </p>
+    <div class="hero-actions">
+      <a href="#contact" class="btn btn-primary"><span class="fr">Devenir partenaire</span><span class="en">Become a partner</span></a>
+      <a href="#reseau-actuel" class="btn btn-ghost"><span class="fr">Voir le réseau actuel</span><span class="en">See the current network</span></a>
+    </div>
+  </div>
+</section>
+
+<section class="market-strip">
+  <div class="wrap">
+    <div class="market-fact">
+      <span class="num">2,5 M+</span>
+      <span class="lbl block-fr">Population du Grand Bamako</span>
+      <span class="lbl block-en">Greater Bamako population</span>
+    </div>
+    <div class="market-fact">
+      <span class="num">~25 M</span>
+      <span class="lbl block-fr">Population du Mali</span>
+      <span class="lbl block-en">Population of Mali</span>
+    </div>
+    <div class="market-fact">
+      <span class="num block-fr" style="font-size:16px; max-width:26ch; display:block;">Bamako, principal point d'entrée commercial et logistique du pays</span>
+      <span class="num block-en" style="font-size:16px; max-width:26ch; display:block;">Bamako, the country's primary commercial and logistics gateway</span>
+    </div>
+  </div>
+</section>
+
+<!-- RÉSEAU ACTUEL -->
+<section class="cat-section actuel" id="reseau-actuel">
+  <div class="cat-rail"></div>
+  <div class="wrap">
+    <div class="cat-head">
+      <span class="cat-chip fr">Réseau actuel</span>
+      <span class="cat-chip en">Current network</span>
+      <h2 class="fr">Un réseau déjà opérationnel, à Bamako et dans les régions</h2>
+      <h2 class="en">A network already operating, in Bamako and the regions</h2>
+    </div>
+    <p class="cat-note">
+      <span class="fr">Sounsouni opère aujourd'hui un point de retrait dans chacun des quartiers de Bamako, ainsi qu'une présence minimale dans les régions du pays.</span>
+      <span class="en">Sounsouni today operates a pickup point in each of Bamako's neighborhoods, plus a minimum presence across the country's regions.</span>
+    </p>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <span class="num">124</span>
+        <span class="lbl fr">Points de retrait actifs au total (Bamako + régions)</span>
+        <span class="lbl en">Active pickup points in total (Bamako + regions)</span>
+        <div class="status fr">Actuel</div>
+        <div class="status en">Current</div>
+      </div>
+      <div class="stat-card">
+        <span class="num">500<small>/jour</small></span>
+        <span class="lbl fr">Livraisons quotidiennes à Bamako, à capacité actuelle</span>
+        <span class="lbl en">Daily deliveries in Bamako, at current capacity</span>
+        <div class="status fr">Actuel</div>
+        <div class="status en">Current</div>
+      </div>
+      <div class="stat-card">
+        <span class="num">35–40</span>
+        <span class="lbl fr">Livreurs actifs en rotation quotidienne</span>
+        <span class="lbl en">Active riders in daily rotation</span>
+        <div class="status fr">Actuel</div>
+        <div class="status en">Current</div>
+      </div>
+    </div>
+    <div class="calc-note">
+      <span class="fr">Détail du calcul : 67 quartiers à Bamako (1 point chacun) + 19 régions du Mali (3 points chacune) = 124 points de retrait. Capacité de livraison : 500 commandes/jour à Bamako, soit environ 13 000 à 15 000 colis/mois selon le nombre de jours ouvrés.</span>
+      <span class="en">Calculation detail: 67 neighborhoods in Bamako (1 point each) + 19 regions of Mali (3 points each) = 124 pickup points. Delivery capacity: 500 orders/day in Bamako, roughly 13,000–15,000 parcels/month depending on working days.</span>
+    </div>
+  </div>
+</section>
+
+<!-- RÉSEAU EN DÉPLOIEMENT -->
+<section class="cat-section deploiement">
+  <div class="cat-rail"></div>
+  <div class="wrap">
+    <div class="cat-head">
+      <span class="cat-chip fr">Réseau en déploiement</span>
+      <span class="cat-chip en">Network being deployed</span>
+      <h2 class="fr">Densification au-delà de la couverture de base</h2>
+      <h2 class="en">Densification beyond baseline coverage</h2>
+    </div>
+    <p class="cat-note">
+      <span class="fr">Au-delà de la présence minimale déjà en place, un renforcement est en cours dans les zones à plus fort volume — plusieurs points par région, plutôt qu'un seul point de repli.</span>
+      <span class="en">Beyond the minimum presence already in place, reinforcement is under way in higher-volume zones — several points per region, rather than a single fallback point.</span>
+    </p>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <span class="num">5<small class="fr">+ / région</small><small class="en">+ / region</small></span>
+        <span class="lbl fr">Points relais visés par région, dans les régions à fort volume</span>
+        <span class="lbl en">Targeted relay points per region, in higher-volume regions</span>
+        <div class="status fr">En déploiement</div>
+        <div class="status en">Being deployed</div>
+      </div>
+      <div class="stat-card">
+        <span class="num">70<small class="fr">+</small></span>
+        <span class="lbl fr">Points de retrait visés à Bamako (densification de certains quartiers)</span>
+        <span class="lbl en">Targeted pickup points in Bamako (densifying select neighborhoods)</span>
+        <div class="status fr">En déploiement</div>
+        <div class="status en">Being deployed</div>
+      </div>
+      <div class="stat-card">
+        <span class="num">60–70</span>
+        <span class="lbl fr">Livreurs en rotation visés, pour absorber la densification</span>
+        <span class="lbl en">Targeted riders in rotation, to absorb the densification</span>
+        <div class="status fr">En déploiement</div>
+        <div class="status en">Being deployed</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CAPACITÉ CIBLE -->
+<section class="cat-section cible">
+  <div class="cat-rail"></div>
+  <div class="wrap">
+    <div class="cat-head">
+      <span class="cat-chip fr">Capacité cible</span>
+      <span class="cat-chip en">Target capacity</span>
+      <h2 class="fr">La capacité que Sounsouni vise à construire</h2>
+      <h2 class="en">The capacity Sounsouni aims to build</h2>
+    </div>
+    <p class="cat-note">
+      <span class="fr">Ces chiffres décrivent une capacité visée, au-delà du réseau actuel — présentés comme cible de dimensionnement pour un partenaire logistique évaluant la taille du réseau à terme, pas comme un acquis.</span>
+      <span class="en">These figures describe a targeted capacity beyond the current network — presented as sizing targets for a logistics partner evaluating the network's eventual scale, not as an achieved fact.</span>
+    </p>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <span class="num">150<small>+</small></span>
+        <span class="lbl fr">Points de retrait au Mali à terme (Bamako + ensemble des régions)</span>
+        <span class="lbl en">Pickup points across Mali long-term (Bamako + all regions)</span>
+        <div class="status fr">Cible</div>
+        <div class="status en">Target</div>
+      </div>
+      <div class="stat-card">
+        <span class="num">100<small>+</small></span>
+        <span class="lbl fr">Livreurs/motos partenaires mobilisables via le réseau indépendant</span>
+        <span class="lbl en">Partner riders/motorbikes mobilizable through the independent network</span>
+        <div class="status fr">Capacité mobilisable</div>
+        <div class="status en">Mobilizable capacity</div>
+      </div>
+      <div class="stat-card">
+        <span class="num">↑</span>
+        <span class="lbl fr">Capacité extensible rapidement grâce à un réseau de partenaires indépendants</span>
+        <span class="lbl en">Capacity that can scale quickly through a network of independent partners</span>
+        <div class="status fr">Modèle flexible</div>
+        <div class="status en">Flexible model</div>
+      </div>
+    </div>
+    <p class="cat-note" style="margin-top:40px; margin-bottom:16px;">
+      <span class="fr">Capacité de traitement de colis visée, par phase de déploiement (au-delà de la capacité actuelle d'environ 13 000–15 000 colis/mois) :</span>
+      <span class="en">Targeted parcel-handling capacity, by rollout phase (beyond the current ~13,000–15,000 parcels/month capacity):</span>
+    </p>
+    <div class="phase-row">
+      <div class="phase-cell">
+        <div class="phase-name fr">Phase 1</div>
+        <div class="phase-name en">Phase 1</div>
+        <div class="num">15 000–30 000<small class="fr"> colis/mois</small><small class="en"> parcels/month</small></div>
+      </div>
+      <div class="phase-cell">
+        <div class="phase-name fr">Phase 2</div>
+        <div class="phase-name en">Phase 2</div>
+        <div class="num">30 000–50 000<small class="fr"> colis/mois</small><small class="en"> parcels/month</small></div>
+      </div>
+      <div class="phase-cell">
+        <div class="phase-name fr">Phase 3</div>
+        <div class="phase-name en">Phase 3</div>
+        <div class="num">75 000<small>+</small><small class="fr"> colis/mois, réseau régional étendu</small><small class="en"> parcels/month, extended regional network</small></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- VISION D'EXPANSION -->
+<section class="cat-section vision">
+  <div class="cat-rail"></div>
+  <div class="wrap">
+    <div class="cat-head">
+      <span class="cat-chip fr">Vision d'expansion</span>
+      <span class="cat-chip en">Expansion vision</span>
+      <h2 class="fr">Le Mali comme point de départ, pas comme destination</h2>
+      <h2 class="en">Mali as a starting point, not a destination</h2>
+    </div>
+    <p class="cat-note" style="max-width:70ch;">
+      <span class="fr">La feuille de route de Sounsouni vise, au-delà du Mali, à devenir une colonne vertébrale logistique pour l'Afrique de l'Ouest francophone — la zone UEMOA (Sénégal, Côte d'Ivoire, Burkina Faso, Niger, Togo, Bénin, Guinée-Bissau). Cette région partage une monnaie commune, des habitudes de paiement et de livraison proches, et ne compte, à ce jour, aucun réseau équivalent déjà en place. Il s'agit ici d'une orientation stratégique de long terme, pas d'un engagement calendaire.</span>
+      <span class="en">Beyond Mali, Sounsouni's roadmap aims to become a logistics backbone for Francophone West Africa — the WAEMU/UEMOA zone (Senegal, Côte d'Ivoire, Burkina Faso, Niger, Togo, Benin, Guinea-Bissau). This region shares a common currency and similar payment and delivery habits, and currently has no equivalent network in place. This is a long-term strategic direction, not a dated commitment.</span>
+    </p>
+  </div>
+</section>
+
+<section class="why">
+  <div class="wrap">
+    <h2><span class="fr">Pourquoi Sounsouni intéresse une plateforme internationale</span><span class="en">Why Sounsouni is relevant to an international platform</span></h2>
+    <div class="why-grid">
+      <div class="why-card">
+        <h3 class="fr">Accès au marché local</h3>
+        <h3 class="en">Local market access</h3>
+        <p class="fr">Une infrastructure locale permettant de connecter les fournisseurs internationaux aux acheteurs maliens.</p>
+        <p class="en">A local infrastructure connecting international suppliers to Malian buyers.</p>
+      </div>
+      <div class="why-card">
+        <h3 class="fr">Dernier kilomètre</h3>
+        <h3 class="en">Last mile</h3>
+        <p class="fr">Un réseau de points relais et de livreurs partenaires permettant de rapprocher les commandes des consommateurs.</p>
+        <p class="en">A network of relay points and partner riders that brings orders closer to consumers.</p>
+      </div>
+      <div class="why-card">
+        <h3 class="fr">Distribution décentralisée</h3>
+        <h3 class="en">Decentralized distribution</h3>
+        <p class="fr">Le modèle ne dépend pas uniquement d'un entrepôt central : les points relais permettent une distribution de proximité.</p>
+        <p class="en">The model does not rely on a single central warehouse: relay points enable proximity-based distribution.</p>
+      </div>
+      <div class="why-card">
+        <h3 class="fr">Scalabilité</h3>
+        <h3 class="en">Scalability</h3>
+        <p class="fr">Le réseau peut être étendu progressivement de Bamako vers les principales villes et régions du Mali, puis vers l'Afrique de l'Ouest.</p>
+        <p class="en">The network can be extended progressively from Bamako to Mali's main cities and regions, then to West Africa.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="flow">
+  <div class="wrap">
+    <h2><span class="fr">Comment un produit international atteint le client final</span><span class="en">How an international product reaches the end customer</span></h2>
+    <p class="cat-note"><span class="fr">Schéma de principe du réseau — illustre le trajet visé, pas un flux déjà mesuré à ce volume.</span><span class="en">Conceptual network diagram — illustrates the intended flow, not a flow already measured at this volume.</span></p>
+    <div class="flow-chain">
+      <div class="flow-node"><span class="dot"></span><div><span class="t fr">Fournisseur international</span><span class="t en">International supplier</span><span class="sub fr">Marketplace, usine, grossiste</span><span class="sub en">Marketplace, factory, wholesaler</span></div></div>
+      <div class="flow-connector"></div>
+      <div class="flow-node"><span class="dot"></span><div><span class="t">Sounsouni</span><span class="sub fr">Interface commerciale et coordination</span><span class="sub en">Commercial interface and coordination</span></div></div>
+      <div class="flow-connector"></div>
+      <div class="flow-node"><span class="dot"></span><div><span class="t fr">Import / logistique internationale</span><span class="t en">Import / international logistics</span></div></div>
+      <div class="flow-connector"></div>
+      <div class="flow-node"><span class="dot"></span><div><span class="t fr">Hub / point de distribution</span><span class="t en">Hub / distribution point</span><span class="sub fr">Bamako</span><span class="sub en">Bamako</span></div></div>
+      <div class="flow-connector"></div>
+      <div class="flow-node"><span class="dot"></span><div><span class="t fr">Points relais</span><span class="t en">Relay points</span></div></div>
+      <div class="flow-connector"></div>
+      <div class="flow-node"><span class="dot"></span><div><span class="t fr">Livreurs partenaires</span><span class="t en">Partner riders</span></div></div>
+      <div class="flow-connector"></div>
+      <div class="flow-node"><span class="dot" style="background:var(--primary);"></span><div><span class="t fr">Client final</span><span class="t en">End customer</span></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="maps">
+  <div class="wrap">
+    <h2><span class="fr">Zones de couverture</span><span class="en">Coverage areas</span></h2>
+    <p class="cat-note"><span class="fr">Représentations schématiques, à titre illustratif — pas des cartes cadastrales.</span><span class="en">Schematic representations for illustration — not survey-grade maps.</span></p>
+    <div class="maps-grid">
+      <div class="map-panel">
+        <h3 class="fr">Mali — point d'entrée et couverture régionale</h3>
+        <h3 class="en">Mali — entry point and regional coverage</h3>
+        <p class="map-caption fr">Bamako comme hub national, présence de base déjà active dans les 19 régions</p>
+        <p class="map-caption en">Bamako as the national hub, baseline presence already active across the 19 regions</p>
+        <svg viewBox="0 0 320 300">
+          <path d="M60 40 L200 20 L260 70 L250 150 L210 220 L150 270 L90 250 L60 190 L40 120 Z" fill="none" stroke="#dcdce4" stroke-width="1.5"/>
+          <circle cx="150" cy="150" r="7" fill="#2e7d32"/>
+          <text x="163" y="154" fill="#1a1a2e" font-size="12" font-family="IBM Plex Sans">Bamako</text>
+          <circle cx="90" cy="90" r="3.5" fill="#7bcb3a"/>
+          <circle cx="210" cy="110" r="3.5" fill="#7bcb3a"/>
+          <circle cx="200" cy="200" r="3.5" fill="#7bcb3a"/>
+          <circle cx="100" cy="200" r="3.5" fill="#7bcb3a"/>
+          <circle cx="70" cy="150" r="3.5" fill="#7bcb3a"/>
+          <line x1="150" y1="150" x2="90" y2="90" stroke="#7bcb3a" stroke-width="1" stroke-dasharray="2 4"/>
+          <line x1="150" y1="150" x2="210" y2="110" stroke="#7bcb3a" stroke-width="1" stroke-dasharray="2 4"/>
+          <line x1="150" y1="150" x2="200" y2="200" stroke="#7bcb3a" stroke-width="1" stroke-dasharray="2 4"/>
+          <line x1="150" y1="150" x2="100" y2="200" stroke="#7bcb3a" stroke-width="1" stroke-dasharray="2 4"/>
+          <line x1="150" y1="150" x2="70" y2="150" stroke="#7bcb3a" stroke-width="1" stroke-dasharray="2 4"/>
+        </svg>
+        <div class="legend">
+          <span><i style="background:#2e7d32;"></i><span class="fr">Hub actuel</span><span class="en">Current hub</span></span>
+          <span><i style="background:#7bcb3a;"></i><span class="fr">Présence régionale active</span><span class="en">Active regional presence</span></span>
+        </div>
+      </div>
+      <div class="map-panel">
+        <h3 class="fr">Grand Bamako — couverture par zone</h3>
+        <h3 class="en">Greater Bamako — coverage by zone</h3>
+        <p class="map-caption fr">Points de retrait actifs dans les 67 quartiers, densification ciblée en cours</p>
+        <p class="map-caption en">Active pickup points across the 67 neighborhoods, targeted densification under way</p>
+        <svg viewBox="0 0 320 300">
+          <circle cx="160" cy="150" r="115" fill="none" stroke="#dcdce4" stroke-width="1.5"/>
+          <path d="M160 150 L160 35 A115 115 0 0 1 259 200 Z" fill="#2e7d32" opacity="0.14"/>
+          <path d="M160 150 L259 200 A115 115 0 0 1 90 258 Z" fill="#f6c343" opacity="0.22"/>
+          <path d="M160 150 L90 258 A115 115 0 0 1 61 100 Z" fill="#2e7d32" opacity="0.14"/>
+          <path d="M160 150 L61 100 A115 115 0 0 1 160 35 Z" fill="#f6c343" opacity="0.22"/>
+          <circle cx="160" cy="150" r="5" fill="#1a1a2e"/>
+        </svg>
+        <div class="legend">
+          <span><i style="background:#2e7d32;"></i><span class="fr">Couverture active</span><span class="en">Active coverage</span></span>
+          <span><i style="background:#f6c343;"></i><span class="fr">Densification en déploiement</span><span class="en">Densification being deployed</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="statement">
+  <div class="wrap">
+    <span class="cat-chip">
+      <span class="fr">Infrastructure conçue pour les marketplaces internationales</span>
+      <span class="en">Infrastructure built for international marketplaces</span>
+    </span>
+    <blockquote>
+      <span class="fr">Sounsouni ne cherche pas seulement à vendre des produits au Mali.</span>
+      <span class="en">Sounsouni is not just trying to sell products in Mali.</span>
+      <span class="muted-line fr">Sounsouni construit l'infrastructure locale permettant à des fournisseurs et marketplaces internationaux d'atteindre leurs clients au Mali.</span>
+      <span class="muted-line en">Sounsouni is building the local infrastructure that lets international suppliers and marketplaces reach their customers in Mali.</span>
+    </blockquote>
+  </div>
+</section>
+
+<section class="contact" id="contact">
+  <div class="wrap">
+    <h2><span class="fr">Discutons de votre entrée sur le marché malien</span><span class="en">Let's discuss your entry into the Malian market</span></h2>
+    <p><span class="fr">Marketplaces, logisticiens, fournisseurs, investisseurs ou partenaires technologiques — nous répondons directement, avec les données de couverture et de volume à jour.</span><span class="en">Marketplaces, logistics companies, suppliers, investors or technology partners — we respond directly, with up-to-date coverage and volume data.</span></p>
+    <div class="contact-actions">
+      <a href="mailto:direction@sounsouni.pro" class="btn btn-primary"><span class="fr">Contacter Sounsouni Network</span><span class="en">Contact Sounsouni Network</span></a>
+      <a href="https://sounsouni.pro" class="btn btn-ghost">sounsouni.pro</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 Sounsouni Network</span>
+    <span class="fr">Bamako, Mali</span>
+    <span class="en">Bamako, Mali</span>
+  </div>
+</footer>
+
+<script>
+function setLang(l){
+  document.documentElement.classList.remove('show-fr','show-en');
+  document.documentElement.classList.add('show-'+l);
+  document.getElementById('btn-fr').classList.toggle('active', l==='fr');
+  document.getElementById('btn-en').classList.toggle('active', l==='en');
+  document.title = l==='fr'
+    ? "Sounsouni Network — Infrastructure logistique du dernier kilomètre au Mali"
+    : "Sounsouni Network — Last-mile logistics infrastructure in Mali";
+  try{ localStorage.setItem('sounsouni-network-lang', l); }catch(e){}
+}
+try{
+  var saved = localStorage.getItem('sounsouni-network-lang');
+  if(saved==='en') setLang('en');
+}catch(e){}
+</script>
+</body>
+</html>
