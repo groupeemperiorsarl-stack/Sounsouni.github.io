@@ -21016,6 +21016,19 @@ function renderAddressBookSection() {
   return html;
 }
 
+// Distingue "ouvert depuis le site, dans un navigateur normal" de
+// "ouvert depuis l'app installée sur l'écran d'accueil" — le même
+// fichier sert les deux, seul ce réglage du navigateur permet de les
+// différencier. Sert à cacher certains liens (ex: Réseau International)
+// uniquement pour les gens qui utilisent l'app installée.
+function isStandaloneApp() {
+  try {
+    return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function renderProfileModal() {
   var p = state.profile;
   var html = '<div class="modal-overlay" id="profile-overlay" data-action="close-profile">';
@@ -21042,6 +21055,9 @@ function renderProfileModal() {
   html += '<button class="vendor-hub-card" data-action="open-profile-info" style="background:var(--bg-body);"><i class="fa-solid fa-id-card"></i><div><div class="vh-title">' + t("profile_my_info") + '</div><div class="vh-sub">' + t("profile_my_info_sub") + '</div></div><i class="fa-solid fa-chevron-right"></i></button>';
   html += '<button class="vendor-hub-card" data-action="open-history" style="background:var(--bg-body);"><i class="fa-solid fa-clock-rotate-left"></i><div><div class="vh-title">' + t("profile_history") + '</div><div class="vh-sub">' + t("profile_history_sub") + '</div></div><i class="fa-solid fa-chevron-right"></i></button>';
   html += '<button class="vendor-hub-card" data-action="open-affiliate-program" style="background:var(--bg-body);"><i class="fa-solid fa-hand-holding-dollar"></i><div><div class="vh-title">' + t("profile_affiliate") + '</div><div class="vh-sub">' + t("profile_affiliate_sub") + '</div></div><i class="fa-solid fa-chevron-right"></i></button>';
+  if (!isStandaloneApp()) {
+    html += '<button class="vendor-hub-card" data-action="open-network-intl" style="background:var(--bg-body);"><i class="fa-solid fa-globe"></i><div><div class="vh-title">Réseau International</div><div class="vh-sub">Partenaires, fournisseurs et logistique internationale</div></div><i class="fa-solid fa-chevron-right"></i></button>';
+  }
   html += '</div>';
 
   html += '<div class="section-title" style="margin-top:22px;margin-bottom:10px;font-size:14px;"><i class="fa-solid fa-sack-dollar"></i> ' + t("profile_financial_services") + '</div>';
@@ -33403,6 +33419,10 @@ root.addEventListener("click", function(e) {
     case "close-carte": state.showCarte = false; render(); break;
     case "open-charge-payment": state.showChargePayment = true; render(); break;
     case "close-charge-payment": state.showChargePayment = false; render(); break;
+    case "open-network-intl": {
+      window.open("https://sounsouni.pro/partenaires.html", "_blank");
+      break;
+    }
     case "open-payment-code": state.showPaymentCode = true; state.myPaymentCode = null; render(); break;
     case "open-reveal-order-contact": {
       state.revealPasswordContext = { type: "order_contact", orderId: value };
@@ -37403,7 +37423,21 @@ function syncProductsInitialBatch() {
         });
         return;
       }
-      state.products = res.data.map(function(row) { return row.data; });
+      // Fusionne avec ce qui est déjà en cache localement, plutôt que
+      // d'écraser toute la liste — sinon, à CHAQUE démarrage de l'app,
+      // tout ce qui avait été chargé en plus pendant une session
+      // précédente (en faisant défiler le marché) disparaissait, pour ne
+      // revenir qu'après avoir refait défiler suffisamment. Les produits
+      // de ce lot (les plus récemment modifiés) remplacent leur ancienne
+      // version si elle existait déjà ; les autres, chargés avant,
+      // restent tels quels.
+      var freshById = {};
+      res.data.forEach(function(row) { freshById[row.data.id] = row.data; });
+      var merged = state.products.map(function(p) { return freshById[p.id] || p; });
+      res.data.forEach(function(row) {
+        if (!merged.some(function(p) { return p.id === row.data.id; })) merged.push(row.data);
+      });
+      state.products = merged;
       _productsFullyLoaded = res.data.length < PRODUCTS_BATCH_SIZE;
       finishProductsBoot();
     });
