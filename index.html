@@ -26640,7 +26640,7 @@ function renderAdmin() {
   }
 
   // ---- Modules valides pour ce rôle (Groupe 1 complet, Groupe 2 restreint) ----
-  var validTabsOwner = ["dashboard","comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","filature"];
+  var validTabsOwner = ["dashboard","comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","filature","test"];
   var validTabsEmployee = ["dashboard","comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","pub","reviews","partenaires"];
   var validTabs = isOwner ? validTabsOwner : validTabsEmployee;
   if (validTabs.indexOf(state.adminTab) === -1) state.adminTab = "dashboard";
