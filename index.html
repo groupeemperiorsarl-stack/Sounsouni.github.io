@@ -7697,12 +7697,14 @@ function defaultState() {
     // séparé, à très courte durée, pour le seul cas "mot de passe
     // oublié" : passwordResetToken, effacé dès qu'il a servi une fois.
     sessionToken: null,
+    adminSessionToken: null,
     passwordResetToken: null,
     // Cache local du SEUL portefeuille/gains de la personne connectée —
     // rempli par fetchMyWalletState(), jamais par la synchronisation
     // générale (voir la note sur SHARED_KEYS).
     myWallet: null,
     myEarnings: null,
+    myAddresses: null,
     adminWalletSearchResults: [],
     adminWalletSearchLoading: false,
     adminWalletDetail: null,
@@ -8993,6 +8995,7 @@ const TRANSLATIONS = {
     seller_chat: "Chat",
     seller_cannot_deliver_confirmed: "Vous avez signalé ne pas pouvoir livrer ces articles.",
     seller_prep_done: "Préparation terminée — livreur en charge.",
+    seller_order_no_longer_active: "Cette commande n'est plus active (annulée ou déjà terminée) — rien à faire ici.",
     seller_international_agent_managed: "Commande suivie par votre agent de sourcing — rien à faire de votre côté pour l'instant.",
     seller_confirm_your_part: "Appuyer ici pour confirmer votre part",
     seller_cannot_deliver: "La marchandise ne pourra pas être livrée",
@@ -10672,6 +10675,7 @@ const TRANSLATIONS = {
     seller_chat: "Chat",
     seller_cannot_deliver_confirmed: "You reported being unable to deliver these items.",
     seller_prep_done: "Preparation complete — delivery person in charge.",
+    seller_order_no_longer_active: "This order is no longer active (cancelled or already completed) — nothing to do here.",
     seller_international_agent_managed: "Order tracked by your sourcing agent — nothing to do on your side for now.",
     seller_confirm_your_part: "Tap here to confirm your part",
     seller_cannot_deliver: "The goods cannot be delivered",
@@ -12351,6 +12355,7 @@ const TRANSLATIONS = {
     seller_chat: "चैट",
     seller_cannot_deliver_confirmed: "आपने बताया कि आप ये वस्तुएं डिलीवर नहीं कर सकते।",
     seller_prep_done: "तैयारी पूरी — डिलीवरी व्यक्ति ज़िम्मेदार।",
+    seller_order_no_longer_active: "यह ऑर्डर अब सक्रिय नहीं है (रद्द या पहले से पूरा) — यहाँ कुछ करने को नहीं है।",
     seller_international_agent_managed: "आपके सोर्सिंग एजेंट द्वारा ट्रैक किया जा रहा ऑर्डर — फिलहाल आपकी ओर से कुछ करने की ज़रूरत नहीं।",
     seller_confirm_your_part: "अपना हिस्सा पुष्टि करने के लिए यहां दबाएं",
     seller_cannot_deliver: "सामान डिलीवर नहीं किया जा सकता",
@@ -14133,6 +14138,10 @@ function mergeAccountsByPhone(primaryId) {
         if (primary.favorites.indexOf(fid) === -1) primary.favorites.push(fid);
       });
     }
+    // Les adresses enregistrées ne vivent plus sur le compte (voir
+    // addresses-write) — ce bloc n'a donc plus d'effet ici. En cas de
+    // fusion de deux comptes en double, les adresses de chacun restent
+    // séparées ; limite mineure acceptée, pas un souci de sécurité.
     if (Array.isArray(dup.savedAddresses) && dup.savedAddresses.length) {
       if (!Array.isArray(primary.savedAddresses)) primary.savedAddresses = [];
       dup.savedAddresses.forEach(function(sa) {
@@ -14233,6 +14242,7 @@ function loginAccount(accountId) {
   save();
   saveDoc("accounts", account);
   fetchMyWalletState();
+  fetchMyAddresses();
   render();
 }
 
@@ -14378,6 +14388,19 @@ function switchRole(role) {
 }
 
 function applyRoleSwitch(role) {
+  // Le déverrouillage du panneau Admin passe aussi par ici (via
+  // applyRoleSwitch("admin")) — mais "admin" n'est PAS un vrai rôle de
+  // navigation comme acheteur/vendeur/livreur : c'est un panneau à part,
+  // qui ne doit jamais toucher au compte réel. Avant ce correctif, ça
+  // écrasait — et ENREGISTRAIT EN BASE — le rôle du compte normal en
+  // "admin", à chaque déverrouillage. On se contente ici de changer
+  // l'écran affiché, sans rien modifier ni sauvegarder sur le compte.
+  if (role === "admin") {
+    state.view = "admin";
+    state.showRoleMenu = false;
+    render();
+    return;
+  }
   refreshProfileFromAccounts();
   state.profile.role = role;
   // "isSourcingAgent" est un statut PERMANENT du compte, séparé du rôle
@@ -14934,6 +14957,7 @@ function placeInternationalOrder() {
 }
 
 function placeOrder() {
+  pushDebugLog("info", "placeOrder() appelé", "payment=" + (state.checkoutForm && state.checkoutForm.payment));
   var items = checkoutItems();
   if (items.length === 0) {
     showToast(t("toast_cart_not_found"));
@@ -15072,6 +15096,7 @@ function placeOrder() {
   }
   
   if (form.payment === "paiement_livraison") {
+    pushDebugLog("info", "Branche paiement_livraison atteinte", "items=" + orderDraft.items.length + " orderId=" + orderDraft.id);
     orderDraft.paymentStatus = "paid"; // rien à attendre pour un paiement à la livraison
     finalizeOrder(orderDraft, { simulated: false });
     return;
@@ -15179,6 +15204,7 @@ function initiatePayment(order) {
 }
 
 function finalizeOrder(order, opts) {
+  pushDebugLog("info", "finalizeOrder() démarré", "orderId=" + order.id + " items=" + order.items.length + " view avant=" + state.view);
   var affectedProducts = [];
   for (var i = 0; i < order.items.length; i++) {
     var it = order.items[i];
@@ -15249,6 +15275,7 @@ function finalizeOrder(order, opts) {
   secureOrderSaveDoc(order);
   affectedProducts.forEach(function(p) { saveDoc("products", p); });
   render();
+  pushDebugLog("info", "finalizeOrder() terminé", "view après=" + state.view + " taille panier après=" + state.cart.length);
   // Une commande internationale n'a ni code de retrait ni code OTP (ces
   // deux-là supposent une livraison locale au Mali) — sans ce cas à part,
   // le message affichait "undefined" à la place d'un vrai code.
@@ -15365,6 +15392,17 @@ function sellerConfirmReady(orderId) {
   var order = null;
   for (var i = 0; i < state.orders.length; i++) { if (state.orders[i].id === orderId) { order = state.orders[i]; break; } }
   if (!order || !state.profile) return;
+  // Même protection que sellerRefuseItems : une commande déjà annulée,
+  // livrée, non livrable ou refusée au retrait ne doit plus jamais
+  // pouvoir être "confirmée" après coup — sinon le statut se remet à
+  // bouger sur une commande déjà terminée, et le message envoyé à
+  // l'acheteur ("en attente des autres boutiques") n'a plus de sens,
+  // même pour une commande à une seule boutique.
+  var terminalStatusesReady = ["Livrée", "Annulée", "Non livrable", "Refusée au retrait"];
+  if (terminalStatusesReady.indexOf(order.status) !== -1) {
+    showToast(t("toast_order_cannot_be_modified"));
+    return;
+  }
   var myId = state.profile.id;
   if (!order.vendorStatuses) order.vendorStatuses = {};
   order.vendorStatuses[myId] = "Prête";
@@ -16376,10 +16414,30 @@ function secureOrderSaveDoc(order) {
 // Appelle une opération de wallet-write — le serveur recalcule tout
 // lui-même (jamais un solde envoyé par le téléphone), voir le fichier
 // de la fonction pour la liste des opérations disponibles.
-function callWalletOperation(payload) {
-  return fetch(supabaseConfig.url + "/functions/v1/wallet-write", {
+// Appelle une opération d'addresses-write — fonction séparée de
+// wallet-write, dédiée au carnet d'adresses privé de chacun.
+function callAddressesOperation(payload) {
+  return fetch(supabaseConfig.url + "/functions/v1/addresses-write", {
     method: "POST",
     headers: authHeaders(),
+    body: JSON.stringify(payload)
+  })
+    .then(function(r) { return r.json(); })
+    .catch(function(err) {
+      console.error("Erreur réseau addresses-write :", err);
+      return { success: false, error: "network_error" };
+    });
+}
+
+function callWalletOperation(payload) {
+  // Les opérations "admin_*" utilisent l'identité Admin (déverrouillée
+  // séparément), jamais celle du profil acheteur/vendeur actif — sinon
+  // un Admin qui consulte un portefeuille pendant qu'il navigue comme
+  // acheteur risquerait de mélanger les deux, dans un sens ou l'autre.
+  var isAdminOp = typeof payload.operation === "string" && payload.operation.indexOf("admin_") === 0;
+  return fetch(supabaseConfig.url + "/functions/v1/wallet-write", {
+    method: "POST",
+    headers: authHeaders(null, isAdminOp),
     body: JSON.stringify(payload)
   })
     .then(function(r) { return r.json(); })
@@ -20667,8 +20725,18 @@ function renderRoleMenuModal() {
 // système de tarification par quartier en dépend), en plus du repère, de
 // la position GPS exacte (optionnelle) et d'un nom libre choisi par
 // l'acheteur (Maison, Bureau…).
+// Récupère UNIQUEMENT mes propres adresses enregistrées — jamais
+// celles de qui que ce soit d'autre (voir addresses-write). Appelée à
+// la connexion, comme fetchMyWalletState.
+function fetchMyAddresses() {
+  if (!state.profile) return Promise.resolve();
+  return callAddressesOperation({ operation: "get_my_addresses" }).then(function(res) {
+    if (res.success) { state.myAddresses = res.addresses || []; save(); }
+  });
+}
+
 function getSavedAddresses() {
-  return (state.profile && Array.isArray(state.profile.savedAddresses)) ? state.profile.savedAddresses : [];
+  return Array.isArray(state.myAddresses) ? state.myAddresses : [];
 }
 
 function openAddressModal(existingId) {
@@ -20691,41 +20759,24 @@ function saveAddressDraft() {
   if (!d.label || !d.label.trim()) { showToast(t("toast_give_address_name")); return; }
   if (!d.commune) { showToast(t("toast_commune_required")); return; }
   if (!d.quartier) { showToast(t("toast_neighborhood_required")); return; }
-  refreshProfileFromAccounts();
-  var list = getSavedAddresses().slice();
-  var entry = {
-    id: d.id || uid(),
-    label: d.label.trim(),
-    commune: d.commune,
-    quartier: d.quartier,
-    repere: (d.repere || "").trim(),
-    lat: d.lat,
-    lng: d.lng
-  };
-  var idx = list.findIndex(function(a) { return a.id === entry.id; });
-  if (idx === -1) list.push(entry); else list[idx] = entry;
-  state.profile.savedAddresses = list;
-  for (var i = 0; i < state.accounts.length; i++) {
-    if (state.accounts[i].id === state.profile.id) { state.accounts[i] = { ...state.profile }; break; }
-  }
-  save();
-  saveDoc("accounts", state.profile);
-  showToast(t("toast_address_saved"));
-  closeAddressModal();
+  callAddressesOperation({ operation: "save_my_address", address: d }).then(function(res) {
+    if (!res.success) { showToast("❌ Une erreur est survenue, réessayez."); return; }
+    state.myAddresses = res.addresses || [];
+    save();
+    showToast(t("toast_address_saved"));
+    closeAddressModal();
+  });
 }
 
 function deleteAddress(id) {
   if (!confirm("Supprimer cette adresse ?")) return;
-  refreshProfileFromAccounts();
-  var list = getSavedAddresses().filter(function(a) { return a.id !== id; });
-  state.profile.savedAddresses = list;
-  for (var i = 0; i < state.accounts.length; i++) {
-    if (state.accounts[i].id === state.profile.id) { state.accounts[i] = { ...state.profile }; break; }
-  }
-  save();
-  saveDoc("accounts", state.profile);
-  showToast(t("toast_address_deleted"));
-  render();
+  callAddressesOperation({ operation: "delete_my_address", addressId: id }).then(function(res) {
+    if (!res.success) { showToast("❌ Une erreur est survenue, réessayez."); return; }
+    state.myAddresses = res.addresses || [];
+    save();
+    showToast(t("toast_address_deleted"));
+    render();
+  });
 }
 
 // Applique une adresse enregistrée au formulaire de commande — Express ou
@@ -21910,9 +21961,10 @@ function b64ToBuf(b64) {
 // Petit utilitaire central : construit les en-têtes d'une requête vers
 // une fonction serveur, en y ajoutant le jeton de session s'il y en a
 // un — pour ne jamais l'oublier sur un appel qui en a besoin.
-function authHeaders(extra) {
+function authHeaders(extra, useAdminToken) {
   var h = Object.assign({ "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey }, extra || {});
-  if (state.sessionToken) h["X-Session-Token"] = state.sessionToken;
+  var token = useAdminToken ? state.adminSessionToken : state.sessionToken;
+  if (token) h["X-Session-Token"] = token;
   return h;
 }
 
@@ -21931,6 +21983,20 @@ function createAccountSecurely(account) {
     .catch(function() { return { success: false, error: "network_error" }; });
 }
 
+// Retrouve un compte par identité (nom+téléphone ou nom+email, plus
+// date de naissance) — entièrement côté serveur désormais, pour ne
+// plus jamais avoir besoin de la date de naissance de qui que ce soit
+// d'autre en mémoire sur ce téléphone.
+function findAccountForRecovery(payload) {
+  return fetch(supabaseConfig.url + "/functions/v1/find-account-recovery", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+    body: JSON.stringify(payload)
+  })
+    .then(function(r) { return r.json(); })
+    .catch(function() { return { success: false }; });
+}
+
 function verifyAccountPassword(accountId, password) {
   return fetch(supabaseConfig.url + "/functions/v1/verify-login", {
     method: "POST",
@@ -21942,8 +22008,21 @@ function verifyAccountPassword(accountId, password) {
       // Un mot de passe correct délivre un vrai jeton de session — on le
       // garde, il faudra le présenter pour toute action sensible ensuite
       // (commandes, portefeuille, changement de mot de passe...).
+      //
+      // Si ce mot de passe vérifié est celui du compte ACTUELLEMENT
+      // connecté (ou qu'aucun profil n'est encore actif — connexion
+      // initiale), c'est le jeton "principal" qui sert à toutes les
+      // actions courantes (commandes, portefeuille). Mais si c'est celui
+      // d'une IDENTITÉ SÉPARÉE — admin_owner, national_admin_*,
+      // dashboard_partner_* — déverrouillée alors qu'un profil normal
+      // est déjà connecté, ce jeton ne doit JAMAIS remplacer le
+      // principal : sinon la prochaine commande passée en tant
+      // qu'acheteur seraît refusée par le serveur (elle porterait alors
+      // l'identité Admin, pas la vraie).
       if (res.success && res.sessionToken) {
-        state.sessionToken = res.sessionToken;
+        var isOwnProfile = !state.profile || state.profile.id === accountId;
+        if (isOwnProfile) state.sessionToken = res.sessionToken;
+        else state.adminSessionToken = res.sessionToken;
         save();
       }
       return !!res.success;
@@ -21971,16 +22050,31 @@ function verifyAccountRecoveryCode(accountId, recoveryCode) {
     .catch(function() { return false; });
 }
 
-function setAccountPassword(accountId, newPassword, newRecoveryCode) {
+function setAccountPassword(accountId, newPassword, newRecoveryCode, birthDate) {
   var payload = { accountId: accountId };
   if (newPassword) payload.newPassword = newPassword;
   if (newRecoveryCode) payload.newRecoveryCode = newRecoveryCode;
+  // La date de naissance ne va JAMAIS dans "accounts" (largement lu par
+  // toute l'app) — seulement ici, vers "credentials", une table jamais
+  // accessible directement depuis le téléphone. C'est elle qui sert à
+  // retrouver un compte en cas de mot de passe oublié (voir
+  // findAccountForRecovery), sans qu'aucune date de naissance n'ait
+  // jamais besoin d'être visible en dehors du serveur.
+  if (birthDate) payload.birthDate = birthDate;
   // Utilise le jeton de réinitialisation s'il y en a un en attente
-  // (juste après un code de récupération vérifié) — sinon la vraie
-  // session normale, si elle existe (changement volontaire).
+  // (juste après un code de récupération vérifié) — sinon, le jeton
+  // correspondant à CE compte précis : le principal si c'est le profil
+  // actif (ou qu'aucun profil n'est encore connecté), le jeton Admin
+  // séparé sinon (ex : changer le mot de passe admin_owner pendant
+  // qu'un profil acheteur normal est connecté).
   var extraHeaders = {};
-  if (state.passwordResetToken) extraHeaders["X-Session-Token"] = state.passwordResetToken;
-  else if (state.sessionToken) extraHeaders["X-Session-Token"] = state.sessionToken;
+  if (state.passwordResetToken) {
+    extraHeaders["X-Session-Token"] = state.passwordResetToken;
+  } else {
+    var isOwnProfile = !state.profile || state.profile.id === accountId;
+    var relevantToken = isOwnProfile ? state.sessionToken : state.adminSessionToken;
+    if (relevantToken) extraHeaders["X-Session-Token"] = relevantToken;
+  }
   return fetch(supabaseConfig.url + "/functions/v1/set-password", {
     method: "POST",
     headers: Object.assign({ "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey }, extraHeaders),
@@ -24212,6 +24306,18 @@ function renderInternationalCheckout() {
 // ---------- RENDER CHECKOUT ----------
 function renderCheckout() {
   if (checkoutIsInternational()) return renderInternationalCheckout();
+  // Filet de sécurité : cet écran ne doit jamais s'afficher avec un
+  // panier vide (bug de navigation arrière, ou tout autre cas
+  // imprévu) — sans ça, la personne se retrouve face à un formulaire
+  // de paiement à 0 FCFA, sans article, sans comprendre pourquoi. On
+  // la renvoie vers "Achats", où se trouve la commande qu'elle vient
+  // de passer (avec son code de retrait/OTP) — pas vers le panier,
+  // déjà vide à ce stade puisque la commande est déjà validée.
+  if (checkoutItems().length === 0) {
+    pushDebugLog("info", "renderCheckout appelé avec panier vide — redirection vers Achats", "view avant=" + state.view);
+    state.view = "orders";
+    return renderOrders();
+  }
   var f = state.checkoutForm;
   var zones = deliveryZonesForCity(f.city);
   var isRelais = f.deliveryMode === "relais";
@@ -25567,12 +25673,17 @@ function renderSellerOrders() {
       html += '<div style="font-size:11.5px;color:var(--danger);margin-top:8px"><i class="fa-solid fa-circle-xmark"></i> ' + t("seller_cannot_deliver_confirmed") + '</div>';
     } else if (sellerDone) {
       html += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:8px"><i class="fa-solid fa-circle-check" style="color:var(--success)"></i> ' + t("seller_prep_done") + '</div>';
+    } else if (["Livrée", "Annulée", "Non livrable", "Refusée au retrait"].indexOf(o2.status) !== -1) {
+      // La commande dans son ensemble est déjà terminée (annulée par
+      // l'acheteur, par exemple) — même si CE vendeur n'avait encore rien
+      // confirmé de son côté, il n'y a plus rien à faire ici.
+      html += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:8px"><i class="fa-solid fa-circle-info"></i> ' + t("seller_order_no_longer_active") + '</div>';
     } else {
       html += '<div class="status-actions">';
       html += '<button class="pulse-attention" data-action="seller-confirm-ready" data-order="' + o2.id + '">' + t("seller_confirm_your_part") + '</button>';
       html += '</div>';
     }
-    if (!o2.isInternational && myVendorStatus !== "Refusée" && !sellerDone) {
+    if (!o2.isInternational && myVendorStatus !== "Refusée" && !sellerDone && ["Livrée", "Annulée", "Non livrable", "Refusée au retrait"].indexOf(o2.status) === -1) {
       html += '<button class="link-btn" style="color:var(--danger);font-size:11.5px;margin-top:6px;" data-action="open-non-livrable-modal" data-value="' + o2.id + '"><i class="fa-solid fa-circle-xmark"></i> ' + t("seller_cannot_deliver") + '</button>';
     }
     html += '</div>';
@@ -28712,7 +28823,7 @@ function renderAdminAccountDetail(accountId) {
   html += '<div class="glass-card" style="padding:14px;margin-top:10px;">';
   html += '<div style="font-weight:800;font-size:13.5px;margin-bottom:8px;"><i class="fa-solid fa-shield-halved"></i> Sécurité (réservé à l\'administration)</div>';
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12.5px;margin-bottom:12px;">';
-  html += '<div><span style="color:var(--text-dim);">Date de naissance</span><br><strong>' + (a.birthDate ? esc(a.birthDate) : '— (pas encore définie)') + '</strong></div>';
+  html += '<div><span style="color:var(--text-dim);">Date de naissance</span><br><strong>' + (a.birthDate ? esc(a.birthDate) : 'Protégée côté serveur (credentials)') + '</strong></div>';
   html += '<div><span style="color:var(--text-dim);">Mot de passe</span><br><strong>' + (a.hasPassword ? '🔒 Défini (protégé, jamais affiché)' : '— (pas encore défini)') + '</strong></div>';
   html += '<div style="grid-column:1/3;"><span style="color:var(--text-dim);">Code secret de récupération</span><br><strong>' + (a.hasRecoveryCode ? '🔒 Défini (protégé, jamais affiché)' : '— (pas encore généré)') + '</strong></div>';
   html += '</div>';
@@ -32757,10 +32868,9 @@ root.addEventListener("click", function(e) {
       if (!pd.password || pd.password.length < 4) { showToast(t("toast_password_min_4_chars")); break; }
       if (pd.password !== pd.password2) { showToast(t("toast_passwords_dont_match")); break; }
       var newRecoveryCodePlain = generateRecoveryCode();
-      setAccountPassword(state.profile.id, pd.password, newRecoveryCodePlain).then(function(ok) {
+      setAccountPassword(state.profile.id, pd.password, newRecoveryCodePlain, pd.birthDate).then(function(ok) {
         if (!ok) { showToast("❌ Une erreur est survenue, réessayez."); return; }
         if (needsEmailNow) state.profile.email = pd.email.trim();
-        state.profile.birthDate = pd.birthDate;
         state.profile.hasPassword = true;
         state.profile.hasRecoveryCode = true;
         persistProfileToAccounts();
@@ -32846,27 +32956,22 @@ root.addEventListener("click", function(e) {
       if (!fd.phone || !fd.phone.trim()) { showToast(t("toast_enter_phone2")); break; }
       if (!fd.birthDate) { showToast(t("toast_enter_birthdate")); break; }
       if (!fd.recoveryCode || !fd.recoveryCode.trim()) { showToast(t("toast_enter_secret_code")); break; }
-      var fDigits = fd.phone.replace(/\D/g, "");
-      var fNameNorm = fd.name.trim().toLowerCase();
-      var fMatch = state.accounts.find(function(a) {
-        var aDigits = (a.phone || "").replace(/\D/g, "");
-        var phoneMatches = aDigits === (fd.countryCode + fDigits).replace(/\D/g, "") || aDigits.endsWith(fDigits);
-        return phoneMatches && (a.name || "").trim().toLowerCase() === fNameNorm && a.birthDate === fd.birthDate;
-      });
-      if (!fMatch) {
-        showToast("❌ Aucune correspondance trouvée. Vérifiez chaque champ, ou utilisez \"J'ai perdu le code\".");
-        break;
-      }
-      verifyAccountRecoveryCode(fMatch.id, fd.recoveryCode.trim().toUpperCase()).then(function(match) {
-        if (!match) {
+      findAccountForRecovery({ mode: "phone", name: fd.name, phone: fd.phone.replace(/\D/g, ""), countryCode: fd.countryCode, birthDate: fd.birthDate }).then(function(findRes) {
+        if (!findRes.success || !findRes.found) {
           showToast("❌ Aucune correspondance trouvée. Vérifiez chaque champ, ou utilisez \"J'ai perdu le code\".");
           return;
         }
-        state.showForgotPassword = false;
-        state.forgotPasswordDraft = null;
-        state.forgotPasswordResetAccountId = fMatch.id;
-        state.forgotPasswordNewPwDraft = { password: "", password2: "" };
-        render();
+        verifyAccountRecoveryCode(findRes.accountId, fd.recoveryCode.trim().toUpperCase()).then(function(match) {
+          if (!match) {
+            showToast("❌ Aucune correspondance trouvée. Vérifiez chaque champ, ou utilisez \"J'ai perdu le code\".");
+            return;
+          }
+          state.showForgotPassword = false;
+          state.forgotPasswordDraft = null;
+          state.forgotPasswordResetAccountId = findRes.accountId;
+          state.forgotPasswordNewPwDraft = { password: "", password2: "" };
+          render();
+        });
       });
       break;
     }
@@ -32902,32 +33007,16 @@ root.addEventListener("click", function(e) {
       if (!ld.name || !ld.name.trim()) { showToast(t("toast_enter_fullname")); break; }
       if (!ld.email || !ld.email.trim()) { showToast(t("toast_enter_email")); break; }
       if (!ld.birthDate) { showToast(t("toast_enter_birthdate")); break; }
-      var lNameNorm = ld.name.trim().toLowerCase();
-      var lEmailNorm = ld.email.trim().toLowerCase();
-      var lMatch = state.accounts.find(function(a) {
-        return (a.name || "").trim().toLowerCase() === lNameNorm && (a.email || "").trim().toLowerCase() === lEmailNorm && a.birthDate === ld.birthDate;
+      findAccountForRecovery({ mode: "email", name: ld.name, email: ld.email, birthDate: ld.birthDate, createRequest: true }).then(function(findRes) {
+        if (!findRes.success || !findRes.found) {
+          showToast(t("toast_no_matching_account"));
+          return;
+        }
+        state.showForgotPassword = false;
+        state.forgotPasswordDraft = null;
+        showToast(t("toast_request_sent_admin_verify"));
+        render();
       });
-      if (!lMatch) {
-        showToast(t("toast_no_matching_account"));
-        break;
-      }
-      if (!state.passwordRecoveryRequests) state.passwordRecoveryRequests = [];
-      state.passwordRecoveryRequests.unshift({
-        id: uid(),
-        accountId: lMatch.id,
-        name: lMatch.name,
-        phone: lMatch.phone,
-        email: lMatch.email,
-        birthDate: lMatch.birthDate,
-        status: "pending",
-        createdAt: Date.now()
-      });
-      save();
-      saveDoc("passwordRecoveryRequests", state.passwordRecoveryRequests[0]);
-      state.showForgotPassword = false;
-      state.forgotPasswordDraft = null;
-      showToast(t("toast_request_sent_admin_verify"));
-      render();
       break;
     }
     case "admin-set-new-password": {
@@ -33243,7 +33332,7 @@ root.addEventListener("click", function(e) {
         taille_panier: (state.cart || []).length,
         nombre_commandes_locales: (state.orders || []).length,
         en_ligne: navigator.onLine,
-        derniere_synchro: state.lastSyncAt || "jamais"
+        derniere_synchro: localStorage.getItem("gems_last_sync_v2") || "jamais"
       };
       pushDebugLog("info", "État de l'app", JSON.stringify(summary, null, 2));
       render();
@@ -36852,7 +36941,7 @@ function maybeSignalBootReady() {
       // Si quelqu'un est déjà connecté (session restaurée depuis
       // l'appareil), on récupère son propre solde une seule fois ici —
       // jamais celui de personne d'autre (voir fetchMyWalletState).
-      if (state.profile) fetchMyWalletState();
+      if (state.profile) { fetchMyWalletState(); fetchMyAddresses(); }
       trySplashFinish();
     } else if (_splashFinished) {
       render();
