@@ -6380,16 +6380,23 @@ function submitBecomeRelais() {
     commune: d.useAutreQuartier ? null : d.commune,
     quartier: d.useAutreQuartier ? d.autreQuartierNom.trim() : d.quartier,
     isAutreQuartier: !!d.useAutreQuartier,
-    autreQuartierLat: d.useAutreQuartier ? d.autreQuartierLat : null,
-    autreQuartierLng: d.useAutreQuartier ? d.autreQuartierLng : null,
-    addressDetail: d.addressDetail || "",
-    shopLat: d.shopLat,
-    shopLng: d.shopLng,
     hasVerificationDocs: true, // la vraie photo part séparément, voir plus bas
     status: "pending",
     createdAt: Date.now()
   };
   state.relaisApplications.push(application);
+  // Coordonnées GPS exactes et adresse détaillée — envoyées à part, vers
+  // la collection protégée dédiée. Jamais dans "relaisApplications"
+  // lui-même, qui reste largement synchronisé pour les badges/listes.
+  callAdminAccessOperation({
+    operation: "save_relais_application_location",
+    applicationId: application.id,
+    shopLat: d.shopLat,
+    shopLng: d.shopLng,
+    autreQuartierLat: d.useAutreQuartier ? d.autreQuartierLat : null,
+    autreQuartierLng: d.useAutreQuartier ? d.autreQuartierLng : null,
+    addressDetail: d.addressDetail || ""
+  });
 
   if (d.useAutreQuartier) {
     var quartierApp = {
@@ -6588,26 +6595,34 @@ function approveRelaisApplication(appId) {
   }
   if (!account) { showToast(t("toast_account_not_found")); return; }
 
-  account.role = "point_vente";
-  account.relaisApplicationStatus = "approved";
-  account.shopName = app.shopName;
-  account.commune = app.commune;
-  account.quartier = app.quartier;
-  account.addressDetail = app.addressDetail;
-  account.shopLat = app.shopLat;
-  account.shopLng = app.shopLng;
+  // Les coordonnées GPS exactes et l'adresse détaillée vivent à part
+  // (voir save_relais_application_location) — on les récupère ici pour
+  // les copier sur le compte, qui DEVIENT public une fois approuvé :
+  // les clients doivent pouvoir trouver ce point de retrait.
+  callAdminAccessOperation({ operation: "get_relais_application_location", applicationId: appId }).then(function(res) {
+    var loc = res.success ? res.location : null;
 
-  if (state.profile && state.profile.id === account.id) state.profile = { ...account };
+    account.role = "point_vente";
+    account.relaisApplicationStatus = "approved";
+    account.shopName = app.shopName;
+    account.commune = app.commune;
+    account.quartier = app.quartier;
+    account.addressDetail = loc ? loc.addressDetail : "";
+    account.shopLat = loc ? loc.shopLat : null;
+    account.shopLng = loc ? loc.shopLng : null;
 
-  app.status = "approved";
-  app.resolvedAt = Date.now();
+    if (state.profile && state.profile.id === account.id) state.profile = { ...account };
 
-  save();
-  saveDoc("accounts", account);
-  saveDoc("relaisApplications", app);
-  addNotification("whatsapp", "🎉 Votre Point de Retrait \"" + app.shopName + "\" a été approuvé ! Ouvrez le menu de rôle pour y accéder.", account.id, "pointvente");
-  showToast(t("toast_pickup_approved"));
-  render();
+    app.status = "approved";
+    app.resolvedAt = Date.now();
+
+    save();
+    saveDoc("accounts", account);
+    saveDoc("relaisApplications", app);
+    addNotification("whatsapp", "🎉 Votre Point de Retrait \"" + app.shopName + "\" a été approuvé ! Ouvrez le menu de rôle pour y accéder.", account.id, "pointvente");
+    showToast(t("toast_pickup_approved"));
+    render();
+  });
 }
 
 function rejectRelaisApplication(appId) {
@@ -7751,6 +7766,9 @@ function defaultState() {
     revealPasswordError: "",
     adminRevealedAddresses: null,
     adminRevealedMessages: null,
+    adminRevealedLogins: null,
+    adminRevealedRelaisLoc: null,
+    adminRevealedRelaisEditLoc: null,
     debugLog: [],
     debugLoggingEnabled: true,
   };
@@ -14193,10 +14211,8 @@ function mergeAccountsByPhone(primaryId) {
         if (!alreadyThere) primary.savedAddresses.push(sa);
       });
     }
-    if (Array.isArray(dup.loginHistory) && dup.loginHistory.length) {
-      if (!Array.isArray(primary.loginHistory)) primary.loginHistory = [];
-      primary.loginHistory = primary.loginHistory.concat(dup.loginHistory).sort(function(a, b) { return a - b; });
-    }
+    // loginHistory ne vit plus sur le compte (voir admin-access,
+    // opération "record_login") — rien à fusionner ici pour ce champ.
     // Si le vendeur avait déjà accepté la commission sur la fiche
     // supprimée, on ne doit pas lui redemander sur la fiche conservée.
     if (dup.vendorCommissionAccepted) primary.vendorCommissionAccepted = true;
@@ -14271,10 +14287,7 @@ function loginAccount(accountId) {
     showToast(t("toast_account_banned"));
     return;
   }
-  if (!Array.isArray(account.loginHistory)) account.loginHistory = [];
-  account.loginHistory.push(Date.now());
   markDeviceAccount(account.id);
-  if (account.loginHistory.length > 200) account.loginHistory = account.loginHistory.slice(-200);
   state.profile = { ...account };
   if (account.language && SUPPORTED_LANGUAGES.indexOf(account.language) !== -1) {
     state.language = account.language;
@@ -14288,6 +14301,7 @@ function loginAccount(accountId) {
   fetchMyWalletState();
   fetchMyAddresses();
   fetchMyOrderContacts();
+  callAdminAccessOperation({ operation: "record_login" });
   render();
 }
 
@@ -27886,8 +27900,12 @@ function renderAdminRelaisApplications() {
           htmlPrefix += '<div style="font-size:11.5px;margin-bottom:4px;"><span style="color:var(--text-dim);">' + fields[f][0] + '</span> : <span style="text-decoration:line-through;color:var(--text-dim);">' + esc(String(oldVal)) + '</span> → <strong>' + esc(String(newVal)) + '</strong></div>';
         }
       }
-      if (oldAcc && (oldAcc.shopLat !== req.changes.shopLat || oldAcc.shopLng !== req.changes.shopLng)) {
-        htmlPrefix += '<div style="font-size:11.5px;margin-bottom:4px;"><span style="color:var(--text-dim);">' + t("ad_field_position") + '</span> : ' + t("ad_new_gps_proposed") + '</div>';
+      // Le GPS proposé ne vit plus dans req.changes (voir plus bas, révélation dédiée).
+      var revealedEditLoc = (state.adminRevealedRelaisEditLoc && state.adminRevealedRelaisEditLoc.editRequestId === req.id) ? state.adminRevealedRelaisEditLoc.location : null;
+      if (!revealedEditLoc) {
+        htmlPrefix += '<button class="link-btn" style="font-size:11px;margin-bottom:6px;" data-action="open-reveal-relais-edit-location" data-value="' + req.id + '"><i class="fa-solid fa-lock"></i> ' + (state.adminIsOwner ? 'Voir la nouvelle adresse proposée (mot de passe requis)' : 'Voir la nouvelle adresse proposée (confirmation requise)') + '</button>';
+      } else {
+        htmlPrefix += '<div style="font-size:11.5px;margin-bottom:6px;"><span style="color:var(--text-dim);">Nouvelle adresse proposée</span> : <strong>' + esc(revealedEditLoc.addressDetail || '—') + '</strong>' + (revealedEditLoc.shopLat != null ? ' · <a href="https://www.google.com/maps?q=' + revealedEditLoc.shopLat + ',' + revealedEditLoc.shopLng + '" target="_blank" style="color:var(--accent);">📍 carte</a>' : '') + '</div>';
       }
       htmlPrefix += '<div style="display:flex;gap:8px;margin-top:10px;">';
       htmlPrefix += '<button class="btn-primary" style="flex:1;padding:9px;font-size:12.5px;" data-action="approve-relais-edit" data-value="' + req.id + '"><i class="fa-solid fa-check"></i> ' + t("ad_approve") + '</button>';
@@ -27910,7 +27928,13 @@ function renderAdminRelaisApplications() {
     html += '<span class="status-pill" style="' + (app.status === "pending" ? '' : app.status === "approved" ? 'background:rgba(46,158,79,0.15);color:#2e9e4f;' : 'background:rgba(255,85,102,0.15);color:var(--danger);') + '">' + (app.status === "pending" ? t("ad_pending_pill") : app.status === "approved" ? t("ad_approved_pill") : t("ad_refused_pill")) + '</span>';
     html += '</div>';
     html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:4px;"><i class="fa-solid fa-user"></i> ' + esc(app.accountName) + ' · <a href="tel:' + esc(app.accountPhone) + '" style="color:var(--accent)">' + esc(app.accountPhone) + '</a></div>';
-    html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:8px;"><i class="fa-solid fa-location-dot"></i> ' + esc(app.quartier) + (app.isAutreQuartier ? t("ad_new_quartier_proposed") : (app.commune ? ', ' + esc(app.commune) : '')) + (app.addressDetail ? ' — ' + esc(app.addressDetail) : '') + '</div>';
+    var revealedLoc = (state.adminRevealedRelaisLoc && state.adminRevealedRelaisLoc.applicationId === app.id) ? state.adminRevealedRelaisLoc.location : null;
+    html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:8px;"><i class="fa-solid fa-location-dot"></i> ' + esc(app.quartier) + (app.isAutreQuartier ? t("ad_new_quartier_proposed") : (app.commune ? ', ' + esc(app.commune) : '')) + (revealedLoc && revealedLoc.addressDetail ? ' — ' + esc(revealedLoc.addressDetail) : '') + '</div>';
+    if (!revealedLoc) {
+      html += '<button class="link-btn" style="font-size:11.5px;margin-bottom:8px;" data-action="open-reveal-relais-location" data-value="' + app.id + '"><i class="fa-solid fa-lock"></i> ' + (state.adminIsOwner ? 'Voir adresse exacte et GPS (mot de passe requis)' : 'Voir adresse exacte et GPS (confirmation requise)') + '</button><br>';
+    } else if (revealedLoc.shopLat != null) {
+      html += '<div style="font-size:11.5px;margin-bottom:8px;"><a href="https://www.google.com/maps?q=' + revealedLoc.shopLat + ',' + revealedLoc.shopLng + '" target="_blank" style="color:var(--accent);font-weight:700;">📍 Voir la position exacte sur la carte</a></div>';
+    }
     if (app.hasVerificationDocs) {
       html += '<button type="button" class="btn-secondary" style="width:100%;margin-bottom:10px;" data-action="view-relais-docs-secure" data-value="' + app.id + '"><i class="fa-solid fa-image"></i> Voir la photo et la pièce d\'identité</button>';
     }
@@ -28940,7 +28964,8 @@ function renderAdminAccountDetail(accountId) {
   html += '<div><span style="color:var(--text-dim);">Téléphone</span><br><strong>' + esc(a.phone || '—') + '</strong></div>';
   html += '<div><span style="color:var(--text-dim);">Email</span><br><strong>' + esc(a.email || '—') + '</strong></div>';
   html += '<div><span style="color:var(--text-dim);">Compte créé le</span><br><strong>' + fmtDateTime(a.createdAt) + '</strong></div>';
-  html += '<div><span style="color:var(--text-dim);">Dernière connexion</span><br><strong>' + fmtDateTime(a.loginHistory && a.loginHistory.length ? a.loginHistory[a.loginHistory.length - 1] : null) + '</strong></div>';
+  var revealedLogins = (state.adminRevealedLogins && state.adminRevealedLogins.accountId === accountId) ? state.adminRevealedLogins.dates : null;
+  html += '<div><span style="color:var(--text-dim);">Dernière connexion</span><br><strong>' + (revealedLogins ? fmtDateTime(revealedLogins.length ? revealedLogins[revealedLogins.length - 1] : null) : '—') + '</strong>' + (!revealedLogins ? ' <button class="link-btn" style="font-size:10.5px;" data-action="open-reveal-login-history" data-value="' + accountId + '"><i class="fa-solid fa-lock"></i> ' + (state.adminIsOwner ? 'Voir' : 'Voir (confirmation)') + '</button>' : '') + '</div>';
   if ((a.unclaimedParcelCount || 0) > 0) {
     var uc = a.unclaimedParcelCount;
     html += '<div style="grid-column:1/-1;margin-top:2px;padding:8px 10px;border-radius:10px;font-size:12px;font-weight:700;background:' + (uc >= 2 ? 'rgba(255,85,102,0.12);color:var(--danger)' : 'rgba(255,193,7,0.12);color:#a15c00') + ';"><i class="fa-solid fa-triangle-exclamation"></i> ' + uc + ' colis jamais récupéré' + (uc > 1 ? 's' : '') + ' au point de retrait' + (uc >= 2 ? ' — comportement répété, à surveiller' : '') + '</div>';
@@ -29142,10 +29167,10 @@ function renderAdminAccountDetail(accountId) {
   html += '</div>';
 
   // ---- Connexions ----
-  var logins = (a.loginHistory || []).slice().reverse();
+  var logins = ((state.adminRevealedLogins && state.adminRevealedLogins.accountId === accountId) ? state.adminRevealedLogins.dates : []).slice().reverse();
   html += renderAdminDetailSection('Connexions', 'fa-right-to-bracket', accountId, 'logins', logins, function(ts) {
     return '<div class="card-row" style="padding:8px 12px;"><i class="fa-solid fa-right-to-bracket" style="color:var(--text-dim);margin-right:8px;"></i>' + fmtDateTime(ts) + '</div>';
-  }, 'Aucune connexion enregistrée.');
+  }, revealedLogins ? 'Aucune connexion enregistrée.' : 'Appuie sur "Voir" ci-dessus pour charger l\'historique.');
 
   // ---- Commandes passées (acheteur) ----
   var myOrders = state.orders.filter(function(o) { return o.buyerId === accountId; }).sort(function(x, y) { return y.createdAt - x.createdAt; });
@@ -32227,10 +32252,7 @@ root.addEventListener("click", function(e) {
           shopName: state.profile.shopName,
           phone: state.profile.phone,
           commune: state.profile.commune,
-          quartier: state.profile.quartier,
-          addressDetail: state.profile.addressDetail,
-          shopLat: state.profile.shopLat,
-          shopLng: state.profile.shopLng
+          quartier: state.profile.quartier
         },
         status: "pending",
         createdAt: Date.now()
@@ -32238,6 +32260,16 @@ root.addEventListener("click", function(e) {
       state.relaisEditRequests.push(editReq);
       save();
       saveDoc("relaisEditRequests", editReq);
+      // Adresse détaillée et GPS proposés — envoyés à part, vers la
+      // collection protégée dédiée, jamais dans "relaisEditRequests"
+      // lui-même, qui reste largement synchronisé.
+      callAdminAccessOperation({
+        operation: "save_relais_edit_location",
+        editRequestId: editReq.id,
+        addressDetail: state.profile.addressDetail,
+        shopLat: state.profile.shopLat,
+        shopLng: state.profile.shopLng
+      });
       // Revient à l'état réellement approuvé du compte — évite d'afficher
       // les changements comme déjà actifs avant validation par l'admin.
       for (var revi = 0; revi < state.accounts.length; revi++) {
@@ -33442,6 +33474,27 @@ root.addEventListener("click", function(e) {
       render();
       break;
     }
+    case "open-reveal-login-history": {
+      state.revealPasswordContext = { type: "login_history", accountId: value };
+      state.revealPasswordValue = "";
+      state.revealPasswordError = "";
+      render();
+      break;
+    }
+    case "open-reveal-relais-location": {
+      state.revealPasswordContext = { type: "relais_location", applicationId: value };
+      state.revealPasswordValue = "";
+      state.revealPasswordError = "";
+      render();
+      break;
+    }
+    case "open-reveal-relais-edit-location": {
+      state.revealPasswordContext = { type: "relais_edit_location", editRequestId: value };
+      state.revealPasswordValue = "";
+      state.revealPasswordError = "";
+      render();
+      break;
+    }
     case "open-reveal-conversation-messages": {
       state.revealPasswordContext = { type: "conversation_messages", conversationId: value };
       state.revealPasswordValue = "";
@@ -33466,6 +33519,9 @@ root.addEventListener("click", function(e) {
         if (revealCtx.type === "order_contact") fetchOp = { operation: "get_order_contact", orderId: revealCtx.orderId };
         else if (revealCtx.type === "dispute_detail") fetchOp = { operation: "get_dispute_detail", disputeId: revealCtx.disputeId };
         else if (revealCtx.type === "account_addresses") fetchOp = { operation: "get_addresses", targetAccountId: revealCtx.accountId };
+        else if (revealCtx.type === "login_history") fetchOp = { operation: "get_login_history", targetAccountId: revealCtx.accountId };
+        else if (revealCtx.type === "relais_location") fetchOp = { operation: "get_relais_application_location", applicationId: revealCtx.applicationId };
+        else if (revealCtx.type === "relais_edit_location") fetchOp = { operation: "get_relais_edit_location", editRequestId: revealCtx.editRequestId };
         else if (revealCtx.type === "conversation_messages") fetchOp = { operation: "get_conversation_messages", conversationId: revealCtx.conversationId };
         if (!fetchOp) { state.revealPasswordContext = null; render(); return; }
 
@@ -33494,6 +33550,12 @@ root.addEventListener("click", function(e) {
             save();
           } else if (revealCtx.type === "account_addresses") {
             state.adminRevealedAddresses = { accountId: revealCtx.accountId, addresses: res.addresses || [] };
+          } else if (revealCtx.type === "login_history") {
+            state.adminRevealedLogins = { accountId: revealCtx.accountId, dates: res.dates || [] };
+          } else if (revealCtx.type === "relais_location") {
+            state.adminRevealedRelaisLoc = { applicationId: revealCtx.applicationId, location: res.location || {} };
+          } else if (revealCtx.type === "relais_edit_location") {
+            state.adminRevealedRelaisEditLoc = { editRequestId: revealCtx.editRequestId, location: res.location || {} };
           } else if (revealCtx.type === "conversation_messages") {
             state.adminRevealedMessages = { conversationId: revealCtx.conversationId, messages: res.messages || [] };
           }
@@ -34779,17 +34841,25 @@ root.addEventListener("click", function(e) {
       if (!confirm("Appliquer ces modifications au compte \"" + editReq.accountName + "\" ?")) break;
       var accToEdit = null;
       for (var ate = 0; ate < state.accounts.length; ate++) { if (state.accounts[ate].id === editReq.accountId) { accToEdit = state.accounts[ate]; break; } }
-      if (accToEdit) {
-        Object.assign(accToEdit, editReq.changes);
-        if (state.profile && state.profile.id === accToEdit.id) state.profile = { ...accToEdit };
-        saveDoc("accounts", accToEdit);
-      }
-      editReq.status = "approved";
-      save();
-      saveDoc("relaisEditRequests", editReq);
-      addNotification("whatsapp", "✅ Vos modifications d'informations ont été approuvées et appliquées.", editReq.accountId);
-      showToast(t("toast_changes_applied"));
-      render();
+      callAdminAccessOperation({ operation: "get_relais_edit_location", editRequestId: value }).then(function(res) {
+        var loc = res.success ? res.location : null;
+        if (accToEdit) {
+          Object.assign(accToEdit, editReq.changes);
+          if (loc) {
+            accToEdit.addressDetail = loc.addressDetail;
+            accToEdit.shopLat = loc.shopLat;
+            accToEdit.shopLng = loc.shopLng;
+          }
+          if (state.profile && state.profile.id === accToEdit.id) state.profile = { ...accToEdit };
+          saveDoc("accounts", accToEdit);
+        }
+        editReq.status = "approved";
+        save();
+        saveDoc("relaisEditRequests", editReq);
+        addNotification("whatsapp", "✅ Vos modifications d'informations ont été approuvées et appliquées.", editReq.accountId);
+        showToast(t("toast_changes_applied"));
+        render();
+      });
       break;
     }
     case "reject-relais-edit": {
