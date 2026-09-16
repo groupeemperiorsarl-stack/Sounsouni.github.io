@@ -14301,6 +14301,7 @@ function loginAccount(accountId) {
   fetchMyWalletState();
   fetchMyAddresses();
   fetchMyOrderContacts();
+  fetchMyOrderDetails();
   callAdminAccessOperation({ operation: "record_login" });
   render();
 }
@@ -16594,10 +16595,10 @@ function fetchConversationMessages(conversationId, useAdminToken) {
   });
 }
 
-function callOrderContactOperation(payload) {
+function callOrderContactOperation(payload, useAdminToken) {
   return fetch(supabaseConfig.url + "/functions/v1/order-contact", {
     method: "POST",
-    headers: authHeaders(),
+    headers: authHeaders(null, useAdminToken),
     body: JSON.stringify(payload)
   })
     .then(function(r) { return r.json(); })
@@ -16607,23 +16608,29 @@ function callOrderContactOperation(payload) {
     });
 }
 
-// Récupère les coordonnées GPS/téléphones UNIQUEMENT pour les
-// commandes qui concernent réellement la personne connectée (ses
-// achats, sa boutique, ses livraisons) — jamais celles de qui que ce
-// soit d'autre. Fusionne le résultat directement dans state.orders,
-// pour que tout le code existant (calcul des frais de livraison,
-// affichage du détail...) continue de fonctionner sans rien changer
-// d'autre — comme si ces champs avaient toujours été là.
-function fetchMyOrderContacts() {
-  if (!state.profile) return Promise.resolve();
+// Liste des commandes qui concernent réellement la personne connectée
+// (ses achats, sa boutique via sellerIds — un champ public, séparé du
+// contenu — ses livraisons) — jamais celles de qui que ce soit d'autre.
+function getMyRelevantOrderIds() {
+  if (!state.profile) return [];
   var myId = state.profile.id;
-  var relevantIds = state.orders.filter(function(o) {
+  return state.orders.filter(function(o) {
     if (o.buyerId === myId) return true;
-    if (Array.isArray(o.items) && o.items.some(function(it) { return it.sellerId === myId; })) return true;
+    if (Array.isArray(o.sellerIds) && o.sellerIds.indexOf(myId) !== -1) return true;
     if (o.livreurId === myId) return true;
     if (o.relaisShopId === myId) return true;
     return false;
   }).map(function(o) { return o.id; });
+}
+
+// Récupère les coordonnées GPS/téléphones UNIQUEMENT pour les
+// commandes qui concernent réellement la personne connectée. Fusionne
+// le résultat directement dans state.orders, pour que tout le code
+// existant (calcul des frais de livraison, affichage du détail...)
+// continue de fonctionner sans rien changer d'autre — comme si ces
+// champs avaient toujours été là.
+function fetchMyOrderContacts() {
+  var relevantIds = getMyRelevantOrderIds();
   if (relevantIds.length === 0) return Promise.resolve();
   return callOrderContactOperation({ operation: "get_contact_batch", orderIds: relevantIds }).then(function(res) {
     if (!res.success) return;
@@ -16639,6 +16646,30 @@ function fetchMyOrderContacts() {
       }
     }
     save();
+  });
+}
+
+// Récupère le CONTENU (articles, montants) uniquement pour les
+// commandes qui concernent réellement la personne connectée — jamais
+// diffusé en bloc à tout le monde (voir order-write/order-contact).
+// Même principe de fusion que fetchMyOrderContacts : une fois fusionné,
+// tout le code existant qui lit order.items/order.subtotal continue de
+// fonctionner sans rien changer d'autre.
+function fetchMyOrderDetails(specificOrderIds) {
+  var relevantIds = specificOrderIds || getMyRelevantOrderIds();
+  if (relevantIds.length === 0) return Promise.resolve();
+  return callOrderContactOperation({ operation: "get_details_batch", orderIds: relevantIds }).then(function(res) {
+    if (!res.success) return;
+    var details = res.details || {};
+    var changed = false;
+    for (var i = 0; i < state.orders.length; i++) {
+      var d = details[state.orders[i].id];
+      if (d) {
+        Object.assign(state.orders[i], d);
+        changed = true;
+      }
+    }
+    if (changed) { save(); render(); }
   });
 }
 
@@ -30636,6 +30667,11 @@ function renderAdminOrderModal() {
   html += '</div>';
   
   html += '<div style="font-weight:800;font-size:13.5px;margin:20px 0 8px;"><i class="fa-solid fa-box-open"></i> Articles</div>';
+  if (!o.items) {
+    html += '<button class="link-btn" data-action="open-reveal-order-details" data-value="' + o.id + '"><i class="fa-solid fa-lock"></i> ' + (state.adminIsOwner ? 'Voir les articles et montants (mot de passe requis)' : 'Voir les articles et montants (confirmation requise)') + '</button>';
+    html += '</div></div>';
+    return html;
+  }
   for (var it = 0; it < o.items.length; it++) {
     var item = o.items[it];
     html += '<div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border-color);">';
@@ -33460,6 +33496,13 @@ root.addEventListener("click", function(e) {
       render();
       break;
     }
+    case "open-reveal-order-details": {
+      state.revealPasswordContext = { type: "order_details", orderId: value };
+      state.revealPasswordValue = "";
+      state.revealPasswordError = "";
+      render();
+      break;
+    }
     case "open-reveal-dispute-detail": {
       state.revealPasswordContext = { type: "dispute_detail", disputeId: value };
       state.revealPasswordValue = "";
@@ -33516,7 +33559,9 @@ root.addEventListener("click", function(e) {
 
       function proceedWithReveal() {
         var fetchOp = null;
+        var useAdminTok = state.adminIsOwner;
         if (revealCtx.type === "order_contact") fetchOp = { operation: "get_order_contact", orderId: revealCtx.orderId };
+        else if (revealCtx.type === "order_details") fetchOp = { operation: "get_details_batch", orderIds: [revealCtx.orderId] };
         else if (revealCtx.type === "dispute_detail") fetchOp = { operation: "get_dispute_detail", disputeId: revealCtx.disputeId };
         else if (revealCtx.type === "account_addresses") fetchOp = { operation: "get_addresses", targetAccountId: revealCtx.accountId };
         else if (revealCtx.type === "login_history") fetchOp = { operation: "get_login_history", targetAccountId: revealCtx.accountId };
@@ -33525,9 +33570,21 @@ root.addEventListener("click", function(e) {
         else if (revealCtx.type === "conversation_messages") fetchOp = { operation: "get_conversation_messages", conversationId: revealCtx.conversationId };
         if (!fetchOp) { state.revealPasswordContext = null; render(); return; }
 
-        callAdminAccessOperation(fetchOp).then(function(res) {
+        var revealPromise = (revealCtx.type === "order_details")
+          ? callOrderContactOperation(fetchOp, useAdminTok)
+          : callAdminAccessOperation(fetchOp);
+
+        revealPromise.then(function(res) {
           if (!res.success) {
             showToast("❌ Impossible de récupérer ces informations.");
+          } else if (revealCtx.type === "order_details") {
+            var d = res.details ? res.details[revealCtx.orderId] : null;
+            if (d) {
+              for (var rdi = 0; rdi < state.orders.length; rdi++) {
+                if (state.orders[rdi].id === revealCtx.orderId) { Object.assign(state.orders[rdi], d); break; }
+              }
+              save();
+            }
           } else if (revealCtx.type === "order_contact") {
             var c = res.contact;
             if (c) {
@@ -37848,9 +37905,17 @@ function bootAppWithLocalData() {
         }
         localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
         refreshProfileFromAccounts();
+        // Sécurité : le contenu (items/subtotal/total) arrive séparément
+        // désormais (voir fetchMyOrderDetails) — en attendant qu'il
+        // arrive, on s'assure qu'aucune commande n'a "items" complètement
+        // absent, pour qu'un .length/.map exécuté entre-temps ne fasse
+        // jamais planter l'écran (juste "0 article" un court instant).
+        for (var oi = 0; oi < state.orders.length; oi++) {
+          if (!Array.isArray(state.orders[oi].items)) state.orders[oi].items = [];
+        }
         save();
         pushDebugLog("info", "Synchronisation générale terminée", "lignes reçues au total=" + res.data.length + " · comptes en mémoire après=" + state.accounts.length + " · pages=" + Math.ceil(res.data.length / PAGE_SIZE));
-        if (state.profile) fetchMyOrderContacts();
+        if (state.profile) { fetchMyOrderContacts(); fetchMyOrderDetails(); }
       }
       _generalSyncReady = true;
       maybeSignalBootReady();
@@ -37897,6 +37962,22 @@ function bootAppWithLocalData() {
         }
         state[row.collection] = list;
         if (row.collection === "accounts") refreshProfileFromAccounts();
+        // Une commande qui vient d'arriver (ou de changer) par le temps
+        // réel n'a que ses métadonnées (statut, qui est concerné...) —
+        // son contenu (articles, montants) vit à part désormais (voir
+        // order-write/order-contact). On va le chercher tout de suite
+        // si cette commande nous concerne, sans attendre le prochain
+        // cycle de synchronisation complet.
+        if (row.collection === "orders" && changed && state.profile) {
+          var newOrder = row.data;
+          var newOrderHadNoItems = !Array.isArray(newOrder.items);
+          if (newOrderHadNoItems) newOrder.items = [];
+          var concernsMe = newOrder.buyerId === state.profile.id
+            || (Array.isArray(newOrder.sellerIds) && newOrder.sellerIds.indexOf(state.profile.id) !== -1)
+            || newOrder.livreurId === state.profile.id
+            || newOrder.relaisShopId === state.profile.id;
+          if (concernsMe && newOrderHadNoItems) fetchMyOrderDetails([newOrder.id]);
+        }
         // Son + notification système — uniquement pour du contenu qui nous
         // concerne VRAIMENT (jamais nos propres actions), et jamais pendant
         // le chargement initial (tout l'historique arriverait d'un coup).
