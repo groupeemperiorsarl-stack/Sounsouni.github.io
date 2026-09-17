@@ -18198,7 +18198,7 @@ function sendMessage(conversationId, message) {
   var cleanedMessage = maskResult.cleaned;
 
   callConversationMessagesOperation({ operation: "send_message", conversationId: conversationId, message: cleanedMessage, hasPhoneNumber: maskResult.hasPhone }).then(function(res) {
-    if (!res.success) { showToast("❌ Message non envoyé, réessaie."); return; }
+    if (!res.success) { pushDebugLog("error", "Échec envoi message", JSON.stringify(res)); showToast("❌ Message non envoyé, réessaie."); return; }
     // Le serveur a déjà mis à jour les compteurs non-lus/la date sur
     // "conversations" — on rafraîchit juste l'affichage local avec le
     // message reçu en retour, sans jamais avoir eu besoin d'écrire le
@@ -18237,7 +18237,7 @@ function sendVoiceMessage(conversationId, audioUrl, digitGroups) {
   var hasPhoneNumber = (digitGroups || []).some(function(g) { return g.length >= 5 && g.length <= 8; });
 
   callConversationMessagesOperation({ operation: "send_message", conversationId: conversationId, isVoice: true, audioUrl: audioUrl, hasPhoneNumber: hasPhoneNumber }).then(function(res) {
-    if (!res.success) { showToast("❌ Message vocal non envoyé, réessaie."); return; }
+    if (!res.success) { pushDebugLog("error", "Échec envoi message vocal", JSON.stringify(res)); showToast("❌ Message vocal non envoyé, réessaie."); return; }
     var msg = res.message;
     msg.voiceDigits = digitGroups || [];
     msg.type = "audio";
@@ -33695,6 +33695,7 @@ root.addEventListener("click", function(e) {
 
         revealPromise.then(function(res) {
           if (!res.success) {
+            pushDebugLog("error", "Échec révélation Admin (" + revealCtx.type + ")", JSON.stringify(res));
             showToast("❌ Impossible de récupérer ces informations.");
           } else if (revealCtx.type === "order_details") {
             var d = res.details ? res.details[revealCtx.orderId] : null;
