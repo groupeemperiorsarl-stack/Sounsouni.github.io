@@ -14169,7 +14169,21 @@ function switchToLinkedAccount(accountId) {
     }
     save();
   }
-  loginAccount(accountId);
+  // Avant de basculer, on obtient un VRAI jeton de session pour ce
+  // compte précis — sans ça, l'app affichait le bon compte mais
+  // gardait le jeton de l'ancien, ce qui faisait échouer silencieusement
+  // toute action ensuite (passer commande, envoyer un message...) avec
+  // "session_required". Pas besoin de redemander le mot de passe : le
+  // serveur vérifie juste que les deux comptes partagent le même numéro.
+  callAddressesOperation({ operation: "get_linked_account_token", targetAccountId: accountId }).then(function(res) {
+    if (res.success && res.sessionToken) {
+      state.sessionToken = res.sessionToken;
+      save();
+    } else {
+      pushDebugLog("error", "Échec changement de compte lié", JSON.stringify(res));
+    }
+    loginAccount(accountId);
+  });
 }
 
 // Marque un compte comme "réellement utilisé sur cet appareil" — c'est
