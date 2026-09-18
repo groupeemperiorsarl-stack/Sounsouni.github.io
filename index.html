@@ -25371,17 +25371,16 @@ function renderSeller() {
   var myOrders = [];
   for (var i = 0; i < state.orders.length; i++) {
     var o = state.orders[i];
-    for (var j = 0; j < o.items.length; j++) {
-      if (o.items[j].sellerId === state.profile.id) {
-        myOrders.push(o);
-        break;
-      }
+    if (Array.isArray(o.sellerIds) && o.sellerIds.indexOf(state.profile.id) !== -1) {
+      myOrders.push(o);
+    } else if (Array.isArray(o.items) && o.items.some(function(it) { return it.sellerId === state.profile.id; })) {
+      myOrders.push(o);
     }
   }
   var totalSales = 0;
   for (var k = 0; k < myOrders.length; k++) {
     var o2 = myOrders[k];
-    for (var l = 0; l < o2.items.length; l++) {
+    for (var l = 0; l < (o2.items || []).length; l++) {
       if (o2.items[l].sellerId === state.profile.id) {
         totalSales += o2.items[l].price * o2.items[l].qty;
       }
@@ -25932,11 +25931,17 @@ function renderSellerOrders() {
   var myOrders = [];
   for (var i = 0; i < state.orders.length; i++) {
     var o = state.orders[i];
-    for (var j = 0; j < o.items.length; j++) {
-      if (o.items[j].sellerId === state.profile.id) {
-        myOrders.push(o);
-        break;
-      }
+    // "sellerIds" est disponible IMMÉDIATEMENT (métadonnée publique de la
+    // commande) — contrairement à "items", qui n'arrive qu'un instant
+    // après (voir fetchMyOrderDetails). Filtrer sur items ici faisait
+    // apparaître une commande toute neuve comme "invisible" pour le
+    // vendeur, le temps que son contenu arrive.
+    if (Array.isArray(o.sellerIds) && o.sellerIds.indexOf(state.profile.id) !== -1) {
+      myOrders.push(o);
+    } else if (Array.isArray(o.items) && o.items.some(function(it) { return it.sellerId === state.profile.id; })) {
+      // Repli pour d'éventuelles commandes qui n'auraient pas sellerIds
+      // (ne devrait plus arriver après la migration, gardé par sécurité).
+      myOrders.push(o);
     }
   }
   if (myOrders.length === 0) return '<div class="empty-state"><i class="fa-solid fa-inbox"></i><div class="title">' + t("seller_no_order") + '</div></div>';
