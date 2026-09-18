@@ -7890,6 +7890,10 @@ function defaultState() {
     adminRevealedRelaisEditLoc: null,
     debugLog: [],
     debugLoggingEnabled: true,
+    debugToolsEnabled: false,
+    debugOrderQuery: "",
+    debugAccountQuery: "",
+    debugQueryResult: null,
   };
 }
 
@@ -28169,6 +28173,37 @@ function renderAdminTest() {
   html += '<div style="font-size:12.5px;"><strong>Capture des erreurs</strong><br><span style="font-size:10.5px;color:var(--text-dim);">À désactiver une fois le problème réglé — sinon ça continue à occuper de la place pour rien.</span></div>';
   html += '<div class="toggle-switch ' + (state.debugLoggingEnabled ? 'active' : '') + '" data-action="toggle-debug-logging"><div class="toggle-knob"></div></div>';
   html += '</div>';
+
+  if (state.adminIsOwner) {
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;margin-bottom:10px;border-bottom:1px solid var(--border-color);">';
+    html += '<div style="font-size:12.5px;"><strong>Diagnostic avancé (tous les comptes)</strong><br><span style="font-size:10.5px;color:var(--text-dim);">Va chercher la vérité directement sur le serveur — pas seulement ce que TON téléphone a en cache. À désactiver une fois le problème réglé.</span></div>';
+    html += '<div class="toggle-switch ' + (state.debugToolsEnabled ? 'active' : '') + '" data-action="toggle-debug-tools"><div class="toggle-knob"></div></div>';
+    html += '</div>';
+
+    if (state.debugToolsEnabled) {
+      html += '<div style="background:var(--bg-body);border-radius:10px;padding:12px;margin-bottom:14px;">';
+      html += '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">🔎 Chercher une commande (par son code, ex: 4V9E0)</div>';
+      html += '<div style="display:flex;gap:8px;margin-bottom:10px;">';
+      html += '<input class="input" id="debug-order-input" placeholder="Code de commande" value="' + esc(state.debugOrderQuery || "") + '" data-bind="debugOrderQuery" data-enter-action="debug-search-order" />';
+      html += '<button class="btn-primary" style="flex:0;padding:0 16px;" data-action="debug-search-order"><i class="fa-solid fa-search"></i></button>';
+      html += '</div>';
+      html += '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">🔎 Chercher un compte (nom, boutique ou téléphone)</div>';
+      html += '<div style="display:flex;gap:8px;">';
+      html += '<input class="input" id="debug-account-input" placeholder="Nom, boutique ou téléphone" value="' + esc(state.debugAccountQuery || "") + '" data-bind="debugAccountQuery" data-enter-action="debug-search-account" />';
+      html += '<button class="btn-primary" style="flex:0;padding:0 16px;" data-action="debug-search-account"><i class="fa-solid fa-search"></i></button>';
+      html += '</div>';
+      if (state.debugQueryResult) {
+        html += '<div style="margin-top:14px;">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+        html += '<strong style="font-size:12px;">Résultat (' + state.debugQueryResult.count + ')</strong>';
+        html += '<button class="link-btn" style="font-size:11px;" data-action="debug-copy-result"><i class="fa-solid fa-copy"></i> Copier</button>';
+        html += '</div>';
+        html += '<pre style="background:#0d0d14;color:#7fdb7f;font-size:10px;padding:10px;border-radius:8px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:400px;overflow-y:auto;">' + esc(JSON.stringify(state.debugQueryResult.results, null, 2)) + '</pre>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+  }
   html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:12px;">Cette page capte automatiquement les erreurs de l\'app. Reproduis le problème (ex : passer une commande), reviens ici, puis appuie sur "Copier" et colle le résultat dans la conversation.</div>';
   html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">';
   html += '<button class="btn-primary" style="flex:1;" data-action="copy-debug-log"><i class="fa-solid fa-copy"></i> Copier tout</button>';
@@ -33988,6 +34023,33 @@ root.addEventListener("click", function(e) {
         else showToast("❌ Suppression refusée.");
         render();
       });
+      break;
+    }
+    case "toggle-debug-tools": {
+      state.debugToolsEnabled = !state.debugToolsEnabled;
+      save();
+      render();
+      break;
+    }
+    case "debug-search-order": {
+      if (!state.debugOrderQuery) break;
+      callAdminAccessOperation({ operation: "debug_get_order", orderQuery: state.debugOrderQuery }).then(function(res) {
+        state.debugQueryResult = res.success ? res : { count: 0, results: [{ erreur: res.error || "échec" }] };
+        render();
+      });
+      break;
+    }
+    case "debug-search-account": {
+      if (!state.debugAccountQuery) break;
+      callAdminAccessOperation({ operation: "debug_get_account", accountQuery: state.debugAccountQuery }).then(function(res) {
+        state.debugQueryResult = res.success ? res : { count: 0, results: [{ erreur: res.error || "échec" }] };
+        render();
+      });
+      break;
+    }
+    case "debug-copy-result": {
+      copyTextToClipboard(JSON.stringify(state.debugQueryResult ? state.debugQueryResult.results : {}, null, 2));
+      showToast("Copié !");
       break;
     }
     case "toggle-debug-logging": {
