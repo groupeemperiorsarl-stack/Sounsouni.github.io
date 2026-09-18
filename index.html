@@ -25959,10 +25959,11 @@ function renderSellerOrders() {
     var myVendorStatus = (o2.vendorStatuses && o2.vendorStatuses[state.profile.id]) || o2.status;
     var sellerDone = myVendorStatus === "Prête" || myVendorStatus === "Refusée" || statusProgressIndex(o2.status) > statusProgressIndex("Prête");
     html += '<div class="card-row" style="flex-direction:column;align-items:stretch">';
-    html += '<div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:8px">';
+    html += '<div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:2px">';
     html += '<span style="font-weight:700">#' + o2.id.slice(-5).toUpperCase() + '</span>';
     html += '<span class="status-pill"><i class="fa-solid ' + (STATUS_ICONS[myVendorStatus] || STATUS_ICONS[o2.status]) + '"></i> ' + (myVendorStatus === "Refusée" ? t("seller_you_refused") : orderStatusLabel(myVendorStatus)) + '</span>';
     html += '</div>';
+    html += '<div style="font-size:10.5px;color:var(--text-dim);margin-bottom:6px;">' + fmtDateTime(o2.createdAt) + '</div>';
     // Seuls VOS articles apparaissent ici — jamais ceux des autres
     // boutiques présentes dans la même commande groupée.
     for (var l = 0; l < o2.items.length; l++) {
@@ -29344,7 +29345,7 @@ function renderAdminAccountDetail(accountId) {
   // ---- Commandes passées (acheteur) ----
   var myOrders = state.orders.filter(function(o) { return o.buyerId === accountId; }).sort(function(x, y) { return y.createdAt - x.createdAt; });
   html += renderAdminDetailSection('Commandes passées', 'fa-receipt', accountId, 'orders', myOrders, function(o) {
-    return '<div class="card-row" style="cursor:pointer;" data-action="open-admin-order" data-value="' + o.id + '"><div style="flex:1;"><div style="font-weight:700;font-size:12.5px;">#' + o.id.slice(-5).toUpperCase() + '</div><div style="font-size:11px;color:var(--text-dim);">' + fmtDateTime(o.createdAt) + ' · ' + o.status + '</div></div><div style="font-weight:700;font-size:12.5px;">' + money(o.total, o.country) + '</div></div>';
+    return '<div class="card-row" style="cursor:pointer;" data-action="open-admin-order" data-value="' + o.id + '"><div style="flex:1;"><div style="font-weight:700;font-size:12.5px;">#' + o.id.slice(-5).toUpperCase() + '</div><div style="font-size:11px;color:var(--text-dim);">' + fmtDateTime(o.createdAt) + ' · ' + o.status + '</div></div><div style="font-weight:700;font-size:12.5px;">' + (o.total != null ? money(o.total, o.country) : '—') + '</div></div>';
   }, 'Aucune commande.');
 
   // ---- Conversations (messages acheteur ↔ vendeur) — pouvoir admin étendu ----
@@ -38046,11 +38047,14 @@ function bootAppWithLocalData() {
         refreshProfileFromAccounts();
         // Sécurité : le contenu (items/subtotal/total) arrive séparément
         // désormais (voir fetchMyOrderDetails) — en attendant qu'il
-        // arrive, on s'assure qu'aucune commande n'a "items" complètement
-        // absent, pour qu'un .length/.map exécuté entre-temps ne fasse
-        // jamais planter l'écran (juste "0 article" un court instant).
+        // arrive, on s'assure qu'aucune commande n'a ces champs
+        // complètement absents, pour qu'un .length/.map/money() exécuté
+        // entre-temps ne fasse jamais planter l'écran ni afficher "NaN"
+        // (juste "0" un court instant).
         for (var oi = 0; oi < state.orders.length; oi++) {
           if (!Array.isArray(state.orders[oi].items)) state.orders[oi].items = [];
+          if (typeof state.orders[oi].subtotal !== "number") state.orders[oi].subtotal = 0;
+          if (typeof state.orders[oi].total !== "number") state.orders[oi].total = 0;
         }
         save();
         pushDebugLog("info", "Synchronisation générale terminée", "lignes reçues au total=" + res.data.length + " · comptes en mémoire après=" + state.accounts.length + " · pages=" + Math.ceil(res.data.length / PAGE_SIZE));
