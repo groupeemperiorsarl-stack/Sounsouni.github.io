@@ -37474,6 +37474,19 @@ if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App
       window.Capacitor.Plugins.App.minimizeApp();
     }
   });
+  // Quand le téléphone met l'app en arrière-plan (écran verrouillé,
+  // autre appli ouverte), le système suspend souvent la connexion en
+  // temps réel — sans rien qui la relance au retour, l'app pouvait
+  // rester bloquée sur un état ancien indéfiniment (nouvelle commande
+  // jamais reçue tant qu'on n'a pas redémarré l'app complètement à la
+  // main). On recharge simplement l'app à chaque retour au premier
+  // plan, pour repartir à coup sûr sur une synchronisation fraîche —
+  // comme le ferait un onglet de navigateur qu'on rouvre.
+  window.Capacitor.Plugins.App.addListener("appStateChange", function(st) {
+    if (st && st.isActive) {
+      window.location.reload();
+    }
+  });
 }
 
 // ---------- SPLASH SCREEN (logo animé au lancement) ----------
