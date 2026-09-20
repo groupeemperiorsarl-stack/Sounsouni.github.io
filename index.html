@@ -5162,6 +5162,75 @@ function hideUploadLoader() {
   }
 }
 
+// ---------- Resynchronisation silencieuse au retour au premier plan ----------
+// Remplace l'ancien window.location.reload() : recharge les données à jour
+// (commandes, comptes, messages...) SANS recharger toute la page — donc
+// sans repasser par l'écran de démarrage et sans perdre la position de la
+// personne dans l'app. Affiche le petit loader mascotte pendant l'opération,
+// comme prévu à l'origine pour ce cas d'usage.
+var _backgroundResyncRunning = false;
+function runBackgroundResync() {
+  if (!FIREBASE_ENABLED || typeof sb === "undefined" || !sb) return;
+  if (_backgroundResyncRunning) return; // évite deux resyncs en même temps
+  _backgroundResyncRunning = true;
+  showUploadLoader();
+
+  var LAST_SYNC_KEY = "gems_last_sync_v2";
+  var lastSyncAt = localStorage.getItem(LAST_SYNC_KEY);
+  var hasCachedData = state.products.length > 0 && state.accounts.length > 0;
+  var ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  var needsFullSync = !lastSyncAt || !hasCachedData || (Date.now() - new Date(lastSyncAt).getTime()) > ONE_DAY_MS;
+  var PAGE_SIZE = 900;
+
+  function fetchAllResyncPages(offset, accumulated) {
+    var pageQuery = sb.from("app_data").select("*").neq("collection", "products").range(offset, offset + PAGE_SIZE - 1);
+    if (!needsFullSync) pageQuery = pageQuery.gt("updated_at", lastSyncAt);
+    return pageQuery.then(function(res) {
+      if (res.error) return res;
+      var combined = accumulated.concat(res.data || []);
+      if (res.data && res.data.length === PAGE_SIZE) {
+        return fetchAllResyncPages(offset + PAGE_SIZE, combined);
+      }
+      return { error: null, data: combined };
+    });
+  }
+
+  fetchAllResyncPages(0, []).then(function(res) {
+    if (!res.error) {
+      if (needsFullSync) {
+        var byCollection = {};
+        SHARED_KEYS.forEach(function(name) { byCollection[name] = []; });
+        res.data.forEach(function(row) {
+          if (byCollection[row.collection]) byCollection[row.collection].push(row.data);
+        });
+        SHARED_KEYS.forEach(function(name) { state[name] = byCollection[name]; });
+      } else {
+        res.data.forEach(function(row) {
+          if (SHARED_KEYS.indexOf(row.collection) === -1) return;
+          var list = state[row.collection];
+          var idx = list.findIndex(function(item) { return item.id === row.data.id; });
+          if (idx === -1) list.push(row.data); else list[idx] = row.data;
+        });
+      }
+      localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
+      refreshProfileFromAccounts();
+      for (var oi = 0; oi < state.orders.length; oi++) {
+        if (!Array.isArray(state.orders[oi].items)) state.orders[oi].items = [];
+        if (typeof state.orders[oi].subtotal !== "number") state.orders[oi].subtotal = 0;
+        if (typeof state.orders[oi].total !== "number") state.orders[oi].total = 0;
+      }
+      save();
+      pushDebugLog("info", "Resynchronisation silencieuse (retour au premier plan)", "lignes reçues=" + res.data.length);
+      if (state.profile) { fetchMyOrderContacts(); fetchMyOrderDetails(); }
+      render();
+    } else {
+      console.error("Erreur resynchronisation silencieuse :", res.error);
+    }
+    _backgroundResyncRunning = false;
+    hideUploadLoader();
+  });
+}
+
 function uploadToStorage(file, folder, onDone) {
   showUploadLoader();
   compressImage(file, function(processedFile) {
@@ -14700,6 +14769,15 @@ function submitAdminGate() {
       state.adminActiveAccountId = "admin_owner";
       state.showAdminGate = false;
       state.adminGateChosenGroup = null;
+      // L'accès instantané ci-dessus ne contacte jamais le serveur, donc
+      // ne délivre aucun jeton — sans ça, tout appel Admin qui exige un
+      // X-Session-Token (debug_get_order, etc.) échouerait avec
+      // "session_required". On demande quand même un vrai jeton en tâche
+      // de fond (sans bloquer l'accès), au cas où ce mot de passe est
+      // aussi le vrai mot de passe serveur du compte admin_owner.
+      verifyAccountPassword("admin_owner", enteredPass).then(function(match) {
+        pushDebugLog("info", "Jeton Admin (X-Session-Token)", state.adminSessionToken || "(aucun jeton obtenu — ce mot de passe ne correspond pas au mot de passe serveur de admin_owner)");
+      });
       applyRoleSwitch(state.pendingRole);
       return;
     }
@@ -37566,12 +37644,12 @@ if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App
   // temps réel — sans rien qui la relance au retour, l'app pouvait
   // rester bloquée sur un état ancien indéfiniment (nouvelle commande
   // jamais reçue tant qu'on n'a pas redémarré l'app complètement à la
-  // main). On recharge simplement l'app à chaque retour au premier
-  // plan, pour repartir à coup sûr sur une synchronisation fraîche —
-  // comme le ferait un onglet de navigateur qu'on rouvre.
+  // main). On relance une resynchronisation silencieuse à chaque retour
+  // au premier plan (avec le loader mascotte), SANS recharger toute la
+  // page — pour ne jamais perdre la position ou un formulaire en cours.
   window.Capacitor.Plugins.App.addListener("appStateChange", function(st) {
     if (st && st.isActive) {
-      window.location.reload();
+      runBackgroundResync();
     }
   });
 }
