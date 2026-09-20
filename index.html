@@ -4929,10 +4929,11 @@ function saveDoc(collectionName, docData) {
   // perdue : elle rejoint une file d'attente et sera réenvoyée dès que la
   // connexion revient — indispensable pour un paiement fait dans une zone
   // sans réseau, mais utile pour absolument tout le reste aussi.
-  if (navigator.onLine === false) {
-    queuePendingSync(collectionName, docData);
-    return;
-  }
+  // Important : on ne se fie JAMAIS à navigator.onLine pour décider de ne
+  // pas essayer — ce signal peut indiquer "hors ligne" à tort sur mobile
+  // (WebView Android, changement de réseau...), ce qui bloquait alors
+  // silencieusement l'envoi sans même tenter la vraie requête. On tente
+  // toujours ; seul un VRAI échec réseau/serveur met en file d'attente.
   sb.from("app_data").upsert({ collection: collectionName, id: docData.id, data: docData, updated_at: new Date().toISOString() }, { onConflict: "collection,id" })
     .then(function(res) {
       if (res.error) {
@@ -4953,6 +4954,26 @@ function saveDoc(collectionName, docData) {
 // ("delete") — sans ça, une suppression qui échoue en silence pouvait
 // laisser une fiche supprimée localement ressurgir au prochain
 // rechargement, alors que ses photos, elles, avaient bien été effacées.
+// Calcule le prochain "point de départ" (watermark) pour la synchronisation
+// incrémentale — à partir de l'heure la plus récente RÉELLEMENT reçue du
+// serveur, jamais de l'heure du téléphone. Utiliser l'heure du téléphone
+// pouvait faire sauter DÉFINITIVEMENT une commande écrite pile pendant
+// qu'une synchronisation était déjà en cours (son horodatage serveur
+// tombait avant l'heure locale prise après coup, donc jamais redemandée
+// ensuite). Petite marge de sécurité de 3 secondes en plus, pour absorber
+// un léger décalage d'horloge entre plusieurs écritures presque
+// simultanées — au pire, une ligne déjà connue est redemandée une fois de
+// plus (sans effet, la fusion est idempotente), jamais l'inverse.
+function computeNextSyncWatermark(rows, previousWatermark) {
+  var maxTs = null;
+  for (var i = 0; i < rows.length; i++) {
+    var t = rows[i].updated_at ? new Date(rows[i].updated_at).getTime() : 0;
+    if (maxTs === null || t > maxTs) maxTs = t;
+  }
+  if (maxTs === null) return previousWatermark || new Date().toISOString();
+  return new Date(maxTs - 3000).toISOString();
+}
+
 function queuePendingSync(collectionName, docData, type) {
   if (!state.pendingSyncQueue) state.pendingSyncQueue = [];
   var idx = -1;
@@ -4969,7 +4990,9 @@ function queuePendingSync(collectionName, docData, type) {
 // 20 secondes (le signal "en ligne" n'est pas toujours fiable sur mobile).
 function flushPendingSyncQueue() {
   if (!FIREBASE_ENABLED || !state.pendingSyncQueue || state.pendingSyncQueue.length === 0) return;
-  if (navigator.onLine === false) return;
+  // Volontairement PAS de vérification navigator.onLine ici non plus —
+  // déjà peu fiable sur mobile (voir plus haut) ; chaque requête gère de
+  // toute façon son propre échec sans rien casser si vraiment hors ligne.
   var queue = state.pendingSyncQueue.slice();
   queue.forEach(function(entry) {
     var request;
@@ -5030,10 +5053,8 @@ function deleteRemoteDoc(collectionName, docId) {
   // d'échec, la suppression rejoint la file d'attente et sera refaite
   // dès que la connexion revient — sans ça, une fiche produit pouvait
   // rester dans la base alors que ses photos avaient déjà disparu.
-  if (navigator.onLine === false) {
-    queuePendingSync(collectionName, { id: docId }, "delete");
-    return;
-  }
+  // On tente toujours d'abord (voir saveDoc pour pourquoi on ne se fie
+  // plus à navigator.onLine).
   sb.from("app_data").delete().eq("collection", collectionName).eq("id", docId)
     .then(function(res) {
       if (res.error) {
@@ -5212,7 +5233,7 @@ function runBackgroundResync() {
           if (idx === -1) list.push(row.data); else list[idx] = row.data;
         });
       }
-      localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
+      localStorage.setItem(LAST_SYNC_KEY, computeNextSyncWatermark(res.data, lastSyncAt));
       refreshProfileFromAccounts();
       for (var oi = 0; oi < state.orders.length; oi++) {
         if (!Array.isArray(state.orders[oi].items)) state.orders[oi].items = [];
@@ -16577,10 +16598,6 @@ var FILATURE_ACTION_LABELS = {
 // désormais autorisé pour écrire dans "filatureLogs" (voir migration 08).
 function secureFilatureSaveDoc(log) {
   if (!FIREBASE_ENABLED) return;
-  if (navigator.onLine === false) {
-    queuePendingSync("filatureLogs", log);
-    return;
-  }
   fetch(supabaseConfig.url + "/functions/v1/filature-write", {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
@@ -16723,10 +16740,11 @@ function secureOrderSaveDoc(order) {
   delete cleaned.buyerPhone;
   delete cleaned.contactPhone;
 
-  if (navigator.onLine === false) {
-    queuePendingSync("orders", cleaned);
-    return;
-  }
+  // On tente TOUJOURS d'envoyer la commande d'abord — jamais de blocage
+  // préalable sur navigator.onLine (peu fiable sur mobile : peut dire
+  // "hors ligne" à tort et empêcher silencieusement toute tentative,
+  // sans même une erreur à capturer). Seul un vrai échec (réseau ou
+  // serveur) la met en file d'attente, via le .then/.catch ci-dessous.
   fetch(supabaseConfig.url + "/functions/v1/order-write", {
     method: "POST",
     headers: authHeaders(),
@@ -28289,6 +28307,7 @@ function renderAdminTest() {
       html += '<div style="display:flex;gap:8px;margin-bottom:10px;">';
       html += '<input class="input" id="debug-order-input" placeholder="Code de commande" value="' + esc(state.debugOrderQuery || "") + '" data-bind="debugOrderQuery" data-enter-action="debug-search-order" />';
       html += '<button class="btn-primary" style="flex:0;padding:0 16px;" data-action="debug-search-order"><i class="fa-solid fa-search"></i></button>';
+      html += '<button class="btn-secondary" style="flex:0;padding:0 16px;" data-action="debug-search-order-local" title="Vérifier directement dans les données déjà sur ce téléphone, sans passer par le serveur"><i class="fa-solid fa-mobile-screen"></i></button>';
       html += '</div>';
       html += '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">🔎 Chercher un compte (nom, boutique ou téléphone)</div>';
       html += '<div style="display:flex;gap:8px;">';
@@ -34142,6 +34161,38 @@ root.addEventListener("click", function(e) {
       });
       break;
     }
+    case "debug-search-order-local": {
+      if (!state.debugOrderQuery) break;
+      // Vérifie DIRECTEMENT dans les données déjà présentes sur ce
+      // téléphone (state.orders) — sans appeler le serveur, sans jeton.
+      // Sert à savoir si une commande manquante à l'écran est vraiment
+      // absente localement (souci de synchronisation) ou bien présente
+      // mais filtrée à l'affichage (souci de rendu) — reproduit ici
+      // exactement le même test que renderSellerOrders().
+      var q = String(state.debugOrderQuery).trim().toUpperCase();
+      var matches = (state.orders || []).filter(function(o) { return o.id.toUpperCase().indexOf(q) !== -1; });
+      var myId = state.profile ? state.profile.id : null;
+      var results = matches.slice(0, 5).map(function(o) {
+        var sellerIdsOk = Array.isArray(o.sellerIds) && myId && o.sellerIds.indexOf(myId) !== -1;
+        var itemsFallbackOk = Array.isArray(o.items) && myId && o.items.some(function(it) { return it.sellerId === myId; });
+        return {
+          orderId: o.id,
+          trouve_localement: true,
+          sellerIds: o.sellerIds || null,
+          mon_compte_actuel: myId,
+          correspond_via_sellerIds: sellerIdsOk,
+          correspond_via_items_repli: itemsFallbackOk,
+          devrait_apparaitre_chez_moi: sellerIdsOk || itemsFallbackOk,
+          nombre_items: Array.isArray(o.items) ? o.items.length : "items absent (" + typeof o.items + ")",
+          status: o.status,
+          vendorStatuses: o.vendorStatuses || null,
+          createdAt: o.createdAt ? new Date(o.createdAt).toISOString() : null
+        };
+      });
+      state.debugQueryResult = { count: matches.length, results: matches.length ? results : [{ trouve_localement: false, note: "Cette commande n'est PAS dans les " + (state.orders || []).length + " commandes actuellement en mémoire sur ce téléphone — problème de synchronisation, pas d'affichage." }] };
+      render();
+      break;
+    }
     case "debug-search-account": {
       if (!state.debugAccountQuery) break;
       callAdminAccessOperation({ operation: "debug_get_account", accountQuery: state.debugAccountQuery }).then(function(res) {
@@ -38221,7 +38272,7 @@ function bootAppWithLocalData() {
             if (idx === -1) list.push(row.data); else list[idx] = row.data;
           });
         }
-        localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
+        localStorage.setItem(LAST_SYNC_KEY, computeNextSyncWatermark(res.data, lastSyncAt));
         refreshProfileFromAccounts();
         // Sécurité : le contenu (items/subtotal/total) arrive séparément
         // désormais (voir fetchMyOrderDetails) — en attendant qu'il
