@@ -14711,6 +14711,10 @@ function submitAdminGate() {
         state.adminActiveAccountId = "admin_owner";
         state.showAdminGate = false;
         state.adminGateChosenGroup = null;
+        // Affiché dans Admin > Test > journal de debug, pour pouvoir copier
+        // le jeton depuis le téléphone (utile pour tester une fonction
+        // serveur avec X-Session-Token sans avoir besoin d'un ordinateur).
+        pushDebugLog("info", "Jeton Admin (X-Session-Token)", state.adminSessionToken || "(aucun jeton obtenu)");
         applyRoleSwitch(state.pendingRole);
         return;
       }
