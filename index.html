@@ -7939,6 +7939,27 @@ function pushDebugLog(type, message, detail) {
     if (state.debugLog.length > 200) state.debugLog.length = 200;
     save();
     if (state.view === "admin" && state.adminTab === "test") render();
+    // Envoi au serveur (best-effort, jamais bloquant) pour que l'Admin
+    // puisse voir les erreurs de N'IMPORTE QUEL compte à distance — voir
+    // Admin > Test > "Erreurs récentes". Seulement les vraies erreurs
+    // (pas les traces "info" routinières, pour ne pas saturer), et
+    // jamais de console.error ici pour éviter une boucle si cet envoi
+    // lui-même échoue.
+    if ((type === "error" || type === "promise" || type === "console.error") && typeof FIREBASE_ENABLED !== "undefined" && FIREBASE_ENABLED && typeof sb !== "undefined" && sb) {
+      sb.from("app_data").upsert({
+        collection: "clientErrorLogs",
+        id: "log-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+        data: {
+          accountId: (state.profile && state.profile.id) || null,
+          accountName: (state.profile && (state.profile.shopName || state.profile.name)) || null,
+          type: type,
+          message: String(message || ""),
+          detail: detail ? String(detail) : "",
+          at: Date.now()
+        },
+        updated_at: new Date().toISOString()
+      }, { onConflict: "collection,id" }).catch(function() { /* best-effort, silencieux */ });
+    }
   } catch (e) { /* la capture elle-même ne doit jamais faire planter l'app */ }
 }
 window.addEventListener("error", function(e) {
@@ -37541,14 +37562,12 @@ if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App
   // temps réel — sans rien qui la relance au retour, l'app pouvait
   // rester bloquée sur un état ancien indéfiniment (nouvelle commande
   // jamais reçue tant qu'on n'a pas redémarré l'app complètement à la
-  // main). Au retour au premier plan, on resynchronise donc en
-  // silence — avec le même loader animé que pour l'envoi de photos —
-  // SANS recharger la page : la personne reste exactement sur l'écran
-  // où elle était, juste avec des données à jour une fois terminé.
+  // main). On recharge simplement l'app à chaque retour au premier
+  // plan, pour repartir à coup sûr sur une synchronisation fraîche —
+  // comme le ferait un onglet de navigateur qu'on rouvre.
   window.Capacitor.Plugins.App.addListener("appStateChange", function(st) {
     if (st && st.isActive) {
-      showUploadLoader();
-      runBackgroundResync().finally(function() { hideUploadLoader(); });
+      window.location.reload();
     }
   });
 }
@@ -38014,68 +38033,6 @@ function trySplashFinish() {
 }
 
 setTimeout(function() { _splashMinTimeDone = true; trySplashFinish(); }, 5500);
-
-// Resynchronisation "silencieuse" — même logique que celle du démarrage
-// (voir bootAppWithLocalData plus bas), mais réutilisable à tout moment
-// SANS jamais toucher à l'écran de démarrage ni recharger la page. Sert
-// notamment au retour au premier plan de l'app (voir plus bas) : on
-// veut rattraper ce qui a pu être manqué pendant que l'app était en
-// arrière-plan, sans faire perdre à la personne l'écran où elle était.
-function runBackgroundResync() {
-  if (!FIREBASE_ENABLED) return Promise.resolve();
-  var LAST_SYNC_KEY = "gems_last_sync_v2";
-  var lastSyncAt = localStorage.getItem(LAST_SYNC_KEY);
-  var hasCachedData = state.products.length > 0 && state.accounts.length > 0;
-  var ONE_DAY_MS = 24 * 60 * 60 * 1000;
-  var needsFullSync = !lastSyncAt || !hasCachedData || (Date.now() - new Date(lastSyncAt).getTime()) > ONE_DAY_MS;
-  var PAGE_SIZE = 900;
-
-  function fetchAllSyncPages(offset, accumulated) {
-    var pageQuery = sb.from("app_data").select("*").neq("collection", "products").range(offset, offset + PAGE_SIZE - 1);
-    if (!needsFullSync) pageQuery = pageQuery.gt("updated_at", lastSyncAt);
-    return pageQuery.then(function(res) {
-      if (res.error) return res;
-      var combined = accumulated.concat(res.data || []);
-      if (res.data && res.data.length === PAGE_SIZE) {
-        return fetchAllSyncPages(offset + PAGE_SIZE, combined);
-      }
-      return { error: null, data: combined };
-    });
-  }
-
-  return fetchAllSyncPages(0, []).then(function(res) {
-    if (res.error) {
-      console.error("Erreur de resynchronisation silencieuse :", res.error);
-      return;
-    }
-    if (needsFullSync) {
-      var byCollection = {};
-      SHARED_KEYS.forEach(function(name) { byCollection[name] = []; });
-      res.data.forEach(function(row) {
-        if (byCollection[row.collection]) byCollection[row.collection].push(row.data);
-      });
-      SHARED_KEYS.forEach(function(name) { state[name] = byCollection[name]; });
-    } else {
-      res.data.forEach(function(row) {
-        if (SHARED_KEYS.indexOf(row.collection) === -1) return;
-        var list = state[row.collection];
-        var idx = list.findIndex(function(item) { return item.id === row.data.id; });
-        if (idx === -1) list.push(row.data); else list[idx] = row.data;
-      });
-    }
-    localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
-    refreshProfileFromAccounts();
-    for (var oi = 0; oi < state.orders.length; oi++) {
-      if (!Array.isArray(state.orders[oi].items)) state.orders[oi].items = [];
-      if (typeof state.orders[oi].subtotal !== "number") state.orders[oi].subtotal = 0;
-      if (typeof state.orders[oi].total !== "number") state.orders[oi].total = 0;
-    }
-    save();
-    pushDebugLog("info", "Resynchronisation silencieuse terminée", "lignes reçues au total=" + res.data.length);
-    if (state.profile) { fetchMyOrderContacts(); fetchMyOrderDetails(); }
-    render();
-  });
-}
 
 function bootAppWithLocalData() {
   if (!FIREBASE_ENABLED) {
