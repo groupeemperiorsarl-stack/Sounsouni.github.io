@@ -479,6 +479,12 @@ input, select, textarea {
   50% { transform: scale(1.15); }
 }
 
+/* ---------- Surbrillance "adresse requise" au paiement ---------- */
+@keyframes pulseAddressGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,159,10,0.55); }
+  50% { box-shadow: 0 0 0 10px rgba(255,159,10,0); }
+}
+
 /* ---------- BULLE DU SAGE (invite à découvrir le Guide) ---------- */
 @keyframes mascotPop {
   0% { transform: scale(0.7); opacity: 0; }
@@ -5385,6 +5391,68 @@ const DELIVERY_FEES = {
 };
 
 const DEFAULT_DELIVERY_FEE = 2000;
+
+// ---------- LIVRAISON INTER-VILLES (envoi par car, hors Bamako) ----------
+// Pour les autres grandes villes du Mali, pas de calcul GPS/rive — le
+// vendeur (basé à Bamako) envoie le colis par car, l'acheteur le récupère
+// lui-même à la gare routière de sa ville. Un tarif de base par ville
+// (jamais deviné : reste "non configuré" tant que l'admin n'a pas
+// renseigné le vrai prix du car), plus une majoration par article
+// supplémentaire dans la même commande (colis plus gros/plus lourd à
+// envoyer), elle aussi propre à chaque ville puisque les distances et les
+// tarifs de car ne sont pas les mêmes.
+function intercityDeliveryCities() {
+  return CITIES.filter(function(c) { return c !== "Bamako"; });
+}
+
+function defaultIntercityDeliveryConfig() {
+  var cfg = {};
+  intercityDeliveryCities().forEach(function(city) {
+    cfg[city] = { basePrice: null, extraItemFee: null };
+  });
+  return cfg;
+}
+
+function getIntercityDeliveryConfig() {
+  if (state.settings) {
+    for (var i = 0; i < state.settings.length; i++) {
+      if (state.settings[i].id === "intercity_delivery_config") {
+        // Fusionne avec les valeurs par défaut au cas où une ville aurait
+        // été ajoutée à CITIES après l'enregistrement de cette config.
+        var saved = state.settings[i].data || {};
+        var merged = defaultIntercityDeliveryConfig();
+        Object.keys(saved).forEach(function(city) { merged[city] = saved[city]; });
+        return merged;
+      }
+    }
+  }
+  return defaultIntercityDeliveryConfig();
+}
+
+function saveIntercityDeliveryConfig(cfg) {
+  var doc = { id: "intercity_delivery_config", data: cfg };
+  var idx = -1;
+  for (var i = 0; i < state.settings.length; i++) {
+    if (state.settings[i].id === "intercity_delivery_config") { idx = i; break; }
+  }
+  if (idx === -1) state.settings.push(doc); else state.settings[idx] = doc;
+  save();
+  saveDoc("settings", doc);
+}
+
+// totalItemCount : nombre total d'articles dans la commande (quantités
+// additionnées, pas seulement le nombre de lignes différentes) — un colis
+// avec plus d'articles est plus gros/plus lourd à envoyer par car.
+// Renvoie null si le prix de cette ville n'a pas encore été configuré —
+// à afficher comme "tarif pas encore disponible", jamais comme 0 FCFA.
+function computeIntercityDeliveryFee(city, totalItemCount) {
+  var cfg = getIntercityDeliveryConfig();
+  var cityCfg = cfg[city];
+  if (!cityCfg || cityCfg.basePrice == null) return null;
+  var extra = Math.max(0, (totalItemCount || 1) - 1);
+  var extraFee = cityCfg.extraItemFee != null ? cityCfg.extraItemFee : 0;
+  return cityCfg.basePrice + extra * extraFee;
+}
 // Nombre d'articles affichés à la fois dans le marché — le reste se charge
 // automatiquement au défilement, voir setupMarketInfiniteScroll().
 const MARKET_PAGE_SIZE = 20;
@@ -6401,7 +6469,7 @@ var ADMIN_RESTRICTED_ACTIONS = [
   "admin-add-quartier-proche", "admin-remove-quartier-proche", "undo-quartier-proche-change",
   "send-admin-broadcast", "toggle-employee-permission", "add-boost-tier", "remove-boost-tier", "save-boost-tiers",
   "save-vip-rotation-seconds", "save-delivery-base-config", "admin-add-commune", "admin-remove-commune",
-  "save-admin-product-edit", "admin-delete-account", "save-relais-commission", "save-delivery-fees",
+  "save-admin-product-edit", "admin-delete-account", "save-relais-commission", "save-delivery-fees", "save-intercity-delivery-fees",
   "save-affiliate-rate", "submit-vip-ad", "edit-vip-ad", "remove-vipad-image", "set-vip-config", "delete-vip-ad",
   "toggle-bgpattern-enabled", "remove-bgpattern-icon", "regenerate-bg-pattern",
   "add-webhook-partner", "toggle-webhook-partner", "remove-webhook-partner", "test-webhook-partner",
@@ -7363,6 +7431,15 @@ function undoQuartierProcheChange() {
 // (fiche d'adresse, inscription vendeur, demande Point de Retrait, fiche
 // boutique, adresse au moment de payer...) — une seule fois écrite, sert
 // partout, pour ne jamais avoir 7 versions légèrement différentes.
+// ---------- Sélecteur Commune (simple) + Quartier avec bascule officiel/proche ----------
+// Fonctions PARTAGÉES par tous les formulaires qui proposent ce choix
+// (fiche d'adresse, inscription vendeur, demande Point de Retrait, fiche
+// boutique, adresse au moment de payer...) — une seule fois écrites,
+// servent partout, pour ne jamais avoir 7 versions légèrement différentes.
+//
+// Le menu Commune reste simple (Commune I à VI + Zone Kati-ville) — le
+// choix "officiel / quartier proche" se fait juste en dessous, sur le
+// champ Quartier lui-même, via deux boutons.
 function communeSelectOptionsHtml(currentCommune, currentIsProche, placeholder) {
   var officialData = getQuartiersData();
   var prochesData = getQuartiersProchesData();
@@ -7370,10 +7447,7 @@ function communeSelectOptionsHtml(currentCommune, currentIsProche, placeholder) 
   var opts = '<option value="">' + placeholder + '</option>';
   for (var i = 0; i < communes.length; i++) {
     var c = communes[i];
-    opts += '<option value="' + esc(c) + '" ' + (currentCommune === c && !currentIsProche ? 'selected' : '') + '>' + esc(c) + '</option>';
-    if (prochesData[c] && prochesData[c].length > 0) {
-      opts += '<option value="' + esc(c) + '::proche" ' + (currentCommune === c && currentIsProche ? 'selected' : '') + '>' + t("addr_quartier_proche_de") + ' ' + esc(c) + '</option>';
-    }
+    opts += '<option value="' + esc(c) + '" ' + (currentCommune === c ? 'selected' : '') + '>' + esc(c) + '</option>';
   }
   if (prochesData["Zone Kati-ville"] && prochesData["Zone Kati-ville"].length > 0) {
     opts += '<option value="Zone Kati-ville" ' + (currentCommune === "Zone Kati-ville" ? 'selected' : '') + '>Zone Kati-ville</option>';
@@ -7381,8 +7455,9 @@ function communeSelectOptionsHtml(currentCommune, currentIsProche, placeholder) 
   return opts;
 }
 
-// Renvoie la bonne liste de quartiers pour la valeur actuellement choisie
-// dans le sélecteur ci-dessus — officielle, "proche", ou Kati-ville.
+// Renvoie la bonne liste de quartiers pour la Commune et le mode
+// (officiel/proche) actuellement choisis — Zone Kati-ville n'a pas de
+// liste officielle, donc pas de bascule pour elle, juste sa propre liste.
 function resolveQuartierListForCommune(commune, isProche) {
   if (!commune) return [];
   if (commune === "Zone Kati-ville") return getQuartiersProchesData()["Zone Kati-ville"] || [];
@@ -7398,18 +7473,32 @@ function quartierOptionsHtml(list, currentQuartier, placeholder) {
   return opts;
 }
 
-// Nettoie la valeur brute d'un <select> Commune juste après un data-bind
-// (qui vient d'écrire "Commune X::proche" tel quel) — à appeler dans le
-// gestionnaire de "change", AVANT toute autre logique qui lirait ce champ.
-function applyCommuneProcheParsing(obj, communeField, quartierField, procheField) {
-  var raw = obj[communeField] || "";
-  if (raw.indexOf("::proche") !== -1) {
-    obj[communeField] = raw.replace("::proche", "");
-    obj[procheField] = true;
-  } else {
-    obj[procheField] = false;
+// Construit le champ Quartier complet : les deux boutons de bascule
+// (seulement si cette Commune a une liste de "quartiers proches" non
+// vide — sinon inutile de les montrer), puis le menu déroulant lui-même,
+// rempli selon le mode actif. targetKey identifie le formulaire concerné
+// pour le clic sur les boutons (voir l'action "set-quartier-mode").
+function renderQuartierFieldWithToggle(commune, isProche, quartierVal, quartierBindPath, targetKey, placeholder) {
+  var html = '';
+  var prochesData = getQuartiersProchesData();
+  var hasProches = commune && commune !== "Zone Kati-ville" && prochesData[commune] && prochesData[commune].length > 0;
+  if (hasProches) {
+    html += '<div style="display:flex;gap:6px;margin-top:6px;margin-bottom:6px;">';
+    html += '<button type="button" style="flex:1;padding:10px 4px;font-size:11px;font-weight:700;border-radius:8px;border:1.5px solid var(--border-color);line-height:1.3;white-space:normal;' + (!isProche ? 'background:var(--accent);color:white;border-color:var(--accent);' : 'background:transparent;color:var(--text-secondary);') + '" data-action="set-quartier-mode" data-target="' + targetKey + '" data-value="official">Les quartiers de la ' + esc(commune) + '</button>';
+    html += '<button type="button" style="flex:1;padding:10px 4px;font-size:11px;font-weight:700;border-radius:8px;border:1.5px solid var(--border-color);line-height:1.3;white-space:normal;' + (isProche ? 'background:var(--accent);color:white;border-color:var(--accent);' : 'background:transparent;color:var(--text-secondary);') + '" data-action="set-quartier-mode" data-target="' + targetKey + '" data-value="proche">Les quartiers proches de cette Commune</button>';
+    html += '</div>';
   }
+  var list = resolveQuartierListForCommune(commune, isProche);
+  html += '<select class="input" data-bind="' + quartierBindPath + '" ' + (!commune ? 'disabled' : '') + '>' + quartierOptionsHtml(list, quartierVal, placeholder) + '</select>';
+  return html;
+}
+
+// Réinitialise le Quartier (et repasse en mode "officiel") quand la
+// Commune elle-même change — la liste de quartiers valide n'est plus la
+// même, et le mode "proche" de l'ancienne Commune n'a plus de sens ici.
+function resetQuartierOnCommuneChange(obj, quartierField, procheField) {
   obj[quartierField] = "";
+  obj[procheField] = false;
 }
 
 // ---------- QUARTIERS : COUCHE MODIFIABLE PAR L'ADMIN ----------
@@ -8010,6 +8099,9 @@ function defaultState() {
     disputeDraft: { reason: "produit_endommage", description: "" },
     showBoostModal: false,
     showLocationPicker: false,
+    locationPickerIsConfirm: false,
+    showAddressRequiredPopup: false,
+    highlightAddressSection: false,
     showEarnings: false,
     collapsedAdminSections: {},
     adminOrdersSearch: "",
@@ -8505,6 +8597,17 @@ function playNotificationSound() {
 function showSystemNotification(body) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   try { new Notification("Sounsouni", { body: body, icon: "🛍️" }); } catch (e) {}
+}
+
+// Amène automatiquement l'écran jusqu'au bloc adresse/point de retrait au
+// paiement, plutôt que de compter sur la personne pour le retrouver toute
+// seule — un léger délai le temps que le rendu (et son défilement) soit
+// bien posé à l'écran.
+function scrollToAddressSection() {
+  setTimeout(function() {
+    var el = document.getElementById('checkout-address-section');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 150);
 }
 
 function showToast(msg) {
@@ -9637,6 +9740,8 @@ const TRANSLATIONS = {
     ipe_vertical: "Position verticale",
     ipe_validate: "Valider cette position",
     lp_title: "Placer votre position",
+    lp_title_confirm: "Confirmez votre position",
+    lp_explainer_confirm: "Voici la position détectée automatiquement — vérifiez qu'elle correspond bien à l'adresse voulue. Si ce n'est pas le cas (par exemple si vous êtes en déplacement ailleurs en ce moment), faites glisser le repère jusqu'au bon endroit avant de confirmer.",
     lp_explainer: "La localisation automatique n'a pas répondu. Touchez la carte à l'endroit voulu pour placer votre position manuellement.",
     lp_two_fingers: "Utilisez",
     lp_two_fingers_bold: "deux doigts",
@@ -11319,6 +11424,8 @@ const TRANSLATIONS = {
     ipe_vertical: "Vertical position",
     ipe_validate: "Validate this position",
     lp_title: "Set your location",
+    lp_title_confirm: "Confirm your location",
+    lp_explainer_confirm: "Here is the automatically detected position — check that it matches the intended address. If not (for example if you are currently travelling elsewhere), drag the pin to the right spot before confirming.",
     lp_explainer: "Automatic location didn't respond. Tap the map at the desired spot to place your location manually.",
     lp_two_fingers: "Use",
     lp_two_fingers_bold: "two fingers",
@@ -13001,6 +13108,8 @@ const TRANSLATIONS = {
     ipe_vertical: "ऊर्ध्वाधर स्थिति",
     ipe_validate: "इस स्थिति की पुष्टि करें",
     lp_title: "अपनी स्थिति निर्धारित करें",
+    lp_title_confirm: "अपनी स्थिति की पुष्टि करें",
+    lp_explainer_confirm: "स्वचालित रूप से पता लगाई गई स्थिति यह है — जांचें कि यह सही पते से मेल खाती है। यदि नहीं (उदाहरण के लिए यदि आप फिलहाल कहीं और यात्रा पर हैं), तो पुष्टि करने से पहले पिन को सही जगह पर खींचें।",
     lp_explainer: "स्वचालित स्थान ने जवाब नहीं दिया। अपनी स्थिति मैन्युअल रूप से रखने के लिए नक्शे पर वांछित स्थान को छूएं।",
     lp_two_fingers: "नक्शा हिलाने के लिए",
     lp_two_fingers_bold: "दो उंगलियों",
@@ -15462,11 +15571,20 @@ function placeOrder() {
   if (isRelais) {
     if (!form.relaisShopId) {
       showToast(t("toast_choose_pickup_to_collect"));
+      state.showAddressRequiredPopup = true;
+      state.highlightAddressSection = true;
+      render();
+      scrollToAddressSection();
       return;
     }
   } else {
     if (!form.expressCommune || !form.expressQuartier) {
       showToast(t("toast_choose_commune_neighborhood"));
+      state.showAddressRequiredPopup = true;
+      state.highlightAddressSection = true;
+      state.checkoutAddressExpanded = true;
+      render();
+      scrollToAddressSection();
       return;
     }
     // L'obligation du point de repère est désormais entièrement gérée en
@@ -17866,15 +17984,18 @@ function renderLocationPickerModal() {
   var html = '<div class="modal-overlay" id="location-picker-overlay" data-action="close-location-picker">';
   html += '<div class="modal-sheet" style="max-height:80vh;">';
   html += '<button class="modal-close" data-action="close-location-picker"><i class="fa-solid fa-xmark"></i></button>';
-  html += '<div class="section-title" style="margin-bottom:4px;">' + t("lp_title") + '</div>';
-  html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">' + t("lp_explainer") + '</div>';
+  html += '<div class="section-title" style="margin-bottom:4px;">' + t(state.locationPickerIsConfirm ? "lp_title_confirm" : "lp_title") + '</div>';
+  html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">' + t(state.locationPickerIsConfirm ? "lp_explainer_confirm" : "lp_explainer") + '</div>';
   html += '<div style="position:relative;">';
   html += '<div id="location-picker-map" style="height:300px;border-radius:14px;overflow:hidden;position:relative;isolation:isolate;z-index:0;"></div>';
-  html += '<div style="position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:500;background:rgba(30,30,30,0.92);color:white;font-size:11.5px;font-weight:600;padding:8px 14px;border-radius:12px;display:flex;align-items:center;gap:8px;box-shadow:0 4px 12px rgba(0,0,0,0.25);max-width:88%;text-align:center;">';
-  html += '<i class="fa-solid fa-hand" style="font-size:15px;flex-shrink:0;"></i>';
-  html += t("lp_two_fingers") + ' <b>' + t("lp_two_fingers_bold") + '</b> ' + t("lp_two_fingers_end");
-  html += '<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:6px solid rgba(30,30,30,0.92);"></div>';
-  html += '</div>';
+  if (!state.locationPickerHintDismissed) {
+    html += '<div style="position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:500;background:rgba(30,30,30,0.92);color:white;font-size:11.5px;font-weight:600;padding:8px 30px 8px 14px;border-radius:12px;display:flex;align-items:center;gap:8px;box-shadow:0 4px 12px rgba(0,0,0,0.25);max-width:88%;text-align:center;">';
+    html += '<i class="fa-solid fa-hand" style="font-size:15px;flex-shrink:0;"></i>';
+    html += t("lp_two_fingers") + ' <b>' + t("lp_two_fingers_bold") + '</b> ' + t("lp_two_fingers_end");
+    html += '<button type="button" data-action="dismiss-location-picker-hint" style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,0.15);color:white;border:none;font-size:10px;flex-shrink:0;"><i class="fa-solid fa-xmark"></i></button>';
+    html += '<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:6px solid rgba(30,30,30,0.92);"></div>';
+    html += '</div>';
+  }
   html += '</div>';
   html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px;max-width:180px;margin-left:auto;margin-right:auto;">';
   html += '<div></div><button type="button" class="btn-secondary" style="padding:8px;" data-action="pan-location-picker" data-value="up"><i class="fa-solid fa-arrow-up"></i></button><div></div>';
@@ -17885,7 +18006,7 @@ function renderLocationPickerModal() {
   html += '<button type="button" class="btn-secondary" style="padding:8px;" data-action="pan-location-picker" data-value="zoomin"><i class="fa-solid fa-magnifying-glass-plus"></i></button>';
   html += '</div>';
   html += '<div style="font-size:10.5px;color:var(--text-dim);text-align:center;margin-top:6px;">' + t("lp_buttons_hint") + '</div>';
-  html += '<button class="btn-primary" id="confirm-manual-location-btn" style="margin-top:14px;" data-action="confirm-manual-location" disabled>' + t("lp_confirm") + '</button>';
+  html += '<button class="btn-primary" id="confirm-manual-location-btn" style="margin-top:14px;" data-action="confirm-manual-location" ' + (state.locationPickerIsConfirm ? '' : 'disabled') + '>' + t("lp_confirm") + '</button>';
   html += '<div class="divider-dashed" style="margin:16px 0;"></div>';
   html += renderGpsPasteField(latPath, lngPath);
   html += '</div></div>';
@@ -17934,7 +18055,10 @@ function mountLocationPickerMap() {
     el._leaflet_id = null;
     el.innerHTML = '';
   }
-  var map = L.map('location-picker-map').setView([12.6392, -8.0029], 12);
+  var map = L.map('location-picker-map').setView(
+    (state.locationPickerIsConfirm && window._manualPinLatLng) ? [window._manualPinLatLng.lat, window._manualPinLatLng.lng] : [12.6392, -8.0029],
+    (state.locationPickerIsConfirm && window._manualPinLatLng) ? 16 : 12
+  );
   window._locationPickerMapInstance = map;
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
   // Leaflet calcule sa taille au moment précis de l'initialisation — si la
@@ -17946,9 +18070,23 @@ function mountLocationPickerMap() {
   // rendu terminé, corrige ça une bonne fois pour toutes.
   setTimeout(function() { map.invalidateSize(); }, 150);
   var marker = null;
+  // Mode confirmation (après une capture automatique réussie) : le repère
+  // est déjà planté là où le téléphone pense être — la personne n'a qu'à
+  // le faire glisser si c'est faux, pas besoin de retoucher sinon.
+  if (state.locationPickerIsConfirm && window._manualPinLatLng) {
+    marker = L.marker([window._manualPinLatLng.lat, window._manualPinLatLng.lng], { draggable: true }).addTo(map);
+    marker.on('dragend', function() {
+      var pos = marker.getLatLng();
+      window._manualPinLatLng = { lat: pos.lat, lng: pos.lng };
+    });
+  }
   map.on('click', function(e) {
     if (marker) map.removeLayer(marker);
-    marker = L.marker([e.latlng.lat, e.latlng.lng]).addTo(map);
+    marker = L.marker([e.latlng.lat, e.latlng.lng], { draggable: true }).addTo(map);
+    marker.on('dragend', function() {
+      var pos = marker.getLatLng();
+      window._manualPinLatLng = { lat: pos.lat, lng: pos.lng };
+    });
     window._manualPinLatLng = { lat: e.latlng.lat, lng: e.latlng.lng };
     var btn = document.getElementById('confirm-manual-location-btn');
     if (btn) btn.disabled = false;
@@ -18147,6 +18285,69 @@ function computeVendorToBuyerFee(vendorLat, vendorLng, buyerLat, buyerLng, count
   return Math.max(cfg.minimum, rounded);
 }
 
+// ---------- NOUVELLE GRILLE DE LIVRAISON (transporteur externe, Bamako) ----------
+// Remplace l'ancien calcul au km réel pour les livraisons Express au Mali —
+// on passe à un transporteur externe qui facture par palier + un
+// supplément fixe pour traverser le fleuve, pas au kilomètre.
+//
+// Rive gauche (nord) : Communes I à IV. Rive droite (sud) : Communes V, VI.
+// Zone Kati-ville : cas à part, toujours 2500 FCFA, prioritaire sur tout.
+function getRiveForCommune(commune) {
+  if (!commune) return null;
+  if (commune === "Zone Kati-ville") return "kati";
+  if (["Commune I", "Commune II", "Commune III", "Commune IV"].indexOf(commune) !== -1) return "gauche";
+  if (["Commune V", "Commune VI"].indexOf(commune) !== -1) return "droite";
+  return null;
+}
+
+function courierTierFeeForDistance(km) {
+  if (km == null) return null;
+  if (km <= 10) return 1500;
+  if (km <= 15) return 1800;
+  if (km <= 20) return 2100;
+  return 2500;
+}
+
+// vendorInfos : [{ lat, lng, commune }, ...] — un par boutique concernée
+// par la commande. buyerCommune : la Commune (ou "Zone Kati-ville") de
+// l'adresse de livraison choisie par l'acheteur.
+function computeCourierDeliveryFee(vendorInfos, buyerLat, buyerLng, buyerCommune) {
+  var buyerRive = getRiveForCommune(buyerCommune);
+  var anyKati = buyerRive === "kati";
+  var rives = [];
+  var maxKm = null;
+  for (var i = 0; i < vendorInfos.length; i++) {
+    var v = vendorInfos[i];
+    var vRive = getRiveForCommune(v.commune);
+    if (vRive === "kati") anyKati = true;
+    else if (vRive) rives.push(vRive);
+    if (v.lat != null && v.lng != null && buyerLat != null && buyerLng != null) {
+      var km = distanceKm(v.lat, v.lng, buyerLat, buyerLng);
+      if (km != null && (maxKm === null || km > maxKm)) maxKm = km;
+    }
+  }
+
+  var base;
+  if (anyKati) {
+    base = 2500;
+  } else {
+    var allSameRive = buyerRive != null && rives.every(function(r) { return r === buyerRive; });
+    if (allSameRive) {
+      base = courierTierFeeForDistance(maxKm);
+    } else {
+      // Rives mixtes (au moins un vendeur de chaque côté, ou commune
+      // inconnue) : tarif fixe, sauf si le trajet le plus long dépasse
+      // vraiment 20 km — dans ce cas on reste plafonné à 2500 comme pour
+      // le cas "même rive".
+      base = (maxKm != null && maxKm > 20) ? 2500 : 2000;
+    }
+  }
+  if (base == null) base = DEFAULT_DELIVERY_FEE; // sécurité si aucune distance/commune connue
+
+  var extraVendors = Math.max(0, vendorInfos.length - 1);
+  return base + extraVendors * 700;
+}
+
 // Calcule la tournée de collecte la plus courte parmi TOUS les ordres de
 // passage possibles entre les boutiques du panier, puis jusqu'au client —
 // exactement comme un livreur qui récupère tout en un seul passage. On
@@ -18224,6 +18425,19 @@ function computeDeliveryFeesFromItems(items, buyerLat, buyerLng, cityForFallback
   }
   var n = Math.max(1, vendorIds.length);
 
+  // ---- Ville hors Bamako (Mali) : envoi par car, retrait à la gare
+  // routière — aucun calcul GPS/rive, pas de tournée par boutique, juste
+  // le tarif de la ville + majoration selon le nombre total d'articles. ----
+  if (deliveryCountry === "Mali" && cityForFallback && cityForFallback !== "Bamako" && intercityDeliveryCities().indexOf(cityForFallback) !== -1) {
+    var totalItemCount = items.reduce(function(sum, it) { return sum + (it.qty || 1); }, 0);
+    var intercityFee = computeIntercityDeliveryFee(cityForFallback, totalItemCount);
+    var perVendorIntercity = vendorIds.map(function(vid) {
+      var accIc = findAccountById(vid);
+      return { sellerId: vid, shopName: accIc ? (accIc.shopName || accIc.name) : 'Boutique', quartier: null, commune: null, fee: null, realDistance: false };
+    });
+    return { expressFee: intercityFee, relaisFee: intercityFee, vendorCount: n, realDistanceUsed: false, perVendor: perVendorIntercity, routeUsed: false, intercity: true, intercityCity: cityForFallback, intercityConfigured: intercityFee != null };
+  }
+
   // On tente d'abord la tournée optimisée (toutes les boutiques ont une
   // position GPS) — sinon repli sur l'ancien calcul additionné par
   // boutique, boutique par boutique n'ayant pas de position ne pouvant
@@ -18246,10 +18460,15 @@ function computeDeliveryFeesFromItems(items, buyerLat, buyerLng, cityForFallback
   var perVendor = [];
   var routeUsed = false;
 
-  if (allHaveGps && vendorIds.length > 0) {
-    // ---- Tournée optimisée : une seule distance totale, un seul frais ----
-    var totalKm = computeOptimalRouteDistanceKm(buyerLat, buyerLng, vendorPositions);
-    expressTotal = computeRouteBasedFee(totalKm, deliveryCountry);
+  if (allHaveGps && vendorIds.length > 0 && deliveryCountry === "Mali") {
+    // ---- Nouveau transporteur externe : palier par distance + rive du
+    // fleuve + supplément par boutique supplémentaire (voir plus haut) ----
+    var vendorInfosCourier = [];
+    for (var pi2 = 0; pi2 < vendorAccounts.length; pi2++) {
+      var accC = vendorAccounts[pi2];
+      vendorInfosCourier.push({ lat: accC.shopLat, lng: accC.shopLng, commune: accC.shopCommune || null });
+    }
+    expressTotal = computeCourierDeliveryFee(vendorInfosCourier, buyerLat, buyerLng, communeForFallback);
     anyRealDistance = true;
     routeUsed = true;
     for (var pi = 0; pi < vendorAccounts.length; pi++) {
@@ -18259,7 +18478,24 @@ function computeDeliveryFeesFromItems(items, buyerLat, buyerLng, cityForFallback
         shopName: accP ? (accP.shopName || accP.name) : 'Boutique',
         quartier: accP ? (accP.shopQuartier || null) : null,
         commune: accP ? (accP.shopCommune || null) : null,
-        fee: null, // plus de frais individuel — c'est une tournée partagée
+        fee: null, // plus de frais individuel — un seul tarif pour toute la commande
+        realDistance: true
+      });
+    }
+  } else if (allHaveGps && vendorIds.length > 0) {
+    // ---- International : on garde l'ancienne tournée optimisée au km ----
+    var totalKm = computeOptimalRouteDistanceKm(buyerLat, buyerLng, vendorPositions);
+    expressTotal = computeRouteBasedFee(totalKm, deliveryCountry);
+    anyRealDistance = true;
+    routeUsed = true;
+    for (var pi3 = 0; pi3 < vendorAccounts.length; pi3++) {
+      var accP3 = vendorAccounts[pi3];
+      perVendor.push({
+        sellerId: vendorIds[pi3],
+        shopName: accP3 ? (accP3.shopName || accP3.name) : 'Boutique',
+        quartier: accP3 ? (accP3.shopQuartier || null) : null,
+        commune: accP3 ? (accP3.shopCommune || null) : null,
+        fee: null,
         realDistance: true
       });
     }
@@ -20819,7 +21055,6 @@ function renderVendorContactFields(d) {
   var vendorGpsOk = d.shopLat != null && d.shopLng != null;
   var communeOptionsVc = communeSelectOptionsHtml(d.commune, d.communeProche, t("shop_customize_choose"));
   var quartierListVc = resolveQuartierListForCommune(d.commune, d.communeProche);
-  var quartierOptionsVc = quartierOptionsHtml(quartierListVc, d.quartier, t("shop_customize_choose"));
   var html = '';
   if (!d.email || d.isSecondAccountFlow) {
     html += '<label class="field-label">' + t("email_required") + '</label>';
@@ -20829,7 +21064,7 @@ function renderVendorContactFields(d) {
   html += '<label class="field-label">' + t("shop_customize_commune") + ' *</label>';
   html += '<select class="input" data-bind="onboardDraft.commune" data-action-change="commune-changed">' + communeOptionsVc + '</select>';
   html += '<label class="field-label">' + t("shop_customize_quartier") + ' *</label>';
-  html += '<select class="input" data-bind="onboardDraft.quartier" ' + (!d.commune ? 'disabled' : '') + '>' + quartierOptionsVc + '</select>';
+  html += renderQuartierFieldWithToggle(d.commune, d.communeProche, d.quartier, "onboardDraft.quartier", "onboard", t("shop_customize_choose"));
   html += '<label class="field-label">' + t("relais_apply_precision") + '</label>';
   html += '<input class="input" placeholder="' + t("relais_apply_precision_placeholder") + '" value="' + esc(d.addressDetail || '') + '" data-bind="onboardDraft.addressDetail" />';
   html += '<label class="field-label">' + t("vo_gps_required") + '</label>';
@@ -21034,7 +21269,6 @@ function renderBecomeRelais() {
   var gpsOk = d.shopLat != null && d.shopLng != null;
   var communeOptions = communeSelectOptionsHtml(d.commune, d.communeProche, "Choisir\u2026");
   var quartierListBr = resolveQuartierListForCommune(d.commune, d.communeProche);
-  var quartierOptions = quartierOptionsHtml(quartierListBr, d.quartier, "Choisir\u2026");
   var html = '<button class="link-btn" style="margin-bottom:14px" data-action="close-become-relais"><i class="fa-solid fa-arrow-left"></i> ' + t("relais_apply_back") + '</button>';
   html += '<div class="section-title" style="margin-bottom:14px;">' + t("relais_apply_title") + '</div>';
   if (!state.profile.email) {
@@ -21047,7 +21281,7 @@ function renderBecomeRelais() {
     '<label class="field-label">' + t("shop_customize_commune") + ' *</label>' +
     '<select class="input" data-bind="relaisApplyDraft.commune" data-action-change="relais-apply-commune-changed">' + communeOptions + '</select>' +
     '<label class="field-label">' + t("shop_customize_quartier") + ' *</label>' +
-    '<select class="input" data-bind="relaisApplyDraft.quartier" ' + (!d.commune ? 'disabled' : '') + '>' + quartierOptions + '</select>' +
+    renderQuartierFieldWithToggle(d.commune, d.communeProche, d.quartier, "relaisApplyDraft.quartier", "relais-apply", "Choisir\u2026") +
     renderAutreQuartierField("relaisApply") +
     '<label class="field-label">' + t("relais_apply_precision") + '</label>' +
     '<input class="input" placeholder="' + t("relais_apply_precision_placeholder") + '" value="' + esc(d.addressDetail || '') + '" data-bind="relaisApplyDraft.addressDetail" />' +
@@ -21168,7 +21402,6 @@ function renderOnboardStepRelais(d) {
   var gpsOk = d.shopLat != null && d.shopLng != null;
   var communeOptions = communeSelectOptionsHtml(d.commune, d.communeProche, "Choisir\u2026");
   var quartierListOb = resolveQuartierListForCommune(d.commune, d.communeProche);
-  var quartierOptions = quartierOptionsHtml(quartierListOb, d.quartier, "Choisir\u2026");
   var html = '<button class="link-btn" style="margin-bottom:14px" data-action="onboard-back-step" data-value="identity"><i class="fa-solid fa-arrow-left"></i> ' + t("relais_apply_back") + '</button>';
   html += '<div class="section-title" style="margin-bottom:14px;">' + t("vo_relais_title") + '</div>';
   if (!d.email) {
@@ -21181,7 +21414,7 @@ function renderOnboardStepRelais(d) {
     '<label class="field-label">' + t("shop_customize_commune") + ' *</label>' +
     '<select class="input" data-bind="onboardDraft.commune" data-action-change="commune-changed">' + communeOptions + '</select>' +
     '<label class="field-label">' + t("shop_customize_quartier") + ' *</label>' +
-    '<select class="input" data-bind="onboardDraft.quartier" ' + (!d.commune ? 'disabled' : '') + '>' + quartierOptions + '</select>' +
+    renderQuartierFieldWithToggle(d.commune, d.communeProche, d.quartier, "onboardDraft.quartier", "onboard", "Choisir\u2026") +
     renderAutreQuartierField("onboard") +
     '<label class="field-label">' + t("relais_apply_precision") + '</label>' +
     '<input class="input" placeholder="' + t("relais_apply_precision_placeholder") + '" value="' + esc(d.addressDetail || '') + '" data-bind="onboardDraft.addressDetail" />' +
@@ -21322,7 +21555,7 @@ function openAddressModal(existingId) {
   var existing = existingId ? getSavedAddresses().find(function(a) { return a.id === existingId; }) : null;
   state.addressDraft = existing
     ? { ...existing }
-    : { id: null, label: "Adresse " + (getSavedAddresses().length + 1), commune: "", quartier: "", repere: "", lat: null, lng: null };
+    : { id: null, label: "Adresse " + (getSavedAddresses().length + 1), city: "Bamako", commune: "", quartier: "", repere: "", lat: null, lng: null };
   state.showAddressModal = true;
   render();
 }
@@ -21336,8 +21569,11 @@ function closeAddressModal() {
 function saveAddressDraft() {
   var d = state.addressDraft;
   if (!d.label || !d.label.trim()) { showToast(t("toast_give_address_name")); return; }
-  if (!d.commune) { showToast(t("toast_commune_required")); return; }
-  if (!d.quartier) { showToast(t("toast_neighborhood_required")); return; }
+  if (!d.city) d.city = "Bamako";
+  if (d.city === "Bamako") {
+    if (!d.commune) { showToast(t("toast_commune_required")); return; }
+    if (!d.quartier) { showToast(t("toast_neighborhood_required")); return; }
+  }
   callAddressesOperation({ operation: "save_my_address", address: d }).then(function(res) {
     if (!res.success) { showToast("❌ Une erreur est survenue, réessayez."); return; }
     state.myAddresses = res.addresses || [];
@@ -21384,27 +21620,41 @@ function applyAddressToCheckout(addr, mode) {
 
 function renderAddressModal() {
   var d = state.addressDraft;
+  if (!d.city) d.city = "Bamako";
+  var addrCityOptions = '';
+  for (var aci = 0; aci < CITIES.length; aci++) {
+    addrCityOptions += '<option value="' + esc(CITIES[aci]) + '" ' + (d.city === CITIES[aci] ? 'selected' : '') + '>' + esc(CITIES[aci]) + '</option>';
+  }
   var communeOptions3 = communeSelectOptionsHtml(d.commune, d.communeProche, t("shop_customize_choose"));
   var quartierList3 = resolveQuartierListForCommune(d.commune, d.communeProche);
-  var quartierOptions3 = quartierOptionsHtml(quartierList3, d.quartier, t("shop_customize_choose"));
   var html = '<div class="modal-overlay" id="address-modal-overlay" data-action="close-address-modal">';
   html += '<div class="modal-sheet">';
   html += '<button class="modal-close" data-action="close-address-modal"><i class="fa-solid fa-xmark"></i></button>';
   html += '<div class="section-title" style="margin-bottom:14px;"><i class="fa-solid fa-location-dot"></i> ' + (d.id ? t("addr_edit_title") : t("addr_new_title")) + '</div>';
   html += '<label class="field-label" style="margin-top:0;">' + t("addr_name_label") + '</label>';
   html += '<input class="input" id="address-draft-label" placeholder="' + t("addr_name_placeholder") + '" value="' + esc(d.label) + '" data-bind="addressDraft.label" />';
-  html += '<label class="field-label">' + t("addr_commune") + '</label>';
-  html += '<select class="input" data-bind="addressDraft.commune" data-action-change="address-commune-changed">' + communeOptions3 + '</select>';
-  html += '<label class="field-label">' + t("addr_quartier") + '</label>';
-  html += '<select class="input" data-bind="addressDraft.quartier" ' + (!d.commune ? 'disabled' : '') + '>' + quartierOptions3 + '</select>';
-  html += '<label class="field-label">' + t("addr_landmark_known") + '</label>';
-  html += '<input class="input" id="address-draft-repere" placeholder="' + t("addr_landmark_placeholder") + '" value="' + esc(d.repere || '') + '" data-bind="addressDraft.repere" />';
-  html += '<label class="field-label">' + t("addr_exact_position") + '</label>';
-  html += '<button type="button" class="btn-secondary" data-action="capture-address-gps"><i class="fa-solid fa-location-crosshairs"></i> ' + (d.lat != null ? t("addr_capture_recapture") : t("addr_locate_this")) + '</button>';
-  if (d.lat != null && d.lng != null) {
-    html += '<div style="font-size:9.5px;color:var(--success);margin-top:2px;">✓ ' + d.lat.toFixed(4) + ', ' + d.lng.toFixed(4) + '</div>';
+  html += '<label class="field-label">' + t("checkout_city") + '</label>';
+  html += '<select class="input" data-bind="addressDraft.city" data-action-change="address-city-changed">' + addrCityOptions + '</select>';
+  if (d.city === "Bamako") {
+    html += '<label class="field-label">' + t("addr_commune") + '</label>';
+    html += '<select class="input" data-bind="addressDraft.commune" data-action-change="address-commune-changed">' + communeOptions3 + '</select>';
+    html += '<label class="field-label">' + t("addr_quartier") + '</label>';
+    html += renderQuartierFieldWithToggle(d.commune, d.communeProche, d.quartier, "addressDraft.quartier", "address", t("shop_customize_choose"));
+    html += '<label class="field-label">' + t("addr_landmark_known") + '</label>';
+    html += '<input class="input" id="address-draft-repere" placeholder="' + t("addr_landmark_placeholder") + '" value="' + esc(d.repere || '') + '" data-bind="addressDraft.repere" />';
+    html += '<label class="field-label">' + t("addr_exact_position") + '</label>';
+    html += '<button type="button" class="btn-secondary" data-action="capture-address-gps"><i class="fa-solid fa-location-crosshairs"></i> ' + (d.lat != null ? t("addr_capture_recapture") : t("addr_locate_this")) + '</button>';
+    if (d.lat != null && d.lng != null) {
+      html += '<div style="font-size:9.5px;color:var(--success);margin-top:2px;">✓ ' + d.lat.toFixed(4) + ', ' + d.lng.toFixed(4) + '</div>';
+    }
+    html += renderGpsPasteField("addressDraft.lat", "addressDraft.lng");
+  } else {
+    // ---- Ville hors Bamako : pas de Commune/Quartier/GPS — retrait à la
+    // gare routière, voir computeDeliveryFeesFromItems(). ----
+    html += '<div class="glass-card" style="padding:12px;margin:10px 0;background:var(--bg-body);">';
+    html += '<div style="font-size:12.5px;"><i class="fa-solid fa-bus"></i> Les commandes envoyées à cette adresse seront à récupérer à la gare routière de <strong>' + esc(d.city) + '</strong>.</div>';
+    html += '</div>';
   }
-  html += renderGpsPasteField("addressDraft.lat", "addressDraft.lng");
   html += '<button class="btn-primary" style="margin-top:16px;" data-action="save-address-draft">' + t("addr_save") + '</button>';
   html += '</div></div>';
   return html;
@@ -21422,8 +21672,8 @@ function renderAddressBookSection() {
       html += '<div class="emoji-thumb"><i class="fa-solid fa-location-dot"></i></div>';
       html += '<div style="flex:1;min-width:0;">';
       html += '<div style="font-weight:700;font-size:13px;">' + esc(a.label) + '</div>';
-      html += '<div style="font-size:11px;color:var(--text-dim);">' + esc(a.quartier) + ' · ' + esc(a.commune) + (a.repere ? ' — ' + esc(a.repere) : '') + '</div>';
-      html += '<div style="font-size:9.5px;color:' + (a.lat != null ? 'var(--success)' : 'var(--text-dim)') + ';margin-top:2px;">' + (a.lat != null ? '✓ ' + t("addr_gps_ok") + ' : ' + a.lat.toFixed(4) + ', ' + a.lng.toFixed(4) : t("addr_gps_missing")) + '</div>';
+      html += '<div style="font-size:11px;color:var(--text-dim);">' + (a.city && a.city !== "Bamako" ? '<i class="fa-solid fa-bus"></i> Gare routière de ' + esc(a.city) : esc(a.quartier) + ' · ' + esc(a.commune) + (a.repere ? ' — ' + esc(a.repere) : '')) + '</div>';
+      html += '<div style="font-size:9.5px;color:' + (a.lat != null ? 'var(--success)' : 'var(--text-dim)') + ';margin-top:2px;">' + ((a.city && a.city !== "Bamako") ? '' : (a.lat != null ? '✓ ' + t("addr_gps_ok") + ' : ' + a.lat.toFixed(4) + ', ' + a.lng.toFixed(4) : t("addr_gps_missing"))) + '</div>';
       html += '</div>';
       html += '<button class="link-btn" style="color:var(--danger);padding:6px;" data-action="delete-address" data-value="' + a.id + '"><i class="fa-solid fa-trash"></i></button>';
       html += '</div>';
@@ -24903,6 +25153,12 @@ function renderCheckout() {
   var f = state.checkoutForm;
   var zones = deliveryZonesForCity(f.city);
   var isRelais = f.deliveryMode === "relais";
+  // Une fois l'adresse (ou le point de retrait) effectivement remplie,
+  // plus besoin d'insister — quel que soit le geste précis qui a permis
+  // d'y arriver (saisie manuelle, adresse enregistrée choisie, etc.).
+  if (state.highlightAddressSection && (isRelais ? f.relaisShopId : (f.expressCommune && f.expressQuartier))) {
+    state.highlightAddressSection = false;
+  }
   var expressFee = (f.expressCommune && f.expressQuartier) ? getQuartierDeliveryFee(f.expressCommune, f.expressQuartier, f.buyerLat, f.buyerLng) : null;
   var checkoutVendorCountPreview = checkoutVendorCount();
   var realFeesPreview = computeRealDeliveryFees(f.buyerLat, f.buyerLng, f.city, f.expressCommune, f.expressQuartier, f.zone);
@@ -24931,6 +25187,14 @@ function renderCheckout() {
   var refCode = getReferralCode();
   
   var html = '<div class="checkout-view"><div class="section-title">Livraison & paiement</div>';
+  if (state.showAddressRequiredPopup) {
+    html += '<div class="glass-card" style="position:relative;padding:14px 34px 14px 14px;margin-bottom:14px;background:rgba(255,159,10,0.12);border:1.5px solid #ff9f0a;">';
+    html += '<button type="button" data-action="dismiss-address-required-popup" style="position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.08);border:none;color:var(--text-secondary);font-size:11px;"><i class="fa-solid fa-xmark"></i></button>';
+    html += '<div style="font-size:12.5px;font-weight:700;margin-bottom:6px;"><i class="fa-solid fa-triangle-exclamation" style="color:#ff9f0a;"></i> Adresse de livraison requise</div>';
+    html += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">Pour continuer votre achat, vous devez fournir vos informations d\u2019adresse afin de pouvoir être livré(e).</div>';
+    html += '<button type="button" class="btn-primary" style="padding:8px 14px;font-size:12px;" data-action="scroll-to-address-required">Cliquez ici pour remplir vos informations</button>';
+    html += '</div>';
+  }
   if (state.quickBuyItem) {
     var itemNames = '';
     for (var k = 0; k < items.length; k++) {
@@ -24972,7 +25236,7 @@ function renderCheckout() {
   if (isRelais) {
     html += '<label class="field-label">' + t("checkout_city") + '</label>';
     html += '<select class="input" data-bind="checkoutForm.city" data-action-change="city-changed">' + cityOptions + '</select>';
-    html += renderRelaisShopPicker();
+    html += '<div id="checkout-address-section" style="' + (state.highlightAddressSection ? 'animation:pulseAddressGlow 1.3s ease-in-out infinite;border-radius:14px;' : '') + '">' + renderRelaisShopPicker() + '</div>';
   } else {
     var savedAddrsExp = getSavedAddresses();
     var selectedExpAddr = f.expressSavedAddressId ? savedAddrsExp.find(function(a) { return a.id === f.expressSavedAddressId; }) : null;
@@ -24981,6 +25245,7 @@ function renderCheckout() {
     // choisie ici, la commande ne doit jamais rester bloquée sur l'ancienne
     // valeur captée au moment de la sélection.
     if (selectedExpAddr) {
+      f.city = selectedExpAddr.city || "Bamako";
       f.expressCommune = selectedExpAddr.commune;
       f.expressQuartier = selectedExpAddr.quartier;
       f.buyerLat = selectedExpAddr.lat;
@@ -25000,7 +25265,7 @@ function renderCheckout() {
         addrSectionHtml += '<div class="emoji-thumb"><i class="fa-solid fa-location-dot"></i></div>';
         addrSectionHtml += '<div style="flex:1;min-width:0;">';
         addrSectionHtml += '<div style="font-weight:700;font-size:13px;">' + esc(ea.label) + '</div>';
-        addrSectionHtml += '<div style="font-size:11px;color:var(--text-dim);">' + esc(ea.quartier) + ' · ' + esc(ea.commune) + (ea.repere ? ' — ' + esc(ea.repere) : '') + '</div>';
+        addrSectionHtml += '<div style="font-size:11px;color:var(--text-dim);">' + (ea.city && ea.city !== "Bamako" ? '<i class="fa-solid fa-bus"></i> Gare routière de ' + esc(ea.city) : esc(ea.quartier) + ' · ' + esc(ea.commune) + (ea.repere ? ' — ' + esc(ea.repere) : '')) + '</div>';
         addrSectionHtml += '</div></button>';
       }
       addrSectionHtml += '<button class="btn-secondary" style="width:100%;margin-bottom:10px;" data-action="add-new-express-address"><i class="fa-solid fa-plus"></i> Nouvelle adresse</button>';
@@ -25008,7 +25273,7 @@ function renderCheckout() {
       // ---- Adresse enregistrée choisie : résumé compact ----
       addrSectionHtml += '<div class="glass-card" style="padding:12px;margin-bottom:10px;background:var(--bg-body);">';
       addrSectionHtml += '<div style="font-weight:700;font-size:13px;"><i class="fa-solid fa-location-dot"></i> ' + esc(selectedExpAddr.label) + '</div>';
-      addrSectionHtml += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;">' + esc(selectedExpAddr.quartier) + ' · ' + esc(selectedExpAddr.commune) + (selectedExpAddr.repere ? ' — ' + esc(selectedExpAddr.repere) : '') + '</div>';
+      addrSectionHtml += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;">' + (selectedExpAddr.city && selectedExpAddr.city !== "Bamako" ? '<i class="fa-solid fa-bus"></i> Gare routière de ' + esc(selectedExpAddr.city) : esc(selectedExpAddr.quartier) + ' · ' + esc(selectedExpAddr.commune) + (selectedExpAddr.repere ? ' — ' + esc(selectedExpAddr.repere) : '')) + '</div>';
       // Rappel explicite que les autres adresses restent bien enregistrées
       // — l'écran ne montre que celle choisie pour CETTE commande, ce qui
       // pouvait donner l'impression fausse que les autres avaient disparu.
@@ -25017,77 +25282,65 @@ function renderCheckout() {
       }
       addrSectionHtml += '<button class="link-btn" style="font-size:11.5px;margin-top:6px;" data-action="change-express-address">Changer d\'adresse</button>';
       addrSectionHtml += '</div>';
-      var feeDetailSaved = getQuartierDeliveryFeeDetailed(selectedExpAddr.commune, selectedExpAddr.quartier, f.buyerLat, f.buyerLng);
-      addrSectionHtml += '<div style="font-size:12px;color:var(--success);margin:6px 0 4px;"><i class="fa-solid fa-tag"></i> Tarif estimé pour ce quartier : <strong>' + money(feeDetailSaved.fee) + '</strong></div>';
-      if (feeDetailSaved.hasGps) {
-        addrSectionHtml += '<div class="glass-card" style="padding:10px 12px;margin-bottom:10px;background:var(--bg-body);font-size:11px;line-height:1.6;">';
-        if (feeDetailSaved.method === "quad_outside") {
-          addrSectionHtml += '<div><i class="fa-solid fa-map-pin"></i> Votre position est en dehors des limites du quartier.</div>';
-          addrSectionHtml += '<div style="color:var(--accent);font-weight:700;margin-top:4px;"><i class="fa-solid fa-arrows-to-dot"></i> Repositionnez votre point sur la carte, à l\'intérieur du quartier choisi, pour obtenir le bon tarif — vous pourriez payer moins cher.</div>';
-        } else if (feeDetailSaved.method === "quad_line") {
-          addrSectionHtml += '<div><i class="fa-solid fa-scissors"></i> Vous êtes dans le quartier, côté ' + (feeDetailSaved.reason === "surcharge_applied" ? 'avec' : 'sans') + ' majoration.</div>';
-        } else if (feeDetailSaved.method === "quad_inside") {
-          addrSectionHtml += '<div><i class="fa-solid fa-circle-check"></i> Vous êtes dans les limites du quartier.</div>';
-        } else if (feeDetailSaved.method === "center_fallback") {
-          addrSectionHtml += '<div><i class="fa-solid fa-ruler"></i> Distance base → vous : <strong>' + feeDetailSaved.distBaseToClient.toFixed(2) + ' km</strong></div>';
-          addrSectionHtml += '<div>Distance base → centre du quartier : <strong>' + feeDetailSaved.distBaseToCenter.toFixed(2) + ' km</strong></div>';
-        }
-        if (feeDetailSaved.reason === "surcharge_applied") {
-          addrSectionHtml += '<div>Tolérance sans majoration : <strong>' + feeDetailSaved.thresholdKm + ' km</strong></div>';
-          addrSectionHtml += '<div style="color:var(--danger);font-weight:700;margin-top:4px;"><i class="fa-solid fa-triangle-exclamation"></i> Majoration appliquée : +' + money(feeDetailSaved.surcharge) + '</div>';
-        } else if (feeDetailSaved.reason === "within_threshold") {
-          addrSectionHtml += '<div style="color:var(--success);margin-top:4px;"><i class="fa-solid fa-circle-check"></i> Pas de majoration.</div>';
-        } else if (feeDetailSaved.reason === "surcharge_disabled") {
-          addrSectionHtml += '<div style="color:var(--text-dim);margin-top:4px;">Majoration désactivée dans les réglages Admin.</div>';
+      if (selectedExpAddr.city && selectedExpAddr.city !== "Bamako") {
+        // ---- Adresse enregistrée hors Bamako : retrait à la gare routière ----
+        var icFeeSaved = computeIntercityDeliveryFee(selectedExpAddr.city, checkoutItems().reduce(function(s, it) { return s + (it.qty || 1); }, 0));
+        addrSectionHtml += '<div class="glass-card" style="padding:12px;margin-bottom:10px;background:var(--bg-body);">';
+        addrSectionHtml += '<div style="font-size:12.5px;"><i class="fa-solid fa-bus"></i> À récupérer à la gare routière de <strong>' + esc(selectedExpAddr.city) + '</strong>.</div>';
+        if (icFeeSaved != null) {
+          addrSectionHtml += '<div style="font-size:12px;color:var(--success);margin-top:6px;"><i class="fa-solid fa-tag"></i> Tarif estimé : <strong>' + money(icFeeSaved) + '</strong></div>';
+        } else {
+          addrSectionHtml += '<div style="font-size:11.5px;color:var(--danger);margin-top:6px;"><i class="fa-solid fa-triangle-exclamation"></i> Tarif pas encore configuré pour cette ville.</div>';
         }
         addrSectionHtml += '</div>';
-      } else if (f.buyerLat != null) {
-        addrSectionHtml += '<div style="font-size:10.5px;color:var(--text-dim);margin-bottom:10px;">Position reçue, mais ce quartier n\'a pas encore de limites configurées en Admin — le tarif de base s\'applique.</div>';
-      }
+        addrSectionHtml += '<label class="field-label">' + t("co_alt_phone") + '</label>';
+        addrSectionHtml += '<input class="input" placeholder="Ex : 70 00 00 00" value="' + esc(f.contactPhone != null ? f.contactPhone : (state.profile.phone || '')) + '" data-bind="checkoutForm.contactPhone" />';
+      } else {
+      var realFeeSavedPreview = computeRealDeliveryFees(f.buyerLat, f.buyerLng, f.city, selectedExpAddr.commune, selectedExpAddr.quartier, f.zone).expressFee;
+      addrSectionHtml += '<div style="font-size:12px;color:var(--success);margin:6px 0 10px;"><i class="fa-solid fa-tag"></i> Tarif de livraison estimé : <strong>' + money(realFeeSavedPreview) + '</strong></div>';
       addrSectionHtml += '<label class="field-label">Donner le nom d\'un endroit près de chez vous très connu *</label>';
       addrSectionHtml += '<input class="input" placeholder="' + t("repere_placeholder") + '" value="' + esc(f.repere) + '" data-bind="checkoutForm.repere" />';
       addrSectionHtml += '<label class="field-label">' + t("co_alt_phone") + '</label>';
       addrSectionHtml += '<input class="input" placeholder="Ex : 70 00 00 00" value="' + esc(f.contactPhone != null ? f.contactPhone : (state.profile.phone || '')) + '" data-bind="checkoutForm.contactPhone" />';
+      }
     } else {
       if (savedAddrsExp.length > 0) {
         addrSectionHtml += '<button class="link-btn" style="font-size:11.5px;margin-bottom:8px;" data-action="change-express-address"><i class="fa-solid fa-arrow-left"></i> Choisir une adresse enregistrée</button>';
       }
+      addrSectionHtml += '<label class="field-label" style="margin-top:0;">' + t("checkout_city") + '</label>';
+      addrSectionHtml += '<select class="input" data-bind="checkoutForm.city" data-action-change="express-city-changed">' + cityOptions + '</select>';
+
+      if (f.city && f.city !== "Bamako") {
+        // ---- Ville hors Bamako : pas de Commune/Quartier/GPS — retrait
+        // à la gare routière, voir computeDeliveryFeesFromItems(). ----
+        var icFeePreview = computeIntercityDeliveryFee(f.city, checkoutItems().reduce(function(s, it) { return s + (it.qty || 1); }, 0));
+        addrSectionHtml += '<div class="glass-card" style="padding:12px;margin:10px 0;background:var(--bg-body);">';
+        addrSectionHtml += '<div style="font-size:12.5px;"><i class="fa-solid fa-bus"></i> Votre colis sera envoyé par car et à récupérer à la gare routière de <strong>' + esc(f.city) + '</strong>.</div>';
+        if (icFeePreview != null) {
+          addrSectionHtml += '<div style="font-size:12px;color:var(--success);margin-top:6px;"><i class="fa-solid fa-tag"></i> Tarif estimé : <strong>' + money(icFeePreview) + '</strong></div>';
+        } else {
+          addrSectionHtml += '<div style="font-size:11.5px;color:var(--danger);margin-top:6px;"><i class="fa-solid fa-triangle-exclamation"></i> Tarif pas encore configuré pour cette ville — contactez le service pour finaliser votre commande.</div>';
+        }
+        addrSectionHtml += '</div>';
+        addrSectionHtml += '<label class="field-label">' + t("co_alt_phone") + '</label>';
+        addrSectionHtml += '<input class="input" placeholder="Ex : 70 00 00 00" value="' + esc(f.contactPhone != null ? f.contactPhone : (state.profile.phone || '')) + '" data-bind="checkoutForm.contactPhone" />';
+      } else {
       var kmDistance = f.buyerLat != null ? distanceKm(getDeliveryBaseConfig().lat, getDeliveryBaseConfig().lng, f.buyerLat, f.buyerLng) : null;
       var communeOptions2 = communeSelectOptionsHtml(f.expressCommune, f.expressCommuneProche, "Choisir\u2026");
       var quartierList2 = resolveQuartierListForCommune(f.expressCommune, f.expressCommuneProche);
-      var quartierOptions2 = quartierOptionsHtml(quartierList2, f.expressQuartier, "Choisir\u2026");
       addrSectionHtml += '<label class="field-label">' + t("shop_customize_commune") + ' *</label>';
       addrSectionHtml += '<select class="input" data-bind="checkoutForm.expressCommune" data-action-change="express-commune-changed">' + communeOptions2 + '</select>';
       addrSectionHtml += '<label class="field-label">' + t("shop_customize_quartier") + ' *</label>';
-      addrSectionHtml += '<select class="input" data-bind="checkoutForm.expressQuartier" ' + (!f.expressCommune ? 'disabled' : '') + '>' + quartierOptions2 + '</select>';
+      addrSectionHtml += renderQuartierFieldWithToggle(f.expressCommune, f.expressCommuneProche, f.expressQuartier, "checkoutForm.expressQuartier", "express", "Choisir\u2026");
       if (f.expressCommune && f.expressQuartier) {
-        var feeDetail = getQuartierDeliveryFeeDetailed(f.expressCommune, f.expressQuartier, f.buyerLat, f.buyerLng);
-        addrSectionHtml += '<div style="font-size:12px;color:var(--success);margin:6px 0 4px;"><i class="fa-solid fa-tag"></i> Tarif estimé pour ce quartier : <strong>' + money(feeDetail.fee) + '</strong></div>';
-        if (feeDetail.hasGps) {
-          addrSectionHtml += '<div class="glass-card" style="padding:10px 12px;margin-bottom:10px;background:var(--bg-body);font-size:11px;line-height:1.6;">';
-          if (feeDetail.method === "quad_outside") {
-            addrSectionHtml += '<div><i class="fa-solid fa-map-pin"></i> Votre position est en dehors des limites du quartier.</div>';
-            addrSectionHtml += '<div style="color:var(--accent);font-weight:700;margin-top:4px;"><i class="fa-solid fa-arrows-to-dot"></i> Repositionnez votre point sur la carte, à l\'intérieur du quartier choisi, pour obtenir le bon tarif — vous pourriez payer moins cher.</div>';
-          } else if (feeDetail.method === "quad_line") {
-            addrSectionHtml += '<div><i class="fa-solid fa-scissors"></i> Vous êtes dans le quartier, côté ' + (feeDetail.reason === "surcharge_applied" ? 'avec' : 'sans') + ' majoration.</div>';
-          } else if (feeDetail.method === "quad_inside") {
-            addrSectionHtml += '<div><i class="fa-solid fa-circle-check"></i> Vous êtes dans les limites du quartier.</div>';
-          } else if (feeDetail.method === "center_fallback") {
-            addrSectionHtml += '<div><i class="fa-solid fa-ruler"></i> Distance base → vous : <strong>' + feeDetail.distBaseToClient.toFixed(2) + ' km</strong></div>';
-            addrSectionHtml += '<div>Distance base → centre du quartier : <strong>' + feeDetail.distBaseToCenter.toFixed(2) + ' km</strong></div>';
-          }
-          if (feeDetail.reason === "surcharge_applied") {
-            addrSectionHtml += '<div>Tolérance sans majoration : <strong>' + feeDetail.thresholdKm + ' km</strong></div>';
-            addrSectionHtml += '<div style="color:var(--danger);font-weight:700;margin-top:4px;"><i class="fa-solid fa-triangle-exclamation"></i> Majoration appliquée : +' + money(feeDetail.surcharge) + '</div>';
-          } else if (feeDetail.reason === "within_threshold") {
-            addrSectionHtml += '<div style="color:var(--success);margin-top:4px;"><i class="fa-solid fa-circle-check"></i> Pas de majoration.</div>';
-          } else if (feeDetail.reason === "surcharge_disabled") {
-            addrSectionHtml += '<div style="color:var(--text-dim);margin-top:4px;">Majoration désactivée dans les réglages Admin.</div>';
-          }
-          addrSectionHtml += '</div>';
-        } else if (f.buyerLat != null) {
-          addrSectionHtml += '<div style="font-size:10.5px;color:var(--text-dim);margin-bottom:10px;">Position reçue, mais ce quartier n\'a pas encore de limites configurées en Admin — le tarif de base s\'applique.</div>';
-        }
+        // Le détail par limites de quartier (majoration selon la position
+        // GPS dans le quartier) appartenait à l'ancien calcul par zone —
+        // le nouveau tarif (transporteur, rive du fleuve) ne fonctionne
+        // plus du tout comme ça. On affiche directement le vrai montant
+        // qui sera facturé, calculé de la même façon qu'au récapitulatif
+        // final, pour ne jamais montrer un chiffre différent du total.
+        var realFeeNowPreview = computeRealDeliveryFees(f.buyerLat, f.buyerLng, f.city, f.expressCommune, f.expressQuartier, f.zone).expressFee;
+        addrSectionHtml += '<div style="font-size:12px;color:var(--success);margin:6px 0 10px;"><i class="fa-solid fa-tag"></i> Tarif de livraison estimé : <strong>' + money(realFeeNowPreview) + '</strong></div>';
       }
       addrSectionHtml += '<label class="field-label">Donner le nom d\'un endroit près de chez vous très connu *</label>';
       addrSectionHtml += '<input class="input" placeholder="' + t("repere_placeholder") + '" value="' + esc(f.repere) + '" data-bind="checkoutForm.repere" />';
@@ -25100,7 +25353,7 @@ function renderCheckout() {
       addrSectionHtml += renderGpsPasteField("checkoutForm.buyerLat", "checkoutForm.buyerLng");
       if (f.buyerLat != null) {
         addrSectionHtml += '<div class="glass-card" style="padding:12px;margin-top:10px;background:rgba(46,158,79,0.08);">';
-        addrSectionHtml += '<div style="font-size:12px;color:var(--success);"><i class="fa-solid fa-check-circle"></i> Position confirmée' + (kmDistance != null ? ' — ' + kmDistance.toFixed(1) + ' km de notre point de départ (' + esc(getDeliveryBaseConfig().label) + ')' : '') + '</div>';
+        addrSectionHtml += '<div style="font-size:12px;color:var(--success);"><i class="fa-solid fa-check-circle"></i> Position confirmée</div>';
         // Coordonnées affichées en clair — la preuve concrète que la
         // position a bien été captée, pas juste un message de confirmation
         // qu'on peut manquer ou ne pas croire.
@@ -25120,6 +25373,7 @@ function renderCheckout() {
         addrSectionHtml += '<button class="btn-secondary" style="flex:1;padding:9px;font-size:12.5px;" data-action="save-express-address-no">Non</button>';
         addrSectionHtml += '</div></div>';
       }
+      } // fin branche Bamako (Commune/Quartier/GPS)
     }
   }
 
@@ -25132,7 +25386,7 @@ function renderCheckout() {
   if (!isRelais) {
     var addrExpanded = !!state.checkoutAddressExpanded;
     var addrSummary = f.expressQuartier ? esc(f.expressQuartier) + (f.expressCommune ? ', ' + esc(f.expressCommune) : '') : t("co_address_incomplete");
-    html += '<div class="card-row" style="flex-direction:column;align-items:stretch;margin-bottom:10px;">';
+    html += '<div class="card-row" id="checkout-address-section" style="flex-direction:column;align-items:stretch;margin-bottom:10px;' + (state.highlightAddressSection ? 'animation:pulseAddressGlow 1.3s ease-in-out infinite;' : '') + '">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" data-action="toggle-checkout-address">';
     html += '<div><div style="font-weight:800;font-size:13.5px;"><i class="fa-solid fa-location-dot"></i> ' + t("co_address_label") + '</div><div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;">' + addrSummary + '</div></div>';
     html += '<div style="display:flex;align-items:center;gap:10px;">';
@@ -25215,7 +25469,6 @@ function renderRelaisShopPicker() {
   var quartiersData2 = getQuartiersData();
   var communeOptions = communeSelectOptionsHtml(f.relaisCommune, f.relaisCommuneProche, "Choisir\u2026");
   var quartierListRel = resolveQuartierListForCommune(f.relaisCommune, f.relaisCommuneProche);
-  var quartierOptions = quartierOptionsHtml(quartierListRel, f.relaisQuartier, "Choisir\u2026");
 
   var html = '';
 
@@ -25245,10 +25498,8 @@ function renderRelaisShopPicker() {
     }
     html += '<label class="field-label">' + t("co_choose_pickup") + '</label>';
     html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:8px;">' + t("co_choose_pickup_hint") + '</div>';
-    html += '<div style="display:flex;gap:8px;margin-bottom:8px;">';
-    html += '<select class="input" data-bind="checkoutForm.relaisCommune" data-action-change="buyer-commune-changed" style="flex:1;">' + communeOptions + '</select>';
-    html += '<select class="input" data-bind="checkoutForm.relaisQuartier" ' + (!f.relaisCommune ? 'disabled' : '') + ' style="flex:1;">' + quartierOptions + '</select>';
-    html += '</div>';
+    html += '<select class="input" data-bind="checkoutForm.relaisCommune" data-action-change="buyer-commune-changed" style="margin-bottom:8px;">' + communeOptions + '</select>';
+    html += renderQuartierFieldWithToggle(f.relaisCommune, f.relaisCommuneProche, f.relaisQuartier, "checkoutForm.relaisQuartier", "relais-checkout", "Choisir\u2026");
     html += '<button type="button" class="btn-secondary" style="margin-bottom:10px" data-action="capture-buyer-gps"><i class="fa-solid fa-location-crosshairs"></i> ' + t("co_find_nearby") + '</button>';
     if (f.buyerLat != null) {
       html += '<div class="glass-card" style="padding:10px 12px;margin-bottom:10px;background:rgba(46,158,79,0.08);"><div style="font-size:11.5px;color:var(--success);"><i class="fa-solid fa-check-circle"></i> ' + t("co_position_confirmed") + (f.buyerGpsAccuracy ? ' (±' + Math.round(f.buyerGpsAccuracy) + 'm)' : '') + ' — ' + t("co_sorted_nearest") + '</div><div style="font-size:11px;color:var(--text-dim);margin-top:4px;font-family:monospace;">' + f.buyerLat.toFixed(6) + ', ' + f.buyerLng.toFixed(6) + '</div></div>';
@@ -25509,11 +25760,10 @@ function renderSellerProfileSetup() {
   var qDataShop = getQuartiersData();
   var communeOptionsShop = communeSelectOptionsHtml(p.shopCommune, p.shopCommuneProche, t("shop_customize_choose"));
   var quartierListShop = resolveQuartierListForCommune(p.shopCommune, p.shopCommuneProche);
-  var quartierOptionsShop = quartierOptionsHtml(quartierListShop, p.shopQuartier, t("shop_customize_choose"));
   html += '<label class="field-label">' + t("shop_customize_commune") + ' *</label>';
   html += '<select class="input" data-bind="profile.shopCommune" data-action-change="shop-commune-changed">' + communeOptionsShop + '</select>';
   html += '<label class="field-label">' + t("shop_customize_quartier") + ' *</label>';
-  html += '<select class="input" data-bind="profile.shopQuartier" ' + (!p.shopCommune ? 'disabled' : '') + '>' + quartierOptionsShop + '</select>';
+  html += renderQuartierFieldWithToggle(p.shopCommune, p.shopCommuneProche, p.shopQuartier, "profile.shopQuartier", "shop-profile", t("shop_customize_choose"));
   html += '<label class="field-label">' + t("sps_landmark") + '</label>';
   html += '<input class="input" placeholder="' + t("shop_customize_landmark_placeholder") + '" value="' + esc(p.shopRepere || '') + '" data-bind="profile.shopRepere" />';
   html += '<label class="field-label">' + t("sps_gps_required") + '</label>';
@@ -25540,7 +25790,6 @@ function renderRelaisEditInfo() {
   var p = state.profile;
   var communeOptions = communeSelectOptionsHtml(p.commune, p.communeProche, t("shop_customize_choose"));
   var quartierListRei = resolveQuartierListForCommune(p.commune, p.communeProche);
-  var quartierOptions = quartierOptionsHtml(quartierListRei, p.quartier, t("shop_customize_choose"));
 
   var html = '<button class="link-btn" style="margin-bottom:14px;" data-action="go-back"><i class="fa-solid fa-arrow-left"></i> ' + t("rei_back") + '</button>';
   html += '<div class="section-title">' + t("rei_title") + '</div>';
@@ -25551,7 +25800,7 @@ function renderRelaisEditInfo() {
   html += '<label class="field-label">' + t("shop_customize_commune") + '</label>';
   html += '<select class="input" data-bind="profile.commune" data-action-change="relais-commune-changed">' + communeOptions + '</select>';
   html += '<label class="field-label">' + t("shop_customize_quartier") + '</label>';
-  html += '<select class="input" data-bind="profile.quartier" ' + (!p.commune ? 'disabled' : '') + '>' + quartierOptions + '</select>';
+  html += renderQuartierFieldWithToggle(p.commune, p.communeProche, p.quartier, "profile.quartier", "relais-profile", t("shop_customize_choose"));
   html += '<label class="field-label">' + t("relais_apply_precision") + '</label>';
   html += '<input class="input" placeholder="' + t("relais_apply_precision_placeholder") + '" value="' + esc(p.addressDetail || '') + '" data-bind="profile.addressDetail" />';
   html += '<label class="field-label">' + t("rei_gps_label") + '</label>';
@@ -28874,6 +29123,27 @@ function renderAdminTarifs() {
     }
   }
   html += '<button class="btn-primary" style="margin-top:16px" data-action="save-delivery-fees"><i class="fa-solid fa-floppy-disk"></i> Enregistrer tous les tarifs</button>';
+
+  // ---- Livraison inter-villes (envoi par car, hors Bamako) ----
+  var icCfg = getIntercityDeliveryConfig();
+  html += '<div class="glass-card" style="padding:14px;margin-top:20px;margin-bottom:16px">';
+  html += '<div style="font-weight:800;font-size:14px;margin-bottom:4px;"><i class="fa-solid fa-bus"></i> Livraison inter-villes (envoi par car)</div>';
+  html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:12px;">Pour les villes hors Bamako — l\'acheteur récupère son colis à la gare routière. Un prix de base par ville, plus une majoration si la commande contient plusieurs articles (colis plus gros à envoyer). Laisse vide tant que tu n\'as pas le vrai tarif du car pour cette ville — aucun prix n\'est deviné.</div>';
+  var icCities = intercityDeliveryCities();
+  for (var ici = 0; ici < icCities.length; ici++) {
+    var icCity = icCities[ici];
+    var icVal = icCfg[icCity] || { basePrice: null, extraItemFee: null };
+    html += '<div style="border-top:1px solid var(--border-color);padding-top:10px;margin-top:10px;">';
+    html += '<div style="font-weight:700;font-size:13px;margin-bottom:6px;">' + esc(icCity) + '</div>';
+    html += '<div style="display:flex;gap:10px;">';
+    html += '<div style="flex:1;"><label class="field-label" style="margin-top:0;font-size:10.5px;">Prix de base (FCFA)</label><input class="input" type="number" placeholder="Non configuré" id="intercity-base-' + esc(icCity) + '" value="' + (icVal.basePrice != null ? icVal.basePrice : '') + '" /></div>';
+    html += '<div style="flex:1;"><label class="field-label" style="margin-top:0;font-size:10.5px;">Majoration / article suppl. (FCFA)</label><input class="input" type="number" placeholder="0" id="intercity-extra-' + esc(icCity) + '" value="' + (icVal.extraItemFee != null ? icVal.extraItemFee : '') + '" /></div>';
+    html += '</div>';
+    html += '</div>';
+  }
+  html += '<button class="btn-primary" style="margin-top:14px" data-action="save-intercity-delivery-fees"><i class="fa-solid fa-floppy-disk"></i> Enregistrer les tarifs inter-villes</button>';
+  html += '</div>';
+
   return html;
 }
 
@@ -32703,14 +32973,15 @@ root.addEventListener("click", function(e) {
       showToast(t("toast_locating"));
       getUserLocation().then(function(loc) {
         if (loc) {
-          state.onboardDraft.shopLat = loc.lat;
-          state.onboardDraft.shopLng = loc.lng;
-          showToast(t("toast_shop_position_captured"));
-          save();
+          window._manualPinLatLng = { lat: loc.lat, lng: loc.lng };
+          state.locationPickerTarget = "shop";
+          state.locationPickerIsConfirm = true;
+          state.showLocationPicker = true;
           render();
         } else {
           showToast(geoErrorMessage());
           state.locationPickerTarget = "shop";
+          state.locationPickerIsConfirm = false;
           state.showLocationPicker = true;
           render();
         }
@@ -32782,14 +33053,15 @@ root.addEventListener("click", function(e) {
       showToast(t("toast_locating"));
       getUserLocation().then(function(loc) {
         if (loc) {
-          state.profile.shopLat = loc.lat;
-          state.profile.shopLng = loc.lng;
-          showToast(t("toast_position_captured"));
-          save();
+          window._manualPinLatLng = { lat: loc.lat, lng: loc.lng };
+          state.locationPickerTarget = "shop-profile";
+          state.locationPickerIsConfirm = true;
+          state.showLocationPicker = true;
           render();
         } else {
           showToast(geoErrorMessage());
           state.locationPickerTarget = "shop-profile";
+          state.locationPickerIsConfirm = false;
           state.showLocationPicker = true;
           render();
         }
@@ -33008,13 +33280,15 @@ root.addEventListener("click", function(e) {
       showToast(t("toast_locating"));
       getUserLocation().then(function(loc) {
         if (loc) {
-          state.relaisApplyDraft.shopLat = loc.lat;
-          state.relaisApplyDraft.shopLng = loc.lng;
-          showToast(t("toast_position_captured"));
+          window._manualPinLatLng = { lat: loc.lat, lng: loc.lng };
+          state.locationPickerTarget = "relais-apply";
+          state.locationPickerIsConfirm = true;
+          state.showLocationPicker = true;
           render();
         } else {
           showToast(geoErrorMessage());
           state.locationPickerTarget = "relais-apply";
+          state.locationPickerIsConfirm = false;
           state.showLocationPicker = true;
           render();
         }
@@ -33038,13 +33312,15 @@ root.addEventListener("click", function(e) {
       showToast(t("toast_locating"));
       getUserLocation().then(function(loc) {
         if (loc) {
-          state.addressDraft.lat = loc.lat;
-          state.addressDraft.lng = loc.lng;
-          showToast(t("toast_position_captured"));
+          window._manualPinLatLng = { lat: loc.lat, lng: loc.lng };
+          state.locationPickerTarget = "address-draft";
+          state.locationPickerIsConfirm = true;
+          state.showLocationPicker = true;
           render();
         } else {
           showToast(geoErrorMessage());
           state.locationPickerTarget = "address-draft";
+          state.locationPickerIsConfirm = false;
           state.showLocationPicker = true;
           render();
         }
@@ -33106,39 +33382,39 @@ root.addEventListener("click", function(e) {
     }
     case "save-express-address-yes": {
       var fExp = state.checkoutForm;
-      refreshProfileFromAccounts();
-      var listExp = getSavedAddresses().slice();
-      var newAddrExp = { id: uid(), label: "Adresse " + (listExp.length + 1), commune: fExp.expressCommune, quartier: fExp.expressQuartier, repere: fExp.repere || "", lat: fExp.buyerLat, lng: fExp.buyerLng };
-      listExp.push(newAddrExp);
-      state.profile.savedAddresses = listExp;
-      for (var svi = 0; svi < state.accounts.length; svi++) {
-        if (state.accounts[svi].id === state.profile.id) { state.accounts[svi] = { ...state.profile }; break; }
-      }
-      save();
-      saveDoc("accounts", state.profile);
-      fExp.expressSavedAddressId = newAddrExp.id;
-      fExp.expressSaveAsked = true;
-      showToast("✅ Adresse enregistrée — " + listExp.length + " adresse(s) au total, toutes conservées.");
-      render();
+      // Corrigé : ça écrivait avant dans un vieux champ (profile.savedAddresses
+      // sur "accounts") laissé de côté depuis la sécurisation des adresses —
+      // jamais relu nulle part, donc l'adresse n'apparaissait jamais dans
+      // "Mes informations & adresses". On passe maintenant par le même
+      // système que le carnet d'adresses, pour que ce soit la même liste
+      // partout (créer/modifier/supprimer là-bas se reflète ici aussi).
+      var newAddrExp = { label: "Adresse " + (getSavedAddresses().length + 1), city: "Bamako", commune: fExp.expressCommune, quartier: fExp.expressQuartier, repere: fExp.repere || "", lat: fExp.buyerLat, lng: fExp.buyerLng };
+      callAddressesOperation({ operation: "save_my_address", address: newAddrExp }).then(function(res) {
+        if (!res.success) { showToast("❌ Une erreur est survenue, réessayez."); return; }
+        state.myAddresses = res.addresses || [];
+        save();
+        var savedOne = state.myAddresses[state.myAddresses.length - 1];
+        fExp.expressSavedAddressId = savedOne ? savedOne.id : null;
+        fExp.expressSaveAsked = true;
+        showToast("✅ Adresse enregistrée — " + state.myAddresses.length + " adresse(s) au total, toutes conservées.");
+        render();
+      });
       break;
     }
     case "save-express-address-no": state.checkoutForm.expressSaveAsked = true; render(); break;
     case "save-relais-address-yes": {
       var fRel = state.checkoutForm;
-      refreshProfileFromAccounts();
-      var listRel = getSavedAddresses().slice();
-      var newAddrRel = { id: uid(), label: "Adresse " + (listRel.length + 1), commune: fRel.relaisCommune, quartier: fRel.relaisQuartier, repere: "", lat: fRel.buyerLat, lng: fRel.buyerLng };
-      listRel.push(newAddrRel);
-      state.profile.savedAddresses = listRel;
-      for (var svj = 0; svj < state.accounts.length; svj++) {
-        if (state.accounts[svj].id === state.profile.id) { state.accounts[svj] = { ...state.profile }; break; }
-      }
-      save();
-      saveDoc("accounts", state.profile);
-      fRel.relaisSavedAddressId = newAddrRel.id;
-      fRel.relaisSaveAsked = true;
-      showToast(t("toast_address_saved_future"));
-      render();
+      var newAddrRel = { label: "Adresse " + (getSavedAddresses().length + 1), city: "Bamako", commune: fRel.relaisCommune, quartier: fRel.relaisQuartier, repere: "", lat: fRel.buyerLat, lng: fRel.buyerLng };
+      callAddressesOperation({ operation: "save_my_address", address: newAddrRel }).then(function(res) {
+        if (!res.success) { showToast("❌ Une erreur est survenue, réessayez."); return; }
+        state.myAddresses = res.addresses || [];
+        save();
+        var savedOneRel = state.myAddresses[state.myAddresses.length - 1];
+        fRel.relaisSavedAddressId = savedOneRel ? savedOneRel.id : null;
+        fRel.relaisSaveAsked = true;
+        showToast(t("toast_address_saved_future"));
+        render();
+      });
       break;
     }
     case "save-relais-address-no": state.checkoutForm.relaisSaveAsked = true; render(); break;
@@ -34309,6 +34585,34 @@ root.addEventListener("click", function(e) {
       });
       break;
     }
+    case "dismiss-address-required-popup": {
+      state.showAddressRequiredPopup = false;
+      render();
+      break;
+    }
+    case "scroll-to-address-required": {
+      state.showAddressRequiredPopup = false;
+      render();
+      scrollToAddressSection();
+      break;
+    }
+    case "set-quartier-mode": {
+      var isProcheMode = (value === "proche");
+      var qmObj = null, qmQuartierField = "quartier", qmProcheField = "communeProche";
+      if (btn.dataset.target === "address") { qmObj = state.addressDraft; }
+      else if (btn.dataset.target === "onboard") { qmObj = state.onboardDraft; }
+      else if (btn.dataset.target === "relais-apply") { qmObj = state.relaisApplyDraft; }
+      else if (btn.dataset.target === "relais-profile") { qmObj = state.profile; }
+      else if (btn.dataset.target === "shop-profile") { qmObj = state.profile; qmQuartierField = "shopQuartier"; qmProcheField = "shopCommuneProche"; }
+      else if (btn.dataset.target === "express") { qmObj = state.checkoutForm; qmQuartierField = "expressQuartier"; qmProcheField = "expressCommuneProche"; }
+      else if (btn.dataset.target === "relais-checkout") { qmObj = state.checkoutForm; qmQuartierField = "relaisQuartier"; qmProcheField = "relaisCommuneProche"; }
+      if (qmObj) {
+        qmObj[qmProcheField] = isProcheMode;
+        qmObj[qmQuartierField] = "";
+      }
+      render();
+      break;
+    }
     case "toggle-admin-collapsible-list": {
       state.adminSectionExpanded[value] = !state.adminSectionExpanded[value];
       if (state.adminSectionExpanded[value] && !state.adminSectionShown[value]) state.adminSectionShown[value] = 20;
@@ -35005,18 +35309,19 @@ root.addEventListener("click", function(e) {
       showToast(t("toast_locating"));
       getUserLocation().then(function(loc) {
         if (loc) {
-          state.checkoutForm.buyerLat = loc.lat;
-          state.checkoutForm.buyerLng = loc.lng;
+          window._manualPinLatLng = { lat: loc.lat, lng: loc.lng };
           state.checkoutForm.buyerGpsAccuracy = loc.accuracy || null;
+          state.locationPickerTarget = "buyer";
+          state.locationPickerIsConfirm = true;
+          state.showLocationPicker = true;
           if (loc.accuracy && loc.accuracy > 100) {
-            showToast("⚠️ Position capturée, mais peu précise (±" + Math.round(loc.accuracy) + "m) — sortez à l'extérieur et réessayez si possible.");
-          } else {
-            showToast(t("toast_position_captured"));
+            showToast("⚠️ Position peu précise (±" + Math.round(loc.accuracy) + "m) — vérifiez bien le repère sur la carte, au besoin déplacez-le.");
           }
           render();
         } else {
           showToast(geoErrorMessage());
           state.locationPickerTarget = "buyer";
+          state.locationPickerIsConfirm = false;
           state.showLocationPicker = true;
           render();
         }
@@ -35045,16 +35350,13 @@ root.addEventListener("click", function(e) {
         // sur les prochains achats avec cette même adresse.
         var savedAddrId = fGate.deliveryMode === "relais" ? fGate.relaisSavedAddressId : fGate.expressSavedAddressId;
         if (savedAddrId) {
-          var addrList = getSavedAddresses().slice();
-          for (var sai2 = 0; sai2 < addrList.length; sai2++) {
-            if (addrList[sai2].id === savedAddrId) { addrList[sai2].repere = repereVal; break; }
+          var addrToUpdate = getSavedAddresses().find(function(a) { return a.id === savedAddrId; });
+          if (addrToUpdate) {
+            var updatedAddr = { ...addrToUpdate, repere: repereVal };
+            callAddressesOperation({ operation: "save_my_address", address: updatedAddr }).then(function(res) {
+              if (res.success) { state.myAddresses = res.addresses || []; save(); }
+            });
           }
-          state.profile.savedAddresses = addrList;
-          for (var svi2 = 0; svi2 < state.accounts.length; svi2++) {
-            if (state.accounts[svi2].id === state.profile.id) { state.accounts[svi2] = { ...state.profile }; break; }
-          }
-          save();
-          saveDoc("accounts", state.profile);
         }
       }
       state.showRepereGate = false;
@@ -36226,6 +36528,25 @@ root.addEventListener("click", function(e) {
       saveDeliveryFeesConfig(newZones);
       break;
     }
+    case "save-intercity-delivery-fees": {
+      var icCitiesSave = intercityDeliveryCities();
+      var newIcCfg = {};
+      for (var ici2 = 0; ici2 < icCitiesSave.length; ici2++) {
+        var icCitySave = icCitiesSave[ici2];
+        var baseInput = document.getElementById('intercity-base-' + icCitySave);
+        var extraInput = document.getElementById('intercity-extra-' + icCitySave);
+        var baseVal = baseInput && baseInput.value !== "" ? parseInt(baseInput.value, 10) : null;
+        var extraVal = extraInput && extraInput.value !== "" ? parseInt(extraInput.value, 10) : null;
+        newIcCfg[icCitySave] = {
+          basePrice: (baseVal != null && !isNaN(baseVal)) ? baseVal : null,
+          extraItemFee: (extraVal != null && !isNaN(extraVal)) ? extraVal : null
+        };
+      }
+      saveIntercityDeliveryConfig(newIcCfg);
+      showToast("✅ Tarifs inter-villes enregistrés.");
+      render();
+      break;
+    }
     case "set-active-image": state.activeImageIndex = Number(value); render(); break;
     case "remove-draft-image": removeDraftImage(Number(value)); break;
     case "remove-draft-video": removeDraftVideo(); break;
@@ -37103,9 +37424,16 @@ root.addEventListener("click", function(e) {
       saveBoostConfig(saveCfg);
       break;
     }
+    case "dismiss-location-picker-hint": {
+      state.locationPickerHintDismissed = true;
+      render();
+      break;
+    }
     case "close-location-picker": {
       state.showLocationPicker = false;
       state.locationPickerTarget = null;
+      state.locationPickerIsConfirm = false;
+      state.locationPickerHintDismissed = false;
       window._manualPinLatLng = null;
       render();
       break;
@@ -37143,6 +37471,7 @@ root.addEventListener("click", function(e) {
         }
         state.showLocationPicker = false;
         state.locationPickerTarget = null;
+        state.locationPickerIsConfirm = false;
         window._manualPinLatLng = null;
         applyQuartierGpsDraftIfNeeded();
         save();
@@ -37718,6 +38047,16 @@ root.addEventListener("change", function(e) {
   if (el.dataset.actionChange === "city-changed") {
     state.checkoutForm.zone = deliveryZonesForCity(state.checkoutForm.city)[0];
   }
+  if (el.dataset.actionChange === "express-city-changed") {
+    state.checkoutForm.expressCommune = "";
+    state.checkoutForm.expressQuartier = "";
+    state.checkoutForm.expressCommuneProche = false;
+  }
+  if (el.dataset.actionChange === "address-city-changed") {
+    state.addressDraft.commune = "";
+    state.addressDraft.quartier = "";
+    state.addressDraft.communeProche = false;
+  }
   if (el.dataset.actionChange === "category-changed") {
     state.productDraft.sizes = [];
   }
@@ -37725,26 +38064,28 @@ root.addEventListener("change", function(e) {
     state.adminStats.period = el.value;
   }
   if (el.dataset.actionChange === "commune-changed") {
-    applyCommuneProcheParsing(state.onboardDraft, "commune", "quartier", "communeProche");
+    resetQuartierOnCommuneChange(state.onboardDraft, "quartier", "communeProche");
   }
   if (el.dataset.actionChange === "relais-commune-changed") {
-    applyCommuneProcheParsing(state.profile, "commune", "quartier", "communeProche");
+    resetQuartierOnCommuneChange(state.profile, "quartier", "communeProche");
   }
   if (el.dataset.actionChange === "relais-apply-commune-changed") {
-    applyCommuneProcheParsing(state.relaisApplyDraft, "commune", "quartier", "communeProche");
+    resetQuartierOnCommuneChange(state.relaisApplyDraft, "quartier", "communeProche");
   }
   if (el.dataset.actionChange === "buyer-commune-changed") {
-    applyCommuneProcheParsing(state.checkoutForm, "relaisCommune", "relaisQuartier", "relaisCommuneProche");
+    resetQuartierOnCommuneChange(state.checkoutForm, "relaisQuartier", "relaisCommuneProche");
     state.checkoutForm.relaisShopId = "";
+    state.highlightAddressSection = false;
   }
   if (el.dataset.actionChange === "express-commune-changed") {
-    applyCommuneProcheParsing(state.checkoutForm, "expressCommune", "expressQuartier", "expressCommuneProche");
+    resetQuartierOnCommuneChange(state.checkoutForm, "expressQuartier", "expressCommuneProche");
+    state.highlightAddressSection = false;
   }
   if (el.dataset.actionChange === "shop-commune-changed") {
-    applyCommuneProcheParsing(state.profile, "shopCommune", "shopQuartier", "shopCommuneProche");
+    resetQuartierOnCommuneChange(state.profile, "shopQuartier", "shopCommuneProche");
   }
   if (el.dataset.actionChange === "address-commune-changed") {
-    applyCommuneProcheParsing(state.addressDraft, "commune", "quartier", "communeProche");
+    resetQuartierOnCommuneChange(state.addressDraft, "quartier", "communeProche");
   }
   save();
   render();
