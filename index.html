@@ -18526,17 +18526,12 @@ function computeDeliveryFeesFromItems(items, buyerLat, buyerLng, cityForFallback
     }
   }
 
-  var relaisFee;
-  if (deliveryCountry !== "Mali") {
-    // Pas encore de tarif de zone dédié au retrait pour les pays étendus
-    // — on applique la même remise que pour plusieurs boutiques (60% du
-    // tarif Express), cohérent avec la logique déjà en place.
-    relaisFee = Math.round((expressTotal * 0.60) / 5) * 5;
-  } else if (n === 1) {
-    relaisFee = getDeliveryFee(cityForFallback, cityZoneForRelaisFallback, "relais");
-  } else {
-    relaisFee = Math.round((expressTotal * 0.60) / 5) * 5;
-  }
+  // Le Point de Retrait coûte 60% du tarif Express (arrondi au multiple
+  // de 5 le plus proche) — toujours calculé à partir du VRAI tarif Express
+  // qu'on vient de déterminer ci-dessus (nouveau système transporteur pour
+  // le Mali), jamais de l'ancien système par zone qui ne reflète plus la
+  // réalité (rive du fleuve, distance vendeur → acheteur).
+  var relaisFee = Math.round((expressTotal * 0.60) / 5) * 5;
   return { expressFee: expressTotal, relaisFee: relaisFee, vendorCount: n, realDistanceUsed: anyRealDistance, perVendor: perVendor, routeUsed: routeUsed };
 }
 
