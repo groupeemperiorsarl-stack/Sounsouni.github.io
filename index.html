@@ -4934,7 +4934,7 @@ function saveDoc(collectionName, docData) {
   // (WebView Android, changement de réseau...), ce qui bloquait alors
   // silencieusement l'envoi sans même tenter la vraie requête. On tente
   // toujours ; seul un VRAI échec réseau/serveur met en file d'attente.
-  sb.from("app_data").upsert({ collection: collectionName, id: docData.id, data: docData, updated_at: new Date().toISOString() }, { onConflict: "collection,id" })
+  return sb.from("app_data").upsert({ collection: collectionName, id: docData.id, data: docData, updated_at: new Date().toISOString() }, { onConflict: "collection,id" })
     .then(function(res) {
       if (res.error) {
         console.error("Erreur de sauvegarde Supabase (" + collectionName + ") :", res.error);
@@ -4946,7 +4946,6 @@ function saveDoc(collectionName, docData) {
       queuePendingSync(collectionName, docData);
     });
 }
-
 // Ajoute (ou remplace, si le même document était déjà en attente) une
 // modification à réenvoyer plus tard — jamais deux fois la même donnée
 // périmée, toujours la plus récente. "type" distingue un enregistrement
@@ -5195,6 +5194,12 @@ function runBackgroundResync() {
   if (_backgroundResyncRunning) return; // évite deux resyncs en même temps
   _backgroundResyncRunning = true;
   showUploadLoader();
+  var resyncStartedAt = Date.now();
+  // Durée minimale d'affichage de la mascotte, même si la resync réelle va
+  // plus vite — un aller-retour de 300ms suivi d'une disparition instantanée
+  // du loader donnait une impression de clignotement plutôt que de vrai
+  // chargement. 4,5 secondes minimum, quel que soit le temps réel du réseau.
+  var MIN_LOADER_DISPLAY_MS = 4500;
 
   var LAST_SYNC_KEY = "gems_last_sync_v2";
   var lastSyncAt = localStorage.getItem(LAST_SYNC_KEY);
@@ -5248,7 +5253,9 @@ function runBackgroundResync() {
       console.error("Erreur resynchronisation silencieuse :", res.error);
     }
     _backgroundResyncRunning = false;
-    hideUploadLoader();
+    var elapsedResyncMs = Date.now() - resyncStartedAt;
+    var remainingDisplayMs = Math.max(0, MIN_LOADER_DISPLAY_MS - elapsedResyncMs);
+    setTimeout(hideUploadLoader, remainingDisplayMs);
   });
 }
 
@@ -6391,6 +6398,7 @@ var ADMIN_RESTRICTED_ACTIONS = [
   "toggle-section-style-bold", "set-brand-image-field", "set-section-style-field", "save-market-display-config",
   "admin-cancel-boost", "approve-relais-edit", "reject-relais-edit",
   "admin-add-quartier", "admin-remove-quartier", "undo-quartier-change",
+  "admin-add-quartier-proche", "admin-remove-quartier-proche", "undo-quartier-proche-change",
   "send-admin-broadcast", "toggle-employee-permission", "add-boost-tier", "remove-boost-tier", "save-boost-tiers",
   "save-vip-rotation-seconds", "save-delivery-base-config", "admin-add-commune", "admin-remove-commune",
   "save-admin-product-edit", "admin-delete-account", "save-relais-commission", "save-delivery-fees",
@@ -6547,6 +6555,19 @@ function getActiveVipAds() {
 // ---------- SOUMISSION : DEVENIR POINT DE RETRAIT (compte déjà existant) ----------
 function submitBecomeRelais() {
   var d = state.relaisApplyDraft;
+  // Empêche une double soumission (double-tap, ou nouvelle tentative
+  // pendant qu'une demande est déjà en attente) — sans ça, deux fiches
+  // quasi identiques se retrouvaient dans la liste "En attente", et
+  // approuver l'une laissait l'autre trainer indéfiniment.
+  if (state.profile.relaisApplicationStatus === "pending") {
+    showToast(t("relais_apply_already_pending") || "Vous avez déjà une candidature Point de Retrait en attente d'examen.");
+    return;
+  }
+  var alreadyPendingApp = state.relaisApplications.some(function(a) { return a.accountId === state.profile.id && a.status === "pending"; });
+  if (alreadyPendingApp) {
+    showToast(t("relais_apply_already_pending") || "Vous avez déjà une candidature Point de Retrait en attente d'examen.");
+    return;
+  }
   if (!state.profile.email && (!d.email || !d.email.trim())) {
     showToast(t("toast_email_required_pickup"));
     return;
@@ -6579,33 +6600,7 @@ function submitBecomeRelais() {
     if (state.accounts[i].id === state.profile.id) { state.accounts[i] = { ...state.profile }; break; }
   }
 
-  var application = {
-    id: uid(),
-    accountId: state.profile.id,
-    accountName: state.profile.name,
-    accountPhone: state.profile.phone,
-    country: state.profile.country || "Mali",
-    shopName: d.shopName.trim(),
-    commune: d.useAutreQuartier ? null : d.commune,
-    quartier: d.useAutreQuartier ? d.autreQuartierNom.trim() : d.quartier,
-    isAutreQuartier: !!d.useAutreQuartier,
-    hasVerificationDocs: true, // la vraie photo part séparément, voir plus bas
-    status: "pending",
-    createdAt: Date.now()
-  };
   state.relaisApplications.push(application);
-  // Coordonnées GPS exactes et adresse détaillée — envoyées à part, vers
-  // la collection protégée dédiée. Jamais dans "relaisApplications"
-  // lui-même, qui reste largement synchronisé pour les badges/listes.
-  callAdminAccessOperation({
-    operation: "save_relais_application_location",
-    applicationId: application.id,
-    shopLat: d.shopLat,
-    shopLng: d.shopLng,
-    autreQuartierLat: d.useAutreQuartier ? d.autreQuartierLat : null,
-    autreQuartierLng: d.useAutreQuartier ? d.autreQuartierLng : null,
-    addressDetail: d.addressDetail || ""
-  });
 
   if (d.useAutreQuartier) {
     var quartierApp = {
@@ -6626,7 +6621,28 @@ function submitBecomeRelais() {
 
   save();
   saveDoc("accounts", state.profile);
-  saveDoc("relaisApplications", application);
+  // IMPORTANT : on attend que la fiche de candidature existe bien côté
+  // serveur AVANT de tenter d'y attacher les coordonnées GPS — sinon
+  // save_relais_application_location la refuse (elle vérifie que la
+  // candidature existe déjà), et le GPS n'est alors jamais enregistré
+  // du tout, sans qu'aucune erreur ne soit visible ensuite pour l'Admin
+  // (juste "aucune localisation enregistrée" au moment de la révéler).
+  var relaisSavePromise = saveDoc("relaisApplications", application);
+  (relaisSavePromise || Promise.resolve()).then(function() {
+    // Coordonnées GPS exactes et adresse détaillée — envoyées à part,
+    // vers la collection protégée dédiée. Jamais dans
+    // "relaisApplications" lui-même, qui reste largement synchronisé
+    // pour les badges/listes.
+    callAdminAccessOperation({
+      operation: "save_relais_application_location",
+      applicationId: application.id,
+      shopLat: d.shopLat,
+      shopLng: d.shopLng,
+      autreQuartierLat: d.useAutreQuartier ? d.autreQuartierLat : null,
+      autreQuartierLng: d.useAutreQuartier ? d.autreQuartierLng : null,
+      addressDetail: d.addressDetail || ""
+    });
+  });
   // La vraie photo (selfie + pièce d'identité) ne transite jamais par
   // app_data — elle part directement vers la table protégée, jamais
   // visible que par un Admin qui confirme son mot de passe pour la voir.
@@ -7269,6 +7285,132 @@ const BAMAKO_QUARTIERS = {
   "Commune V": ["Badalabougou", "Sema I", "Quartier Mali", "Torokorobougou", "Baco-Djicoroni", "Sabalibougou", "Daoudabougou", "Kalaban-Coura"],
   "Commune VI": ["Banankabougou", "Djanékéla", "Faladié", "Magnambougou", "Missabougou", "Niamakoro", "Sénou", "Sogoniko", "Sokorodji", "Yirimadio"]
 };
+
+// ---------- QUARTIERS "PROCHES" D'UNE COMMUNE (hors limites officielles) ----------
+// Beaucoup de secteurs très peuplés autour de Bamako (communes rurales du
+// Cercle de Kati, ou simples extensions non officielles d'un quartier)
+// n'apparaissent jamais dans BAMAKO_QUARTIERS ci-dessus — leurs habitants
+// ne s'y retrouvaient donc jamais dans la fiche d'adresse. Liste compilée
+// à partir des communiqués de coupures d'Énergie du Mali (EDM), qui citent
+// ces secteurs par leur nom réel, recoupée avec la connaissance du terrain
+// de l'utilisateur. Rattachement à une Commune = proximité géographique la
+// plus probable, pas un découpage administratif officiel.
+const BAMAKO_QUARTIERS_PROCHES = {
+  "Commune I": ["Dialakorodji", "Dognoumana", "Fombabougou", "Kouloubleni", "Marseille", "Marseille Dableni", "Moribabougou", "Nafadji", "Rastabougou", "Safo", "Sangarébougou", "Sarambougou", "Souleymanebougou", "Usine Imafer"],
+  "Commune II": ["Babouillabougou", "Cité du Niger", "Hôtel Plazza", "Luna Park", "N'Gomi", "Niaréla Sud", "Niger City", "River District"],
+  "Commune III": ["Bamako-Bolibana", "Dravela-Bolibana", "Quartier du Fleuve"],
+  "Commune IV": ["Dogodouman", "Dorodougou", "Kabalabougou", "Kalabambougou Kanadjiguila", "Katibougou", "Mamaribougou", "Ouezzindougou", "Samanko 2", "Samanko-Plantation", "Samaya"],
+  "Commune V": ["ADEKENE", "Halles de Bamako", "Kabala", "Kalabanco Plateau", "Kalabancoro", "Kalabancoura", "Tiebani"],
+  "Commune VI": ["Attbougou", "Baguinéda-Camp", "Bakorobabougou", "Banankabougou Sema", "Banankoro", "Coro", "Dialakorobougou", "Diatoula", "Dianeguela", "Dougourakoro", "Faladie cité des Coopérants", "Faladie IJA", "Faladie Sema", "Faladie Socoro", "Faso Kanu", "Kobalacoro", "Kobalacoura", "Missabougou recasement", "Missabougou Sema", "Mountougoula", "N'tabacoro", "Niamana", "Sabalibougou Courani", "Sanankoroba", "Sema Bole", "Sifma Bole", "Sirakoro", "Sokoro", "Solola", "Tieguenina", "UNICEF City", "Village Can", "Yirimadjo Zrny", "Yorodjambougou"],
+  // Zone à part : ni une Commune, ni "proche" d'une Commune précise —
+  // le secteur autour de Kati-ville lui-même. Traitée comme son propre
+  // choix dans le sélecteur (pas un suffixe "::proche"), voir
+  // communeSelectOptionsHtml().
+  "Zone Kati-ville": ["Kalifabougou", "Kambila", "Kati"]
+};
+
+// Même principe de calque modifiable que getQuartiersData()/saveQuartiersData()
+// (voir juste au-dessus) — l'admin doit pouvoir ajouter/renommer/retirer un
+// "quartier proche" exactement comme un quartier officiel, sans jamais
+// toucher au code.
+function getQuartiersProchesData() {
+  if (state.settings) {
+    for (var i = 0; i < state.settings.length; i++) {
+      if (state.settings[i].id === "quartiers_proches_overrides") {
+        return state.settings[i].data || JSON.parse(JSON.stringify(BAMAKO_QUARTIERS_PROCHES));
+      }
+    }
+  }
+  return JSON.parse(JSON.stringify(BAMAKO_QUARTIERS_PROCHES));
+}
+
+function saveQuartiersProchesData(data) {
+  if (!state.quartierProcheUndoStack) state.quartierProcheUndoStack = [];
+  state.quartierProcheUndoStack.push(getQuartiersProchesData());
+  if (state.quartierProcheUndoStack.length > 5) state.quartierProcheUndoStack.shift();
+
+  var doc = { id: "quartiers_proches_overrides", data: data };
+  var idx = -1;
+  for (var i = 0; i < state.settings.length; i++) {
+    if (state.settings[i].id === "quartiers_proches_overrides") { idx = i; break; }
+  }
+  if (idx === -1) state.settings.push(doc); else state.settings[idx] = doc;
+  save();
+  saveDoc("settings", doc);
+  render();
+}
+
+function undoQuartierProcheChange() {
+  if (!state.quartierProcheUndoStack || state.quartierProcheUndoStack.length === 0) {
+    showToast(t("toast_nothing_to_cancel"));
+    return;
+  }
+  var previous = state.quartierProcheUndoStack.pop();
+  var doc = { id: "quartiers_proches_overrides", data: previous };
+  var idx = -1;
+  for (var i = 0; i < state.settings.length; i++) {
+    if (state.settings[i].id === "quartiers_proches_overrides") { idx = i; break; }
+  }
+  if (idx === -1) state.settings.push(doc); else state.settings[idx] = doc;
+  save();
+  saveDoc("settings", doc);
+  showToast("↩️ Dernière action annulée (" + state.quartierProcheUndoStack.length + " annulation(s) restante(s)).");
+  render();
+}
+
+// ---------- Sélecteur Commune / Quartier proche / Zone Kati-ville ----------
+// Fonction PARTAGÉE par tous les formulaires qui proposent ce choix
+// (fiche d'adresse, inscription vendeur, demande Point de Retrait, fiche
+// boutique, adresse au moment de payer...) — une seule fois écrite, sert
+// partout, pour ne jamais avoir 7 versions légèrement différentes.
+function communeSelectOptionsHtml(currentCommune, currentIsProche, placeholder) {
+  var officialData = getQuartiersData();
+  var prochesData = getQuartiersProchesData();
+  var communes = Object.keys(officialData);
+  var opts = '<option value="">' + placeholder + '</option>';
+  for (var i = 0; i < communes.length; i++) {
+    var c = communes[i];
+    opts += '<option value="' + esc(c) + '" ' + (currentCommune === c && !currentIsProche ? 'selected' : '') + '>' + esc(c) + '</option>';
+    if (prochesData[c] && prochesData[c].length > 0) {
+      opts += '<option value="' + esc(c) + '::proche" ' + (currentCommune === c && currentIsProche ? 'selected' : '') + '>' + t("addr_quartier_proche_de") + ' ' + esc(c) + '</option>';
+    }
+  }
+  if (prochesData["Zone Kati-ville"] && prochesData["Zone Kati-ville"].length > 0) {
+    opts += '<option value="Zone Kati-ville" ' + (currentCommune === "Zone Kati-ville" ? 'selected' : '') + '>Zone Kati-ville</option>';
+  }
+  return opts;
+}
+
+// Renvoie la bonne liste de quartiers pour la valeur actuellement choisie
+// dans le sélecteur ci-dessus — officielle, "proche", ou Kati-ville.
+function resolveQuartierListForCommune(commune, isProche) {
+  if (!commune) return [];
+  if (commune === "Zone Kati-ville") return getQuartiersProchesData()["Zone Kati-ville"] || [];
+  if (isProche) return getQuartiersProchesData()[commune] || [];
+  return getQuartiersData()[commune] || [];
+}
+
+function quartierOptionsHtml(list, currentQuartier, placeholder) {
+  var opts = '<option value="">' + placeholder + '</option>';
+  for (var i = 0; i < list.length; i++) {
+    opts += '<option value="' + esc(list[i]) + '" ' + (currentQuartier === list[i] ? 'selected' : '') + '>' + esc(list[i]) + '</option>';
+  }
+  return opts;
+}
+
+// Nettoie la valeur brute d'un <select> Commune juste après un data-bind
+// (qui vient d'écrire "Commune X::proche" tel quel) — à appeler dans le
+// gestionnaire de "change", AVANT toute autre logique qui lirait ce champ.
+function applyCommuneProcheParsing(obj, communeField, quartierField, procheField) {
+  var raw = obj[communeField] || "";
+  if (raw.indexOf("::proche") !== -1) {
+    obj[communeField] = raw.replace("::proche", "");
+    obj[procheField] = true;
+  } else {
+    obj[procheField] = false;
+  }
+  obj[quartierField] = "";
+}
 
 // ---------- QUARTIERS : COUCHE MODIFIABLE PAR L'ADMIN ----------
 // La liste ci-dessus (BAMAKO_QUARTIERS) sert de base de référence, vérifiée
@@ -7979,6 +8121,12 @@ function defaultState() {
     adminRevealedRelaisLoc: null,
     adminRevealedRelaisEditLoc: null,
     debugLog: [],
+    // Système générique de listes repliables + pagination + recherche
+    // dans l'Admin (Suivi des livraisons, Points de retrait...) — pour
+    // que ça reste gérable même avec des centaines d'éléments.
+    adminSectionExpanded: { adminAccountsList: true },
+    adminSectionShown: {},
+    adminSectionSearch: {},
     debugLoggingEnabled: true,
     debugToolsEnabled: false,
     debugOrderQuery: "",
@@ -9169,6 +9317,7 @@ const TRANSLATIONS = {
     addr_name_placeholder: "Ex : Maison, Bureau…",
     addr_commune: "Commune *",
     addr_quartier: "Quartier *",
+    addr_quartier_proche_de: "Quartier proche de",
     addr_landmark_known: "Donner le nom d'un endroit près de chez vous très connu",
     addr_landmark_placeholder: "Ex : face à la mosquée",
     addr_exact_position: "Position exacte (optionnel — précise le tarif)",
@@ -9188,6 +9337,7 @@ const TRANSLATIONS = {
     chat_recording: "Enregistrement…",
     chat_write_message: "Écrire un message...",
     relais_apply_back: "Retour",
+    relais_apply_already_pending: "Vous avez déjà une candidature Point de Retrait en attente d'examen.",
     relais_apply_title: "Devenir Point de Retrait",
     relais_apply_email_required: "Obligatoire pour un Point de Retrait — votre compte n'en avait pas encore.",
     relais_apply_shop_name: "Nom de la boutique",
@@ -10849,6 +10999,7 @@ const TRANSLATIONS = {
     addr_name_placeholder: "e.g. Home, Office…",
     addr_commune: "Commune *",
     addr_quartier: "Neighborhood *",
+    addr_quartier_proche_de: "Area near",
     addr_landmark_known: "Give the name of a well-known place near you",
     addr_landmark_placeholder: "e.g. facing the mosque",
     addr_exact_position: "Exact location (optional — refines the price)",
@@ -10868,6 +11019,7 @@ const TRANSLATIONS = {
     chat_recording: "Recording…",
     chat_write_message: "Write a message...",
     relais_apply_back: "Back",
+    relais_apply_already_pending: "You already have a Pickup Point application under review.",
     relais_apply_title: "Become a Pickup Point",
     relais_apply_email_required: "Required for a Pickup Point — your account didn't have one yet.",
     relais_apply_shop_name: "Shop name",
@@ -12529,6 +12681,7 @@ const TRANSLATIONS = {
     addr_name_placeholder: "उदा: घर, कार्यालय…",
     addr_commune: "कम्यून *",
     addr_quartier: "मोहल्ला *",
+    addr_quartier_proche_de: "के पास का इलाका",
     addr_landmark_known: "अपने पास की किसी प्रसिद्ध जगह का नाम दें",
     addr_landmark_placeholder: "उदा: मस्जिद के सामने",
     addr_exact_position: "सटीक स्थान (वैकल्पिक — कीमत को सटीक बनाता है)",
@@ -12548,6 +12701,7 @@ const TRANSLATIONS = {
     chat_recording: "रिकॉर्डिंग हो रही है…",
     chat_write_message: "एक संदेश लिखें...",
     relais_apply_back: "वापस",
+    relais_apply_already_pending: "आपका पिकअप पॉइंट आवेदन पहले से ही समीक्षा में है।",
     relais_apply_title: "पिकअप पॉइंट बनें",
     relais_apply_email_required: "पिकअप पॉइंट के लिए आवश्यक — आपके खाते में अभी तक यह नहीं था।",
     relais_apply_shop_name: "दुकान का नाम",
@@ -20663,19 +20817,9 @@ function renderOnboardStepSectorDetails(d) {
 // (t\u00e9l\u00e9phone pro, adresse, position GPS).
 function renderVendorContactFields(d) {
   var vendorGpsOk = d.shopLat != null && d.shopLng != null;
-  var quartiersDataVc = getQuartiersData();
-  var communeNamesVc = Object.keys(quartiersDataVc);
-  var communeOptionsVc = '<option value="">' + t("shop_customize_choose") + '</option>';
-  for (var vci = 0; vci < communeNamesVc.length; vci++) {
-    communeOptionsVc += '<option value="' + esc(communeNamesVc[vci]) + '" ' + (d.commune === communeNamesVc[vci] ? 'selected' : '') + '>' + esc(communeNamesVc[vci]) + '</option>';
-  }
-  var quartierOptionsVc = '<option value="">' + t("shop_customize_choose") + '</option>';
-  if (d.commune && quartiersDataVc[d.commune]) {
-    var qListVc = quartiersDataVc[d.commune];
-    for (var vqi = 0; vqi < qListVc.length; vqi++) {
-      quartierOptionsVc += '<option value="' + esc(qListVc[vqi]) + '" ' + (d.quartier === qListVc[vqi] ? 'selected' : '') + '>' + esc(qListVc[vqi]) + '</option>';
-    }
-  }
+  var communeOptionsVc = communeSelectOptionsHtml(d.commune, d.communeProche, t("shop_customize_choose"));
+  var quartierListVc = resolveQuartierListForCommune(d.commune, d.communeProche);
+  var quartierOptionsVc = quartierOptionsHtml(quartierListVc, d.quartier, t("shop_customize_choose"));
   var html = '';
   if (!d.email || d.isSecondAccountFlow) {
     html += '<label class="field-label">' + t("email_required") + '</label>';
@@ -20888,19 +21032,9 @@ function renderRelaisPolicyStandalone() {
 function renderBecomeRelais() {
   var d = state.relaisApplyDraft;
   var gpsOk = d.shopLat != null && d.shopLng != null;
-  var quartiersData1 = getQuartiersData();
-  var communeNames = Object.keys(quartiersData1);
-  var communeOptions = '<option value="">Choisir…</option>';
-  for (var ci = 0; ci < communeNames.length; ci++) {
-    communeOptions += '<option value="' + communeNames[ci] + '" ' + (d.commune === communeNames[ci] ? 'selected' : '') + '>' + communeNames[ci] + '</option>';
-  }
-  var quartierOptions = '<option value="">Choisir…</option>';
-  if (d.commune && quartiersData1[d.commune]) {
-    var qList = quartiersData1[d.commune];
-    for (var qi = 0; qi < qList.length; qi++) {
-      quartierOptions += '<option value="' + qList[qi] + '" ' + (d.quartier === qList[qi] ? 'selected' : '') + '>' + qList[qi] + '</option>';
-    }
-  }
+  var communeOptions = communeSelectOptionsHtml(d.commune, d.communeProche, "Choisir\u2026");
+  var quartierListBr = resolveQuartierListForCommune(d.commune, d.communeProche);
+  var quartierOptions = quartierOptionsHtml(quartierListBr, d.quartier, "Choisir\u2026");
   var html = '<button class="link-btn" style="margin-bottom:14px" data-action="close-become-relais"><i class="fa-solid fa-arrow-left"></i> ' + t("relais_apply_back") + '</button>';
   html += '<div class="section-title" style="margin-bottom:14px;">' + t("relais_apply_title") + '</div>';
   if (!state.profile.email) {
@@ -21032,19 +21166,9 @@ function renderSellerPolicyStandalone() {
 
 function renderOnboardStepRelais(d) {
   var gpsOk = d.shopLat != null && d.shopLng != null;
-  var quartiersData1 = getQuartiersData();
-  var communeNames = Object.keys(quartiersData1);
-  var communeOptions = '<option value="">Choisir\u2026</option>';
-  for (var ci = 0; ci < communeNames.length; ci++) {
-    communeOptions += '<option value="' + communeNames[ci] + '" ' + (d.commune === communeNames[ci] ? 'selected' : '') + '>' + communeNames[ci] + '</option>';
-  }
-  var quartierOptions = '<option value="">Choisir\u2026</option>';
-  if (d.commune && quartiersData1[d.commune]) {
-    var qList = quartiersData1[d.commune];
-    for (var qi = 0; qi < qList.length; qi++) {
-      quartierOptions += '<option value="' + qList[qi] + '" ' + (d.quartier === qList[qi] ? 'selected' : '') + '>' + qList[qi] + '</option>';
-    }
-  }
+  var communeOptions = communeSelectOptionsHtml(d.commune, d.communeProche, "Choisir\u2026");
+  var quartierListOb = resolveQuartierListForCommune(d.commune, d.communeProche);
+  var quartierOptions = quartierOptionsHtml(quartierListOb, d.quartier, "Choisir\u2026");
   var html = '<button class="link-btn" style="margin-bottom:14px" data-action="onboard-back-step" data-value="identity"><i class="fa-solid fa-arrow-left"></i> ' + t("relais_apply_back") + '</button>';
   html += '<div class="section-title" style="margin-bottom:14px;">' + t("vo_relais_title") + '</div>';
   if (!d.email) {
@@ -21260,19 +21384,9 @@ function applyAddressToCheckout(addr, mode) {
 
 function renderAddressModal() {
   var d = state.addressDraft;
-  var quartiersData3 = getQuartiersData();
-  var communeNames3 = Object.keys(quartiersData3);
-  var communeOptions3 = '<option value="">' + t("shop_customize_choose") + '</option>';
-  for (var ci = 0; ci < communeNames3.length; ci++) {
-    communeOptions3 += '<option value="' + communeNames3[ci] + '" ' + (d.commune === communeNames3[ci] ? 'selected' : '') + '>' + communeNames3[ci] + '</option>';
-  }
-  var quartierOptions3 = '<option value="">' + t("shop_customize_choose") + '</option>';
-  if (d.commune && quartiersData3[d.commune]) {
-    var qList3 = quartiersData3[d.commune];
-    for (var qi = 0; qi < qList3.length; qi++) {
-      quartierOptions3 += '<option value="' + qList3[qi] + '" ' + (d.quartier === qList3[qi] ? 'selected' : '') + '>' + qList3[qi] + '</option>';
-    }
-  }
+  var communeOptions3 = communeSelectOptionsHtml(d.commune, d.communeProche, t("shop_customize_choose"));
+  var quartierList3 = resolveQuartierListForCommune(d.commune, d.communeProche);
+  var quartierOptions3 = quartierOptionsHtml(quartierList3, d.quartier, t("shop_customize_choose"));
   var html = '<div class="modal-overlay" id="address-modal-overlay" data-action="close-address-modal">';
   html += '<div class="modal-sheet">';
   html += '<button class="modal-close" data-action="close-address-modal"><i class="fa-solid fa-xmark"></i></button>';
@@ -24939,19 +25053,9 @@ function renderCheckout() {
         addrSectionHtml += '<button class="link-btn" style="font-size:11.5px;margin-bottom:8px;" data-action="change-express-address"><i class="fa-solid fa-arrow-left"></i> Choisir une adresse enregistrée</button>';
       }
       var kmDistance = f.buyerLat != null ? distanceKm(getDeliveryBaseConfig().lat, getDeliveryBaseConfig().lng, f.buyerLat, f.buyerLng) : null;
-      var qData2 = getQuartiersData();
-      var communeNames2 = Object.keys(qData2);
-      var communeOptions2 = '<option value="">Choisir…</option>';
-      for (var eci = 0; eci < communeNames2.length; eci++) {
-        communeOptions2 += '<option value="' + communeNames2[eci] + '" ' + (f.expressCommune === communeNames2[eci] ? 'selected' : '') + '>' + communeNames2[eci] + '</option>';
-      }
-      var quartierOptions2 = '<option value="">Choisir…</option>';
-      if (f.expressCommune && qData2[f.expressCommune]) {
-        var eqList = qData2[f.expressCommune];
-        for (var eqi = 0; eqi < eqList.length; eqi++) {
-          quartierOptions2 += '<option value="' + eqList[eqi] + '" ' + (f.expressQuartier === eqList[eqi] ? 'selected' : '') + '>' + eqList[eqi] + '</option>';
-        }
-      }
+      var communeOptions2 = communeSelectOptionsHtml(f.expressCommune, f.expressCommuneProche, "Choisir\u2026");
+      var quartierList2 = resolveQuartierListForCommune(f.expressCommune, f.expressCommuneProche);
+      var quartierOptions2 = quartierOptionsHtml(quartierList2, f.expressQuartier, "Choisir\u2026");
       addrSectionHtml += '<label class="field-label">' + t("shop_customize_commune") + ' *</label>';
       addrSectionHtml += '<select class="input" data-bind="checkoutForm.expressCommune" data-action-change="express-commune-changed">' + communeOptions2 + '</select>';
       addrSectionHtml += '<label class="field-label">' + t("shop_customize_quartier") + ' *</label>';
@@ -25109,18 +25213,9 @@ function renderRelaisShopPicker() {
   var ranked = nearestRelaisShops(f.buyerLat, f.buyerLng, quartierFilter);
 
   var quartiersData2 = getQuartiersData();
-  var communeNames = Object.keys(quartiersData2);
-  var communeOptions = '<option value="">Choisir…</option>';
-  for (var ci = 0; ci < communeNames.length; ci++) {
-    communeOptions += '<option value="' + communeNames[ci] + '" ' + (f.relaisCommune === communeNames[ci] ? 'selected' : '') + '>' + communeNames[ci] + '</option>';
-  }
-  var quartierOptions = '<option value="">Choisir…</option>';
-  if (f.relaisCommune && quartiersData2[f.relaisCommune]) {
-    var qList = quartiersData2[f.relaisCommune];
-    for (var qi = 0; qi < qList.length; qi++) {
-      quartierOptions += '<option value="' + qList[qi] + '" ' + (f.relaisQuartier === qList[qi] ? 'selected' : '') + '>' + qList[qi] + '</option>';
-    }
-  }
+  var communeOptions = communeSelectOptionsHtml(f.relaisCommune, f.relaisCommuneProche, "Choisir\u2026");
+  var quartierListRel = resolveQuartierListForCommune(f.relaisCommune, f.relaisCommuneProche);
+  var quartierOptions = quartierOptionsHtml(quartierListRel, f.relaisQuartier, "Choisir\u2026");
 
   var html = '';
 
@@ -25412,18 +25507,9 @@ function renderSellerProfileSetup() {
   }
 
   var qDataShop = getQuartiersData();
-  var communeNamesShop = Object.keys(qDataShop);
-  var communeOptionsShop = '<option value="">' + t("shop_customize_choose") + '</option>';
-  for (var csi = 0; csi < communeNamesShop.length; csi++) {
-    communeOptionsShop += '<option value="' + esc(communeNamesShop[csi]) + '" ' + (p.shopCommune === communeNamesShop[csi] ? 'selected' : '') + '>' + esc(communeNamesShop[csi]) + '</option>';
-  }
-  var quartierOptionsShop = '<option value="">' + t("shop_customize_choose") + '</option>';
-  if (p.shopCommune && qDataShop[p.shopCommune]) {
-    var qListShop = qDataShop[p.shopCommune];
-    for (var qsi = 0; qsi < qListShop.length; qsi++) {
-      quartierOptionsShop += '<option value="' + esc(qListShop[qsi]) + '" ' + (p.shopQuartier === qListShop[qsi] ? 'selected' : '') + '>' + esc(qListShop[qsi]) + '</option>';
-    }
-  }
+  var communeOptionsShop = communeSelectOptionsHtml(p.shopCommune, p.shopCommuneProche, t("shop_customize_choose"));
+  var quartierListShop = resolveQuartierListForCommune(p.shopCommune, p.shopCommuneProche);
+  var quartierOptionsShop = quartierOptionsHtml(quartierListShop, p.shopQuartier, t("shop_customize_choose"));
   html += '<label class="field-label">' + t("shop_customize_commune") + ' *</label>';
   html += '<select class="input" data-bind="profile.shopCommune" data-action-change="shop-commune-changed">' + communeOptionsShop + '</select>';
   html += '<label class="field-label">' + t("shop_customize_quartier") + ' *</label>';
@@ -25452,19 +25538,9 @@ function renderSellerProfileSetup() {
 // ---------- MODIFIER MES INFOS (Point de Retrait) ----------
 function renderRelaisEditInfo() {
   var p = state.profile;
-  var quartiersData3 = getQuartiersData();
-  var communeNames = Object.keys(quartiersData3);
-  var communeOptions = '<option value="">' + t("shop_customize_choose") + '</option>';
-  for (var ci = 0; ci < communeNames.length; ci++) {
-    communeOptions += '<option value="' + communeNames[ci] + '" ' + (p.commune === communeNames[ci] ? 'selected' : '') + '>' + communeNames[ci] + '</option>';
-  }
-  var quartierOptions = '<option value="">' + t("shop_customize_choose") + '</option>';
-  if (p.commune && quartiersData3[p.commune]) {
-    var qList = quartiersData3[p.commune];
-    for (var qi = 0; qi < qList.length; qi++) {
-      quartierOptions += '<option value="' + qList[qi] + '" ' + (p.quartier === qList[qi] ? 'selected' : '') + '>' + qList[qi] + '</option>';
-    }
-  }
+  var communeOptions = communeSelectOptionsHtml(p.commune, p.communeProche, t("shop_customize_choose"));
+  var quartierListRei = resolveQuartierListForCommune(p.commune, p.communeProche);
+  var quartierOptions = quartierOptionsHtml(quartierListRei, p.quartier, t("shop_customize_choose"));
 
   var html = '<button class="link-btn" style="margin-bottom:14px;" data-action="go-back"><i class="fa-solid fa-arrow-left"></i> ' + t("rei_back") + '</button>';
   html += '<div class="section-title">' + t("rei_title") + '</div>';
@@ -28010,10 +28086,81 @@ function renderAdminQuartiers() {
     html += '</div>';
   }
   }
+
+  // ---- "Quartiers proches" (hors limites officielles) + Zone Kati-ville ----
+  html += '<div class="divider-dashed" style="margin:20px 0 14px;"></div>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+  html += '<div style="font-weight:800;font-size:14px;"><i class="fa-solid fa-map-location-dot"></i> Quartiers proches (hors Communes officielles)</div>';
+  var prochesCollapsed = !!state.collapsedAdminSections.quartiersProchesList;
+  html += '<button class="link-btn" style="padding:6px;" data-action="toggle-admin-section" data-value="quartiersProchesList"><i class="fa-solid ' + (prochesCollapsed ? 'fa-chevron-down' : 'fa-chevron-up') + '"></i></button>';
+  html += '</div>';
+  html += '<div style="font-size:10.5px;color:var(--text-dim);margin-bottom:10px;">Secteurs qui apparaissent dans le sélecteur d\'adresse sous "Quartier proche de la Commune X" — n\'importe qui peut choisir son quartier ici même s\'il n\'est pas officiellement dans une Commune de Bamako.</div>';
+  var prochesUndoCount = (state.quartierProcheUndoStack || []).length;
+  html += '<button class="btn-secondary" style="width:100%;margin-bottom:14px;" data-action="undo-quartier-proche-change" ' + (prochesUndoCount === 0 ? 'disabled' : '') + '><i class="fa-solid fa-rotate-left"></i> ' + t("ad_undo_last_action") + (prochesUndoCount > 0 ? ' (' + prochesUndoCount + ')' : '') + '</button>';
+
+  if (!prochesCollapsed) {
+    var prochesData = getQuartiersProchesData();
+    var prochesGroupNames = Object.keys(prochesData);
+    for (var pgi2 = 0; pgi2 < prochesGroupNames.length; pgi2++) {
+      var prochesCommune = prochesGroupNames[pgi2];
+      html += '<div class="glass-card" style="padding:12px;margin-bottom:10px;">';
+      html += '<div style="font-weight:800;font-size:13.5px;margin-bottom:8px;">' + esc(prochesCommune) + '</div>';
+      var pqs = prochesData[prochesCommune];
+      for (var pqi = 0; pqi < pqs.length; pqi++) {
+        html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">';
+        html += '<input class="input" style="flex:1;padding:6px 10px;font-size:12px;" value="' + esc(pqs[pqi]) + '" data-action="admin-rename-quartier-proche" data-commune="' + esc(prochesCommune) + '" data-old-name="' + esc(pqs[pqi]) + '" />';
+        html += '<button class="link-btn" style="color:var(--danger);" data-action="admin-remove-quartier-proche" data-commune="' + esc(prochesCommune) + '" data-value="' + esc(pqs[pqi]) + '"><i class="fa-solid fa-xmark"></i></button>';
+        html += '</div>';
+      }
+      html += '<div style="display:flex;gap:6px;margin-top:8px;">';
+      html += '<input class="input" id="new-quartier-proche-' + esc(prochesCommune) + '" placeholder="Ajouter un secteur…" style="flex:1;padding:6px 10px;font-size:12px;" />';
+      html += '<button class="link-btn" data-action="admin-add-quartier-proche" data-value="' + esc(prochesCommune) + '"><i class="fa-solid fa-plus"></i></button>';
+      html += '</div>';
+      html += '</div>';
+    }
+  }
+
   return html;
 }
 
 // ---------- ADMIN : DEMANDES LIVREUR ----------
+// ---------- Liste Admin repliable + paginée (20 à la fois) + recherche ----------
+// Réutilisée pour toutes les longues listes de l'Admin (Suivi des
+// livraisons, Points de retrait...) — repliée par défaut, un bouton
+// "Afficher plus" tant qu'il reste des éléments au-delà de 20, et une
+// barre de recherche pour retrouver un élément précis sans tout dérouler.
+function renderAdminCollapsibleList(sectionKey, titleHtml, items, itemRenderFn, opts) {
+  opts = opts || {};
+  var expanded = !!state.adminSectionExpanded[sectionKey];
+  var shown = state.adminSectionShown[sectionKey] || 20;
+  var query = (state.adminSectionSearch[sectionKey] || "").toLowerCase().trim();
+  var filtered = (query && opts.searchFn) ? items.filter(function(it) { return opts.searchFn(it, query); }) : items;
+
+  var html = '<div class="glass-card" style="padding:14px;margin-bottom:16px;">';
+  html += '<button type="button" style="all:unset;cursor:pointer;display:flex;justify-content:space-between;align-items:center;width:100%;" data-action="toggle-admin-collapsible-list" data-value="' + sectionKey + '">';
+  html += '<div style="font-weight:800;font-size:14px;">' + titleHtml + ' (' + items.length + ')</div>';
+  html += '<i class="fa-solid fa-chevron-' + (expanded ? 'up' : 'down') + '" style="color:var(--text-dim);"></i>';
+  html += '</button>';
+  if (expanded) {
+    if (opts.searchPlaceholder && items.length > 5) {
+      html += '<input class="input" style="margin-top:10px;" placeholder="' + esc(opts.searchPlaceholder) + '" value="' + esc(state.adminSectionSearch[sectionKey] || "") + '" data-bind="adminSectionSearch.' + sectionKey + '" />';
+    }
+    if (filtered.length === 0) {
+      html += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:10px;">' + (opts.emptyText || "Aucun élément.") + '</div>';
+    } else {
+      var toShow = filtered.slice(0, shown);
+      html += '<div style="margin-top:10px;">';
+      for (var ii = 0; ii < toShow.length; ii++) html += itemRenderFn(toShow[ii]);
+      html += '</div>';
+      if (filtered.length > shown) {
+        html += '<button class="btn-secondary" style="width:100%;margin-top:10px;" data-action="load-more-admin-section" data-value="' + sectionKey + '">Afficher plus (' + (filtered.length - shown) + ' restant(s))</button>';
+      }
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
 function renderAdminLivreurApplications() {
   var apps = state.livreurApplications.filter(inAdminScope).sort(function(a, b) { return b.createdAt - a.createdAt; });
   var pendingApps = apps.filter(function(a) { return a.status === "pending"; });
@@ -28036,28 +28183,28 @@ function renderAdminLivreurApplications() {
     return readyStep && (Date.now() - readyStep.at) > 30 * 60 * 1000;
   });
 
-  html += '<div class="glass-card" style="padding:14px;margin-bottom:16px;">';
-  html += '<div style="font-weight:800;font-size:14px;margin-bottom:8px;"><i class="fa-solid fa-truck-fast"></i> ' + t("ad_delivery_tracking") + deliverableOrders.length + ')</div>';
+  var lateAlertHtml = '';
   if (lateUnassigned.length > 0) {
-    html += '<div style="background:rgba(239,68,68,0.1);border:1.5px solid var(--danger);border-radius:10px;padding:10px;margin-bottom:10px;">';
-    html += '<div style="font-weight:800;font-size:12.5px;color:var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i> ' + lateUnassigned.length + t("ad_ready_orders_no_livreur") + '</div>';
+    lateAlertHtml += '<div style="background:rgba(239,68,68,0.1);border:1.5px solid var(--danger);border-radius:10px;padding:10px;margin-bottom:16px;">';
+    lateAlertHtml += '<div style="font-weight:800;font-size:12.5px;color:var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i> ' + lateUnassigned.length + t("ad_ready_orders_no_livreur") + '</div>';
     for (var lu = 0; lu < lateUnassigned.length; lu++) {
-      html += '<div style="font-size:11.5px;margin-top:4px;">#' + lateUnassigned[lu].id.slice(-5).toUpperCase() + ' — ' + esc(lateUnassigned[lu].buyerName) + '</div>';
+      lateAlertHtml += '<div style="font-size:11.5px;margin-top:4px;">#' + lateUnassigned[lu].id.slice(-5).toUpperCase() + ' — ' + esc(lateUnassigned[lu].buyerName) + '</div>';
     }
-    html += '</div>';
+    lateAlertHtml += '</div>';
   }
-  if (deliverableOrders.length === 0) {
-    html += '<div style="font-size:11.5px;color:var(--text-dim);">' + t("ad_no_order_in_delivery") + '</div>';
-  } else {
-    for (var d = 0; d < deliverableOrders.length; d++) {
-      var ord = deliverableOrders[d];
-      html += '<div class="card-row" data-action="open-admin-order-detail" data-value="' + ord.id + '" data-open-list="1" style="cursor:pointer;">';
-      html += '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:12px;">#' + ord.id.slice(-5).toUpperCase() + ' — ' + translateStatus(ord.status) + '</div><div style="font-size:10.5px;color:var(--text-dim);">' + (ord.livreurId ? t("ad_taken_by") + esc(ord.livreurName) : t("ad_available_unclaimed")) + '</div></div>';
-      html += '<span class="status-pill" style="background:' + (ord.livreurId ? 'rgba(46,204,113,0.15);color:var(--success)' : 'rgba(255,159,10,0.15);color:#ff9f0a') + ';">' + (ord.livreurId ? t("ad_taken_pill") : t("ad_available_pill")) + '</span>';
-      html += '</div>';
-    }
-  }
-  html += '</div>';
+
+  html += lateAlertHtml;
+  html += renderAdminCollapsibleList("deliveryTracking", '<i class="fa-solid fa-truck-fast"></i> ' + t("ad_delivery_tracking").replace(" (", ""), deliverableOrders, function(ord) {
+    var rowHtml = '<div class="card-row" data-action="open-admin-order-detail" data-value="' + ord.id + '" data-open-list="1" style="cursor:pointer;">';
+    rowHtml += '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:12px;">#' + ord.id.slice(-5).toUpperCase() + ' — ' + translateStatus(ord.status) + '</div><div style="font-size:10.5px;color:var(--text-dim);">' + (ord.livreurId ? t("ad_taken_by") + esc(ord.livreurName) : t("ad_available_unclaimed")) + '</div></div>';
+    rowHtml += '<span class="status-pill" style="background:' + (ord.livreurId ? 'rgba(46,204,113,0.15);color:var(--success)' : 'rgba(255,159,10,0.15);color:#ff9f0a') + ';">' + (ord.livreurId ? t("ad_taken_pill") : t("ad_available_pill")) + '</span>';
+    rowHtml += '</div>';
+    return rowHtml;
+  }, {
+    emptyText: t("ad_no_order_in_delivery"),
+    searchPlaceholder: "Rechercher par code ou acheteur...",
+    searchFn: function(ord, q) { return ord.id.toLowerCase().indexOf(q) !== -1 || (ord.buyerName || "").toLowerCase().indexOf(q) !== -1; }
+  });
 
   html += '<div style="font-weight:800;font-size:14px;margin-bottom:10px;"><i class="fa-solid fa-inbox"></i> ' + t("ad_pending_requests") + pendingApps.length + ')</div>';
   if (pendingApps.length === 0) {
@@ -28212,59 +28359,60 @@ function renderAdminRelaisApplications() {
 
   var apps = state.relaisApplications.filter(function(a) { return a.status === "pending" && inAdminScope(a); }).sort(function(a, b) { return b.createdAt - a.createdAt; });
   var html = htmlPrefix;
-  if (apps.length === 0) {
-    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:16px;">' + t("ad_no_new_pv_request") + '</div>';
-  }
-  for (var i = 0; i < apps.length; i++) {
-    var app = apps[i];
-    html += '<div class="glass-card" style="padding:14px;margin-bottom:12px;">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
-    html += '<div style="font-weight:800;font-size:14px;">' + esc(app.shopName) + '</div>';
-    html += '<span class="status-pill" style="' + (app.status === "pending" ? '' : app.status === "approved" ? 'background:rgba(46,158,79,0.15);color:#2e9e4f;' : 'background:rgba(255,85,102,0.15);color:var(--danger);') + '">' + (app.status === "pending" ? t("ad_pending_pill") : app.status === "approved" ? t("ad_approved_pill") : t("ad_refused_pill")) + '</span>';
-    html += '</div>';
-    html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:4px;"><i class="fa-solid fa-user"></i> ' + esc(app.accountName) + ' · <a href="tel:' + esc(app.accountPhone) + '" style="color:var(--accent)">' + esc(app.accountPhone) + '</a></div>';
+  html += renderAdminCollapsibleList("relaisPending", '<i class="fa-solid fa-inbox"></i> ' + t("ad_pending_requests").replace(" (", ""), apps, function(app) {
+    var cardHtml = '<div class="glass-card" style="padding:14px;margin-bottom:12px;">';
+    cardHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+    cardHtml += '<div style="font-weight:800;font-size:14px;">' + esc(app.shopName) + '</div>';
+    cardHtml += '<span class="status-pill" style="' + (app.status === "pending" ? '' : app.status === "approved" ? 'background:rgba(46,158,79,0.15);color:#2e9e4f;' : 'background:rgba(255,85,102,0.15);color:var(--danger);') + '">' + (app.status === "pending" ? t("ad_pending_pill") : app.status === "approved" ? t("ad_approved_pill") : t("ad_refused_pill")) + '</span>';
+    cardHtml += '</div>';
+    cardHtml += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:4px;"><i class="fa-solid fa-user"></i> ' + esc(app.accountName) + ' · <a href="tel:' + esc(app.accountPhone) + '" style="color:var(--accent)">' + esc(app.accountPhone) + '</a></div>';
     var revealedLoc = (state.adminRevealedRelaisLoc && state.adminRevealedRelaisLoc.applicationId === app.id) ? state.adminRevealedRelaisLoc.location : null;
-    html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:8px;"><i class="fa-solid fa-location-dot"></i> ' + esc(app.quartier) + (app.isAutreQuartier ? t("ad_new_quartier_proposed") : (app.commune ? ', ' + esc(app.commune) : '')) + (revealedLoc && revealedLoc.addressDetail ? ' — ' + esc(revealedLoc.addressDetail) : '') + '</div>';
+    cardHtml += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:8px;"><i class="fa-solid fa-location-dot"></i> ' + esc(app.quartier) + (app.isAutreQuartier ? t("ad_new_quartier_proposed") : (app.commune ? ', ' + esc(app.commune) : '')) + (revealedLoc && revealedLoc.addressDetail ? ' — ' + esc(revealedLoc.addressDetail) : '') + '</div>';
     if (!revealedLoc) {
-      html += '<button class="link-btn" style="font-size:11.5px;margin-bottom:8px;" data-action="open-reveal-relais-location" data-value="' + app.id + '"><i class="fa-solid fa-lock"></i> ' + (state.adminIsOwner ? 'Voir adresse exacte et GPS (mot de passe requis)' : 'Voir adresse exacte et GPS (confirmation requise)') + '</button><br>';
+      cardHtml += '<button class="link-btn" style="font-size:11.5px;margin-bottom:8px;" data-action="open-reveal-relais-location" data-value="' + app.id + '"><i class="fa-solid fa-lock"></i> ' + (state.adminIsOwner ? 'Voir adresse exacte et GPS (mot de passe requis)' : 'Voir adresse exacte et GPS (confirmation requise)') + '</button><br>';
     } else if (revealedLoc.shopLat != null) {
-      html += '<div style="font-size:11.5px;margin-bottom:8px;"><a href="https://www.google.com/maps?q=' + revealedLoc.shopLat + ',' + revealedLoc.shopLng + '" target="_blank" style="color:var(--accent);font-weight:700;">📍 Voir la position exacte sur la carte</a></div>';
+      cardHtml += '<div style="font-size:11.5px;margin-bottom:8px;"><a href="https://www.google.com/maps?q=' + revealedLoc.shopLat + ',' + revealedLoc.shopLng + '" target="_blank" style="color:var(--accent);font-weight:700;">📍 Voir la position exacte sur la carte</a></div>';
+    } else {
+      cardHtml += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">Aucune localisation GPS enregistrée pour cette candidature.</div>';
     }
     if (app.hasVerificationDocs) {
-      html += '<button type="button" class="btn-secondary" style="width:100%;margin-bottom:10px;" data-action="view-relais-docs-secure" data-value="' + app.id + '"><i class="fa-solid fa-image"></i> Voir la photo et la pièce d\'identité</button>';
+      cardHtml += '<button type="button" class="btn-secondary" style="width:100%;margin-bottom:10px;" data-action="view-relais-docs-secure" data-value="' + app.id + '"><i class="fa-solid fa-image"></i> Voir la photo et la pièce d\'identité</button>';
     }
     if (app.status === "pending") {
-      html += '<div style="display:flex;gap:8px;">';
-      html += '<button class="btn-primary" style="flex:1;padding:9px;font-size:12.5px;" data-action="approve-relais-application" data-value="' + app.id + '"><i class="fa-solid fa-check"></i> ' + t("ad_approve") + '</button>';
-      html += '<button class="btn-secondary" style="flex:1;padding:9px;font-size:12.5px;color:var(--danger);border-color:var(--danger);" data-action="reject-relais-application" data-value="' + app.id + '"><i class="fa-solid fa-xmark"></i> ' + t("ad_refuse") + '</button>';
-      html += '</div>';
+      cardHtml += '<div style="display:flex;gap:8px;">';
+      cardHtml += '<button class="btn-primary" style="flex:1;padding:9px;font-size:12.5px;" data-action="approve-relais-application" data-value="' + app.id + '"><i class="fa-solid fa-check"></i> ' + t("ad_approve") + '</button>';
+      cardHtml += '<button class="btn-secondary" style="flex:1;padding:9px;font-size:12.5px;color:var(--danger);border-color:var(--danger);" data-action="reject-relais-application" data-value="' + app.id + '"><i class="fa-solid fa-xmark"></i> ' + t("ad_refuse") + '</button>';
+      cardHtml += '</div>';
     }
-    html += '<div style="font-size:10px;color:var(--text-dim);margin-top:8px;">' + t("ad_submitted_on") + fmtDateTime(app.createdAt) + '</div>';
-    html += '</div>';
-  }
+    cardHtml += '<div style="font-size:10px;color:var(--text-dim);margin-top:8px;">' + t("ad_submitted_on") + fmtDateTime(app.createdAt) + '</div>';
+    cardHtml += '</div>';
+    return cardHtml;
+  }, {
+    emptyText: t("ad_no_new_pv_request"),
+    searchPlaceholder: "Rechercher par boutique, nom ou téléphone...",
+    searchFn: function(app, q) { return (app.shopName || "").toLowerCase().indexOf(q) !== -1 || (app.accountName || "").toLowerCase().indexOf(q) !== -1 || (app.accountPhone || "").indexOf(q) !== -1; }
+  });
 
-  html += '<div class="divider-dashed" style="margin:16px 0;"></div>';
   var activeRelais = state.accounts.filter(function(a) { return a.relaisApplicationStatus === "approved"; });
-  html += '<div style="font-weight:800;font-size:14px;margin-bottom:10px;"><i class="fa-solid fa-shop"></i> ' + t("ad_active_pv_title") + activeRelais.length + ')</div>';
-  if (activeRelais.length === 0) {
-    html += '<div style="font-size:11.5px;color:var(--text-dim);">' + t("ad_no_active_pv") + '</div>';
-  } else {
-    var rate2 = getRelaisCommissionRate();
-    for (var ar = 0; ar < activeRelais.length; ar++) {
-      var rshop = activeRelais[ar];
-      var rOrders = state.orders.filter(function(o) { return o.deliveryMode === "relais" && o.relaisShopId === rshop.id && o.status === "Livrée"; });
-      var rCommission = 0;
-      for (var rc = 0; rc < rOrders.length; rc++) rCommission += (rOrders[rc].deliveryFee || 0) * rate2;
-      html += '<div class="card-row" style="cursor:pointer;" data-action="open-admin-relais-detail" data-value="' + rshop.id + '">';
-      html += '<div class="emoji-thumb"><i class="fa-solid fa-shop"></i></div>';
-      html += '<div style="flex:1;min-width:0;">';
-      html += '<div style="font-weight:700;font-size:13px;">' + esc(rshop.shopName || rshop.name) + (rshop.banned ? ' 🚫' : '') + '</div>';
-      html += '<div style="font-size:11px;color:var(--text-dim);">' + esc(rshop.quartier || '—') + ' · ' + rOrders.length + t("ad_orders_word") + money(rCommission) + t("ad_commission_word") + '</div>';
-      html += '</div>';
-      html += '<i class="fa-solid fa-chevron-right" style="color:var(--text-dim);"></i>';
-      html += '</div>';
-    }
-  }
+  var rate2 = getRelaisCommissionRate();
+  html += renderAdminCollapsibleList("relaisActive", '<i class="fa-solid fa-shop"></i> ' + t("ad_active_pv_title").replace(" (", ""), activeRelais, function(rshop) {
+    var rOrders = state.orders.filter(function(o) { return o.deliveryMode === "relais" && o.relaisShopId === rshop.id && o.status === "Livrée"; });
+    var rCommission = 0;
+    for (var rc = 0; rc < rOrders.length; rc++) rCommission += (rOrders[rc].deliveryFee || 0) * rate2;
+    var rowHtml = '<div class="card-row" style="cursor:pointer;" data-action="open-admin-relais-detail" data-value="' + rshop.id + '">';
+    rowHtml += '<div class="emoji-thumb"><i class="fa-solid fa-shop"></i></div>';
+    rowHtml += '<div style="flex:1;min-width:0;">';
+    rowHtml += '<div style="font-weight:700;font-size:13px;">' + esc(rshop.shopName || rshop.name) + (rshop.banned ? ' 🚫' : '') + '</div>';
+    rowHtml += '<div style="font-size:11px;color:var(--text-dim);">' + esc(rshop.quartier || '—') + ' · ' + rOrders.length + t("ad_orders_word") + money(rCommission) + t("ad_commission_word") + '</div>';
+    rowHtml += '</div>';
+    rowHtml += '<i class="fa-solid fa-chevron-right" style="color:var(--text-dim);"></i>';
+    rowHtml += '</div>';
+    return rowHtml;
+  }, {
+    emptyText: t("ad_no_active_pv"),
+    searchPlaceholder: "Rechercher par boutique ou quartier...",
+    searchFn: function(rshop, q) { return (rshop.shopName || rshop.name || "").toLowerCase().indexOf(q) !== -1 || (rshop.quartier || "").toLowerCase().indexOf(q) !== -1; }
+  });
   return html;
 }
 
@@ -29048,30 +29196,26 @@ function renderAdminAccounts() {
   html += '<button class="btn-primary" style="flex:0;padding:0 16px;" data-action="submit-admin-account-search"><i class="fa-solid fa-magnifying-glass"></i></button>';
   html += '</div>';
 
-  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;">' + accounts.length + t("ad_accounts_count") + '</div>';
-
-  for (var i = 0; i < accounts.length; i++) {
-    var a = accounts[i];
+  html += renderAdminCollapsibleList("adminAccountsList", '<i class="fa-solid fa-users"></i> ' + t("ad_accounts_tab"), accounts, function(a) {
     var accConv = null;
     for (var ac = 0; ac < state.adminConversations.length; ac++) { if (state.adminConversations[ac].accountId === a.id) { accConv = state.adminConversations[ac]; break; } }
-    html += '<div class="card-row" style="cursor:pointer;" data-action="open-admin-account-detail" data-value="' + a.id + '">';
-    html += '<div class="emoji-thumb"><i class="fa-solid ' + (ROLE_ICONS[a.role] || 'fa-user') + '"></i></div>';
-    html += '<div style="flex:1;min-width:0;">';
-    html += '<div style="font-weight:700;font-size:13px;">' + esc(a.name) + (a.banned ? ' <span style="color:var(--danger);font-size:10px;">' + t("ad_banned") + '</span>' : '') + '</div>';
-    html += '<div style="font-size:11px;color:var(--text-dim);">' + esc(a.phone) + ' · ' + translateRoleLabel(a.role) + '</div>';
-    html += '</div>';
+    var rowHtml = '<div class="card-row" style="cursor:pointer;" data-action="open-admin-account-detail" data-value="' + a.id + '">';
+    rowHtml += '<div class="emoji-thumb"><i class="fa-solid ' + (ROLE_ICONS[a.role] || 'fa-user') + '"></i></div>';
+    rowHtml += '<div style="flex:1;min-width:0;">';
+    rowHtml += '<div style="font-weight:700;font-size:13px;">' + esc(a.name) + (a.banned ? ' <span style="color:var(--danger);font-size:10px;">' + t("ad_banned") + '</span>' : '') + '</div>';
+    rowHtml += '<div style="font-size:11px;color:var(--text-dim);">' + esc(a.phone) + ' · ' + translateRoleLabel(a.role) + '</div>';
+    rowHtml += '</div>';
     if (a.hasRefusalAlert) {
-      html += '<span title="' + t("ad_refusal_alert_title") + '" style="background:rgba(255,166,0,0.15);color:#c77700;font-size:10px;padding:1px 8px;border-radius:999px;margin-right:6px;"><i class="fa-solid fa-triangle-exclamation"></i> ' + a.livreurRefusalCount + '</span>';
+      rowHtml += '<span title="' + t("ad_refusal_alert_title") + '" style="background:rgba(255,166,0,0.15);color:#c77700;font-size:10px;padding:1px 8px;border-radius:999px;margin-right:6px;"><i class="fa-solid fa-triangle-exclamation"></i> ' + a.livreurRefusalCount + '</span>';
     }
     if (accConv && (accConv.unreadForAdmin || 0) > 0) {
-      html += '<span style="background:var(--danger);color:white;font-size:10px;padding:1px 8px;border-radius:999px;margin-right:6px;">' + accConv.unreadForAdmin + '</span>';
+      rowHtml += '<span style="background:var(--danger);color:white;font-size:10px;padding:1px 8px;border-radius:999px;margin-right:6px;">' + accConv.unreadForAdmin + '</span>';
     }
-    html += '<i class="fa-solid fa-chevron-right" style="color:var(--text-dim);"></i>';
-    html += '</div>';
-  }
-  if (accounts.length === 0) {
-    html += '<div class="empty-state"><i class="fa-solid fa-user-slash"></i><div class="title">' + t("ad_no_account_found") + '</div></div>';
-  }
+    rowHtml += '<i class="fa-solid fa-chevron-right" style="color:var(--text-dim);"></i>';
+    rowHtml += '</div>';
+    return rowHtml;
+  }, { emptyText: t("ad_no_account_found") });
+
   return html;
 }
 
@@ -32591,16 +32735,20 @@ root.addEventListener("click", function(e) {
       };
       state.relaisEditRequests.push(editReq);
       save();
-      saveDoc("relaisEditRequests", editReq);
-      // Adresse détaillée et GPS proposés — envoyés à part, vers la
-      // collection protégée dédiée, jamais dans "relaisEditRequests"
-      // lui-même, qui reste largement synchronisé.
-      callAdminAccessOperation({
-        operation: "save_relais_edit_location",
-        editRequestId: editReq.id,
-        addressDetail: state.profile.addressDetail,
-        shopLat: state.profile.shopLat,
-        shopLng: state.profile.shopLng
+      // Même correctif que pour la candidature initiale : on attend que
+      // la fiche existe côté serveur avant d'y attacher le GPS.
+      var editSavePromise = saveDoc("relaisEditRequests", editReq);
+      (editSavePromise || Promise.resolve()).then(function() {
+        // Adresse détaillée et GPS proposés — envoyés à part, vers la
+        // collection protégée dédiée, jamais dans "relaisEditRequests"
+        // lui-même, qui reste largement synchronisé.
+        callAdminAccessOperation({
+          operation: "save_relais_edit_location",
+          editRequestId: editReq.id,
+          addressDetail: state.profile.addressDetail,
+          shopLat: state.profile.shopLat,
+          shopLng: state.profile.shopLng
+        });
       });
       // Revient à l'état réellement approuvé du compte — évite d'afficher
       // les changements comme déjà actifs avant validation par l'admin.
@@ -34161,6 +34309,17 @@ root.addEventListener("click", function(e) {
       });
       break;
     }
+    case "toggle-admin-collapsible-list": {
+      state.adminSectionExpanded[value] = !state.adminSectionExpanded[value];
+      if (state.adminSectionExpanded[value] && !state.adminSectionShown[value]) state.adminSectionShown[value] = 20;
+      render();
+      break;
+    }
+    case "load-more-admin-section": {
+      state.adminSectionShown[value] = (state.adminSectionShown[value] || 20) + 20;
+      render();
+      break;
+    }
     case "debug-search-order-local": {
       if (!state.debugOrderQuery) break;
       // Vérifie DIRECTEMENT dans les données déjà présentes sur ce
@@ -35393,6 +35552,29 @@ root.addEventListener("click", function(e) {
       break;
     }
     case "undo-quartier-change": undoQuartierChange(); break;
+    case "undo-quartier-proche-change": undoQuartierProcheChange(); break;
+    case "admin-add-quartier-proche": {
+      var qInputP = document.getElementById('new-quartier-proche-' + value);
+      var newQNameP = qInputP ? qInputP.value.trim() : "";
+      if (!newQNameP) { showToast(t("toast_give_neighborhood_name")); break; }
+      var dataAQP = getQuartiersProchesData();
+      if (!dataAQP[value]) dataAQP[value] = [];
+      if (dataAQP[value].indexOf(newQNameP) !== -1) { showToast(t("toast_neighborhood_exists")); break; }
+      dataAQP[value].push(newQNameP);
+      saveQuartiersProchesData(dataAQP);
+      showToast(t("toast_neighborhood_added"));
+      break;
+    }
+    case "admin-remove-quartier-proche": {
+      var communeRQP = btn.dataset.commune;
+      var dataRQP = getQuartiersProchesData();
+      if (dataRQP[communeRQP]) {
+        dataRQP[communeRQP] = dataRQP[communeRQP].filter(function(q) { return q !== value; });
+        saveQuartiersProchesData(dataRQP);
+        showToast(t("toast_neighborhood_deleted"));
+      }
+      break;
+    }
     case "admin-add-quartier": {
       var qInput = document.getElementById('new-quartier-' + value);
       var newQName = qInput ? qInput.value.trim() : "";
@@ -37515,6 +37697,21 @@ root.addEventListener("change", function(e) {
     }
     return;
   }
+  if (el.dataset.action === "admin-rename-quartier-proche") {
+    var renameDataP = getQuartiersProchesData();
+    var communeRP = el.dataset.commune;
+    var oldNameP = el.dataset.oldName;
+    var newNameP = el.value.trim();
+    if (renameDataP[communeRP] && newNameP && newNameP !== oldNameP) {
+      var idxRP = renameDataP[communeRP].indexOf(oldNameP);
+      if (idxRP !== -1) {
+        renameDataP[communeRP][idxRP] = newNameP;
+        saveQuartiersProchesData(renameDataP);
+        showToast(t("toast_neighborhood_renamed"));
+      }
+    }
+    return;
+  }
   var bind = el.dataset.bind;
   if (!bind || el.tagName !== "SELECT") return;
   if (!setStateAtPath(bind, el.value)) return;
@@ -37528,26 +37725,26 @@ root.addEventListener("change", function(e) {
     state.adminStats.period = el.value;
   }
   if (el.dataset.actionChange === "commune-changed") {
-    state.onboardDraft.quartier = "";
+    applyCommuneProcheParsing(state.onboardDraft, "commune", "quartier", "communeProche");
   }
   if (el.dataset.actionChange === "relais-commune-changed") {
-    state.profile.quartier = "";
+    applyCommuneProcheParsing(state.profile, "commune", "quartier", "communeProche");
   }
   if (el.dataset.actionChange === "relais-apply-commune-changed") {
-    state.relaisApplyDraft.quartier = "";
+    applyCommuneProcheParsing(state.relaisApplyDraft, "commune", "quartier", "communeProche");
   }
   if (el.dataset.actionChange === "buyer-commune-changed") {
-    state.checkoutForm.relaisQuartier = "";
+    applyCommuneProcheParsing(state.checkoutForm, "relaisCommune", "relaisQuartier", "relaisCommuneProche");
     state.checkoutForm.relaisShopId = "";
   }
   if (el.dataset.actionChange === "express-commune-changed") {
-    state.checkoutForm.expressQuartier = "";
+    applyCommuneProcheParsing(state.checkoutForm, "expressCommune", "expressQuartier", "expressCommuneProche");
   }
   if (el.dataset.actionChange === "shop-commune-changed") {
-    state.profile.shopQuartier = "";
+    applyCommuneProcheParsing(state.profile, "shopCommune", "shopQuartier", "shopCommuneProche");
   }
   if (el.dataset.actionChange === "address-commune-changed") {
-    state.addressDraft.quartier = "";
+    applyCommuneProcheParsing(state.addressDraft, "commune", "quartier", "communeProche");
   }
   save();
   render();
