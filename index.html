@@ -6466,7 +6466,7 @@ var ADMIN_RESTRICTED_ACTIONS = [
   "toggle-section-style-bold", "set-brand-image-field", "set-section-style-field", "save-market-display-config",
   "admin-cancel-boost", "approve-relais-edit", "reject-relais-edit",
   "admin-add-quartier", "admin-remove-quartier", "undo-quartier-change",
-  "admin-add-quartier-proche", "admin-remove-quartier-proche", "undo-quartier-proche-change",
+  "admin-add-quartier-proche", "admin-remove-quartier-proche", "undo-quartier-proche-change", "toggle-user-test-mode",
   "send-admin-broadcast", "toggle-employee-permission", "add-boost-tier", "remove-boost-tier", "save-boost-tiers",
   "save-vip-rotation-seconds", "save-delivery-base-config", "admin-add-commune", "admin-remove-commune",
   "save-admin-product-edit", "admin-delete-account", "save-relais-commission", "save-delivery-fees", "save-intercity-delivery-fees",
@@ -8114,6 +8114,7 @@ function defaultState() {
     showAddressModal: false,
     addressDraft: null,
     showProfileInfoModal: false,
+    showUserTestPanel: false,
     showHistoryModal: false,
     historyTab: "achats",
     showFindAccountModal: false,
@@ -19863,6 +19864,7 @@ var OVERLAY_REGISTRY = [
   { key: "wallet", isOpen: function () { return state.showWallet; }, close: function () { state.showWallet = false; } },
   { key: "historyModal", isOpen: function () { return state.showHistoryModal; }, close: function () { state.showHistoryModal = false; } },
   { key: "profileInfo", isOpen: function () { return state.showProfileInfoModal; }, close: function () { state.showProfileInfoModal = false; } },
+  { key: "userTestPanel", isOpen: function () { return state.showUserTestPanel; }, close: function () { state.showUserTestPanel = false; } },
   { key: "shopPicker", isOpen: function () { return state.showShopPicker; }, close: function () { state.showShopPicker = false; } },
   { key: "userGuide", isOpen: function () { return state.showUserGuide; }, close: function () { state.showUserGuide = false; } },
   { key: "profileScreen", isOpen: function () { return state.showProfileScreen; }, close: function () { state.showProfileScreen = false; } }
@@ -20437,6 +20439,7 @@ function buildHTML() {
   if (state.showLivreurRefuseModal) html += renderLivreurRefuseModal();
   if (state.adminViewingConversationId) html += renderAdminConversationViewModal();
   if (state.showProfileInfoModal) html += renderProfileInfoModal();
+  if (state.showUserTestPanel) html += renderUserTestPanel();
   if (state.showHistoryModal) html += renderHistoryModal();
   if (state.showShopPicker) html += renderShopPickerModal();
   if (state.showAffiliateProgram) html += renderAffiliateProgramModal();
@@ -21711,6 +21714,9 @@ function renderProfileModal() {
   html += '</div>';
 
   html += '<div class="profile-menu-list">';
+  if (p.testModeEnabled) {
+    html += '<button class="vendor-hub-card" data-action="open-user-test-panel" style="background:rgba(46,158,79,0.1);border:1.5px solid var(--success);"><i class="fa-solid fa-flask" style="color:var(--success);"></i><div><div class="vh-title">Test</div><div class="vh-sub">Diagnostic complet de l\'app, à envoyer si on te le demande</div></div><i class="fa-solid fa-chevron-right"></i></button>';
+  }
   html += '<button class="vendor-hub-card" data-action="open-profile-info" style="background:var(--bg-body);"><i class="fa-solid fa-id-card"></i><div><div class="vh-title">' + t("profile_my_info") + '</div><div class="vh-sub">' + t("profile_my_info_sub") + '</div></div><i class="fa-solid fa-chevron-right"></i></button>';
   html += '<button class="vendor-hub-card" data-action="open-history" style="background:var(--bg-body);"><i class="fa-solid fa-clock-rotate-left"></i><div><div class="vh-title">' + t("profile_history") + '</div><div class="vh-sub">' + t("profile_history_sub") + '</div></div><i class="fa-solid fa-chevron-right"></i></button>';
   html += '<button class="vendor-hub-card" data-action="open-affiliate-program" style="background:var(--bg-body);"><i class="fa-solid fa-hand-holding-dollar"></i><div><div class="vh-title">' + t("profile_affiliate") + '</div><div class="vh-sub">' + t("profile_affiliate_sub") + '</div></div><i class="fa-solid fa-chevron-right"></i></button>';
@@ -21776,6 +21782,113 @@ function renderProfileModal() {
 
   html += '<button class="link-btn" style="color:var(--danger);margin-top:18px;width:100%;text-align:center;" data-action="logout"><i class="fa-solid fa-right-from-bracket"></i> ' + t("profile_logout") + '</button>';
   html += '<button class="link-btn" style="color:var(--text-dim);margin-top:10px;width:100%;text-align:center;font-size:11.5px;" data-action="open-delete-account"><i class="fa-solid fa-trash-can"></i> ' + t("profile_delete_account") + '</button>';
+  html += '</div></div>';
+  return html;
+}
+
+// ---------- Panneau "Test" — diagnostic complet, visible côté utilisateur ----------
+// Réservé aux comptes activés par l'Admin (voir toggle-user-test-mode).
+// But : que N'IMPORTE QUEL souci futur (pas seulement "je ne vois que mes
+// propres produits") puisse être diagnostiqué en un seul rapport, sans
+// aller-retour de questions — la personne appuie sur "Copier tout" et
+// envoie le résultat.
+function buildUserTestPanelText() {
+  var p = state.profile || {};
+  var lines = ["=== Rapport de test Sounsouni ===", fmtDateTime(Date.now()), ""];
+
+  lines.push("--- Identité & compte ---");
+  lines.push("Nom : " + (p.name || p.shopName || "—"));
+  lines.push("Téléphone : " + (p.phone || "—"));
+  lines.push("Rôle : " + (p.role || "—"));
+  lines.push("Identifiant compte : " + (p.id || "—"));
+  var linkedAccts = state.accounts.filter(function(a) { return a.phone === p.phone && a.id !== p.id; });
+  lines.push("Comptes liés au même numéro : " + (linkedAccts.length ? linkedAccts.map(function(a) { return a.name + " (" + a.role + ")"; }).join(", ") : "aucun"));
+  lines.push("Comptes déjà utilisés sur cet appareil : " + ((state.deviceAccountIds || []).length));
+  lines.push("");
+
+  lines.push("--- Connexion & synchronisation ---");
+  lines.push("Jeton de session présent : " + (state.sessionToken ? "oui" : "NON"));
+  lines.push("En ligne actuellement : " + (navigator.onLine ? "oui" : "NON"));
+  var lastSync = null;
+  try { lastSync = localStorage.getItem("gems_last_sync_v2"); } catch (e) {}
+  lines.push("Dernière synchronisation : " + (lastSync ? fmtDateTime(new Date(lastSync).getTime()) : "jamais / inconnue"));
+  lines.push("Modifications en attente d'envoi : " + ((state.pendingSyncQueue || []).length));
+  lines.push("");
+
+  lines.push("--- Données en mémoire sur ce téléphone ---");
+  lines.push("Comptes : " + state.accounts.length);
+  lines.push("Commandes : " + state.orders.length);
+  lines.push("Produits (total, tous vendeurs) : " + state.products.length);
+  var myProductsCount = state.products.filter(function(pr) { return pr.sellerId === p.id; }).length;
+  lines.push("Produits qui m'appartiennent : " + myProductsCount);
+  lines.push("Produits des AUTRES vendeurs : " + (state.products.length - myProductsCount));
+  lines.push("");
+
+  lines.push("--- Appareil ---");
+  lines.push("Navigateur/app : " + navigator.userAgent);
+  lines.push("Taille d'écran : " + window.innerWidth + " x " + window.innerHeight);
+  lines.push("Langue de l'app : " + (state.lang || "—"));
+  lines.push("Type de connexion : " + (navigator.connection && navigator.connection.effectiveType ? navigator.connection.effectiveType : "inconnu"));
+  lines.push("");
+
+  lines.push("--- Notifications & localisation ---");
+  lines.push("Permission notifications : " + (typeof Notification !== "undefined" ? Notification.permission : "non supporté sur ce navigateur"));
+  lines.push("Permission position GPS : " + (state.testPanelGeoPermission || "vérification en cours…"));
+  lines.push("");
+
+  lines.push("--- Stockage local ---");
+  var approxSizeKb = "?";
+  try { approxSizeKb = Math.round(JSON.stringify(state).length / 1024); } catch (e) {}
+  lines.push("Taille approximative des données sauvegardées : " + approxSizeKb + " Ko");
+  lines.push("");
+
+  lines.push("--- Erreurs récentes (" + (state.debugLog || []).length + ") ---");
+  var logs = (state.debugLog || []).slice(0, 20);
+  if (logs.length === 0) {
+    lines.push("Aucune erreur capturée récemment.");
+  } else {
+    for (var i = 0; i < logs.length; i++) {
+      lines.push("[" + fmtDateTime(logs[i].at) + "] (" + logs[i].type + ") " + logs[i].message + (logs[i].detail ? " — " + logs[i].detail : ""));
+    }
+  }
+  return lines.join("\n");
+}
+
+// Vérification de la permission GPS — asynchrone par nature (API
+// Permissions du navigateur), donc lancée une fois à l'ouverture du
+// panneau puis affichée dès qu'elle répond, plutôt que de bloquer
+// l'affichage du reste en l'attendant.
+function checkGeoPermissionForTestPanel() {
+  if (!navigator.permissions || !navigator.permissions.query) {
+    state.testPanelGeoPermission = "API non disponible sur ce navigateur";
+    render();
+    return;
+  }
+  navigator.permissions.query({ name: "geolocation" }).then(function(status) {
+    state.testPanelGeoPermission = status.state === "granted" ? "accordée" : (status.state === "denied" ? "refusée" : "pas encore demandée");
+    render();
+  }).catch(function() {
+    state.testPanelGeoPermission = "impossible à vérifier";
+    render();
+  });
+}
+
+function renderUserTestPanel() {
+  if (state.testPanelGeoPermission == null) {
+    state.testPanelGeoPermission = "vérification en cours…";
+    setTimeout(checkGeoPermissionForTestPanel, 0);
+  }
+  var html = '<div class="modal-overlay" data-action="close-user-test-panel">';
+  html += '<div class="modal-sheet" style="max-height:85vh;overflow-y:auto;">';
+  html += '<button class="modal-close" data-action="close-user-test-panel"><i class="fa-solid fa-xmark"></i></button>';
+  html += '<div class="section-title" style="margin-bottom:6px;"><i class="fa-solid fa-flask"></i> Test</div>';
+  html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">Si on t\'a demandé de faire ce test, appuie sur "Copier tout" ci-dessous et envoie le résultat.</div>';
+
+  html += '<button class="btn-primary" style="width:100%;margin-bottom:14px;" data-action="copy-user-test-panel"><i class="fa-solid fa-copy"></i> Copier tout</button>';
+
+  var reportText = buildUserTestPanelText();
+  html += '<div class="glass-card" style="padding:12px;background:var(--bg-body);font-family:monospace;font-size:10.5px;white-space:pre-wrap;word-break:break-word;max-height:50vh;overflow-y:auto;">' + esc(reportText) + '</div>';
+
   html += '</div></div>';
   return html;
 }
@@ -29722,7 +29835,17 @@ function renderAdminAccountDetail(accountId) {
   }
   html += '</div>';
 
-  // ---- Diagnostic notifications push (réservé Groupe 1) ----
+  // ---- Mode Test à distance — visible uniquement dans SON profil une fois activé ----
+  html += '<div class="glass-card" style="padding:14px;margin-top:10px;background:' + (a.testModeEnabled ? 'rgba(46,158,79,0.08)' : 'transparent') + ';">';
+  html += '<div style="font-weight:800;font-size:13.5px;margin-bottom:6px;"><i class="fa-solid fa-flask"></i> Mode Test à distance</div>';
+  html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;">Une fois activé, un onglet "Test" apparaît dans le profil de cette personne — elle peut voir l\'état complet de son app et te l\'envoyer en un clic, sans que tu aies besoin de deviner ce qu\'elle voit.</div>';
+  if (a.testModeEnabled) {
+    html += '<div style="font-size:12px;color:var(--success);margin-bottom:8px;"><i class="fa-solid fa-circle-check"></i> Activé — visible dans son profil actuellement.</div>';
+    html += '<button class="btn-secondary" style="width:100%;" data-action="toggle-user-test-mode" data-value="' + a.id + '">Désactiver le mode Test</button>';
+  } else {
+    html += '<button class="btn-primary" style="width:100%;" data-action="toggle-user-test-mode" data-value="' + a.id + '">Activer le mode Test pour ce compte</button>';
+  }
+  html += '</div>';
   if (state.adminIsOwner && !state.adminCountryScope) {
     var accountSubs = (state.pushSubscriptions || []).filter(function(s) { return s.accountId === a.id; });
     html += '<div class="glass-card" style="padding:14px;margin-top:10px;">';
@@ -33295,6 +33418,8 @@ root.addEventListener("click", function(e) {
     case "delete-address": deleteAddress(value); break;
     case "close-address-modal": closeAddressModal(); break;
     case "open-profile-info": state.showProfileInfoModal = true; render(); break;
+    case "open-user-test-panel": state.showUserTestPanel = true; render(); break;
+    case "close-user-test-panel": state.showUserTestPanel = false; render(); break;
     case "open-history": state.showHistoryModal = true; state.historyTab = "achats"; render(); break;
     case "close-history": state.showHistoryModal = false; render(); break;
     case "set-history-tab": state.historyTab = value; render(); break;
@@ -34591,6 +34716,17 @@ root.addEventListener("click", function(e) {
       scrollToAddressSection();
       break;
     }
+    case "toggle-user-test-mode": {
+      var accTM = null;
+      for (var tmi = 0; tmi < state.accounts.length; tmi++) { if (state.accounts[tmi].id === value) { accTM = state.accounts[tmi]; break; } }
+      if (!accTM) break;
+      accTM.testModeEnabled = !accTM.testModeEnabled;
+      save();
+      saveDoc("accounts", accTM);
+      showToast(accTM.testModeEnabled ? "✅ Mode Test activé pour ce compte." : "Mode Test désactivé.");
+      render();
+      break;
+    }
     case "set-quartier-mode": {
       var isProcheMode = (value === "proche");
       var qmObj = null, qmQuartierField = "quartier", qmProcheField = "communeProche";
@@ -34669,6 +34805,12 @@ root.addEventListener("click", function(e) {
       save();
       showToast(state.debugLoggingEnabled ? "Capture des erreurs activée." : "Capture des erreurs désactivée.");
       render();
+      break;
+    }
+    case "copy-user-test-panel": {
+      copyTextToClipboard(buildUserTestPanelText()).then(function(ok) {
+        showToast(ok ? "✅ Copié — colle-le dans la conversation pour l'envoyer." : "❌ Impossible de copier, réessaie.");
+      });
       break;
     }
     case "copy-debug-log": {
