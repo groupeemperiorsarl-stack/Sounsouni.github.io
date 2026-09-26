@@ -19438,7 +19438,7 @@ function renderPublicDiagnosticPage() {
     "Articles visibles au marché : " + visible,
     "Statuts : " + JSON.stringify(modCounts),
     "Comptes en mémoire : " + (state.accounts || []).length,
-    "Chargement ciblé : " + (window._personalSyncStatus ? ("commandes=" + window._personalSyncStatus.orders + ", notifications=" + window._personalSyncStatus.notifications + ", conversations=" + window._personalSyncStatus.conversations + (window._personalSyncStatus.full ? " (accès complet)" : " (personnel)")) : "pas encore effectué"),
+    "Chargement ciblé : " + (window._personalSyncStatus ? ("commandes=" + window._personalSyncStatus.orders + ", notifications=" + window._personalSyncStatus.notifications + ", conversations=" + window._personalSyncStatus.conversations + (window._personalSyncStatus.full ? " (accès complet)" : " (personnel)") + " — via " + (window._personalSyncStatus.via || "?") + (window._personalSyncStatus.fallback ? " [repli : " + window._personalSyncStatus.fallback + "]" : "")) : "pas encore effectué"),
     "Catégorie : " + state.category + " · Recherche : \"" + (state.search || "") + "\"",
     "Filtre boutique : " + (state.shopFilterSellerId || "aucun") + " · Filtre secteur : " + (state.sectorFilter || "aucun")
   ];
@@ -39434,35 +39434,71 @@ function fetchAllPages(buildQuery) {
   return page(0, []);
 }
 
+// Requête préparée mais pas encore lancée : elle ne part que si on en a
+// vraiment besoin (repli quand la fonction sécurisée n'est pas disponible).
+function lazyPages(build) { return function() { return fetchAllPages(build); }; }
 var _personalSyncSeq = 0;
 function syncPersonalCollections() {
   if (!FIREBASE_ENABLED || typeof sb === "undefined" || !sb) return;
   var seq = ++_personalSyncSeq;
+  window._personalSyncFallbackReason = null;
   var ids = myIdentityIds();
   window._personalSyncIdentity = personalSyncIdentityKey();
   var queries = [];
   function q() { return sb.from("app_data").select("*"); }
   if (isFullDataViewer()) {
-    queries.push(fetchAllPages(function() { return q().in("collection", PERSONAL_KEYS); }));
+    queries.push(lazyPages(function() { return q().in("collection", PERSONAL_KEYS); }));
   } else if (ids.length > 0) {
-    queries.push(fetchAllPages(function() { return q().eq("collection", "notifications").in("data->>userId", ids); }));
-    queries.push(fetchAllPages(function() { return q().eq("collection", "conversations").in("data->>buyerId", ids); }));
-    queries.push(fetchAllPages(function() { return q().eq("collection", "conversations").in("data->>sellerId", ids); }));
+    queries.push(lazyPages(function() { return q().eq("collection", "notifications").in("data->>userId", ids); }));
+    queries.push(lazyPages(function() { return q().eq("collection", "conversations").in("data->>buyerId", ids); }));
+    queries.push(lazyPages(function() { return q().eq("collection", "conversations").in("data->>sellerId", ids); }));
     if (state.profile) {
-      queries.push(fetchAllPages(function() { return q().eq("collection", "orders").in("data->>buyerId", ids); }));
-      queries.push(fetchAllPages(function() { return q().eq("collection", "orders").in("data->>livreurId", ids); }));
-      queries.push(fetchAllPages(function() { return q().eq("collection", "orders").in("data->>relaisShopId", ids); }));
+      queries.push(lazyPages(function() { return q().eq("collection", "orders").in("data->>buyerId", ids); }));
+      queries.push(lazyPages(function() { return q().eq("collection", "orders").in("data->>livreurId", ids); }));
+      queries.push(lazyPages(function() { return q().eq("collection", "orders").in("data->>relaisShopId", ids); }));
       ids.forEach(function(id) {
-        queries.push(fetchAllPages(function() { return q().eq("collection", "orders").contains("data", { items: [{ sellerId: id }] }); }));
+        queries.push(lazyPages(function() { return q().eq("collection", "orders").contains("data", { items: [{ sellerId: id }] }); }));
       });
       if (state.profile.role === "livreur") {
-        queries.push(fetchAllPages(function() {
+        queries.push(lazyPages(function() {
           return q().eq("collection", "orders").not("data->>status", "in", "(" + COURIER_INACTIVE_STATUSES.map(function(x) { return '"' + x + '"'; }).join(",") + ")");
         }));
       }
     }
   }
-  Promise.all(queries).then(function(results) {
+  // Étape 3a : pour un compte connecté (hors Admin), on passe d'abord par la
+  // fonction serveur sécurisée "personal-data" (identité vérifiée par le
+  // jeton de session). Tant qu'elle n'est pas déployée (ou en cas de
+  // souci), on garde le chargement direct ci-dessus : rien ne casse.
+  var useSecure = !isFullDataViewer() && state.profile && state.sessionToken;
+  function runDirect(reason) {
+    if (reason) window._personalSyncFallbackReason = reason;
+    Promise.all(queries.map(function(run) { return run(); })).then(function(results) { applyPersonalResults(results, seq, "direct"); });
+  }
+  if (useSecure) {
+    fetch(supabaseConfig.url + "/functions/v1/personal-data", { method: "POST", headers: authHeaders(), body: "{}" })
+      .then(function(r) {
+        if (r.status === 404) return { success: false, error: "fonction non déployée" };
+        return r.json();
+      })
+      .then(function(res) {
+        if (res && res.success) {
+          var rows = [];
+          ["orders", "notifications", "conversations"].forEach(function(k) {
+            (res[k] || []).forEach(function(d) { rows.push({ collection: k, data: d }); });
+          });
+          applyPersonalResults([{ error: null, data: rows }], seq, "serveur sécurisé");
+        } else {
+          runDirect((res && res.error) || "réponse inattendue");
+        }
+      })
+      .catch(function(err) { runDirect("réseau : " + (err && err.message)); });
+  } else {
+    runDirect(null);
+  }
+}
+
+function applyPersonalResults(results, seq, via) {
     if (seq !== _personalSyncSeq) return; // une synchro plus récente a pris le relais
     var failed = results.some(function(r) { return r.error; });
     if (failed) {
@@ -39491,10 +39527,9 @@ function syncPersonalCollections() {
       state[key] = Object.keys(fresh).map(function(k) { return fresh[k]; });
     });
     state.notifications.sort(function(a, b) { return (b.time || 0) - (a.time || 0); });
-    window._personalSyncStatus = { at: Date.now(), orders: state.orders.length, notifications: state.notifications.length, conversations: state.conversations.length, full: isFullDataViewer() };
+    window._personalSyncStatus = { at: Date.now(), orders: state.orders.length, notifications: state.notifications.length, conversations: state.conversations.length, full: isFullDataViewer(), via: via, fallback: via === "direct" ? (window._personalSyncFallbackReason || null) : null };
     save();
     render();
-  });
 }
 function personalSyncIdentityKey() {
   return (state.profile ? state.profile.id + ":" + (state.profile.role || "") : "visiteur") + ":" + (isFullDataViewer() ? "tout" : "perso");
