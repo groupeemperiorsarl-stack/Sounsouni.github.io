@@ -19438,6 +19438,7 @@ function renderPublicDiagnosticPage() {
     "Articles visibles au marché : " + visible,
     "Statuts : " + JSON.stringify(modCounts),
     "Comptes en mémoire : " + (state.accounts || []).length,
+    "Erreurs au démarrage : " + ((window._bootStepErrors && window._bootStepErrors.length) ? window._bootStepErrors.join(" | ") : "aucune"),
     "Chargement ciblé : " + (window._personalSyncStatus ? ("commandes=" + window._personalSyncStatus.orders + ", notifications=" + window._personalSyncStatus.notifications + ", conversations=" + window._personalSyncStatus.conversations + (window._personalSyncStatus.full ? " (accès complet)" : " (personnel)") + " — via " + (window._personalSyncStatus.via || "?") + (window._personalSyncStatus.fallback ? " [repli : " + window._personalSyncStatus.fallback + "]" : "")) : "pas encore effectué"),
     "Catégorie : " + state.category + " · Recherche : \"" + (state.search || "") + "\"",
     "Filtre boutique : " + (state.shopFilterSellerId || "aucun") + " · Filtre secteur : " + (state.sectorFilter || "aucun")
@@ -39799,30 +39800,52 @@ function trySplashFinish() {
   if (_splashFinished) return;
   if (_splashMinTimeDone && _splashAppDataReady) {
     _splashFinished = true;
+    // Chaque étape ci-dessous est isolée : si l'une plante, on l'enregistre
+    // et on continue — l'écran DOIT s'afficher quoi qu'il arrive. Avant, une
+    // seule erreur ici laissait le logo de chargement à l'écran pour toujours.
+    var bootStep = function(name, fn) {
+      try { fn(); } catch (err) {
+        window._bootStepErrors = window._bootStepErrors || [];
+        window._bootStepErrors.push(name + " : " + (err && err.message ? err.message : String(err)));
+        console.error("Étape de démarrage en erreur (" + name + ") :", err);
+        try { pushDebugLog("error", "Étape de démarrage en erreur : " + name, err && err.stack ? String(err.stack).slice(0, 500) : String(err)); } catch (e2) {}
+      }
+    };
     // Pour les comptes déjà existants (créés avant que le son/la
     // notification n'existent) — pas seulement à l'inscription — sinon
     // ceux-là ne verraient jamais la demande d'autorisation.
-    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications) {
-      // App Capacitor — Firebase natif, prioritaire sur le Web Push.
-      // silent=true : c'est un appel automatique de fond, pas une action
-      // demandée par l'utilisateur — aucun toast ne doit apparaître ici.
-      subscribeToFcmIfCapacitor(true);
-    } else if (state.profile && "Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission().then(function(permission) {
-        if (permission === "granted") subscribeToPush();
-      });
-    } else if (state.profile && "Notification" in window && Notification.permission === "granted") {
-      // Déjà autorisé (ex: mise à jour de l'app) — on s'assure que
-      // l'abonnement push existe bien aussi, pas seulement la permission.
-      subscribeToPush();
-    }
-    refreshExchangeRatesIfStale();
-    seedDefaultInternationalCities();
-    checkStalePickupOrders();
-    checkPaymentReturn();
-    render();
+    bootStep("notifications", function() {
+      if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications) {
+        // App Capacitor — Firebase natif, prioritaire sur le Web Push.
+        // silent=true : c'est un appel automatique de fond, pas une action
+        // demandée par l'utilisateur — aucun toast ne doit apparaître ici.
+        subscribeToFcmIfCapacitor(true);
+      } else if (state.profile && "Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission().then(function(permission) {
+          if (permission === "granted") subscribeToPush();
+        });
+      } else if (state.profile && "Notification" in window && Notification.permission === "granted") {
+        // Déjà autorisé (ex: mise à jour de l'app) — on s'assure que
+        // l'abonnement push existe bien aussi, pas seulement la permission.
+        subscribeToPush();
+      }
+    });
+    bootStep("taux de change", refreshExchangeRatesIfStale);
+    bootStep("villes internationales", seedDefaultInternationalCities);
+    bootStep("colis en point de retrait", checkStalePickupOrders);
+    bootStep("retour de paiement", checkPaymentReturn);
+    bootStep("affichage", render);
   }
 }
+
+// Filet de sécurité : si, pour une raison imprévue, le logo de chargement
+// est toujours affiché 15 secondes après le démarrage, on force l'affichage.
+setTimeout(function() {
+  if (!_splashFinished || document.getElementById("su-splash") || document.querySelector(".splash-screen")) {
+    if (!_splashFinished) { _splashMinTimeDone = true; _splashAppDataReady = true; bootDone = true; trySplashFinish(); }
+    else { try { render(); } catch (e) { console.error("Affichage forcé en erreur :", e); } }
+  }
+}, 15000);
 
 setTimeout(function() { _splashMinTimeDone = true; trySplashFinish(); }, 5500);
 
