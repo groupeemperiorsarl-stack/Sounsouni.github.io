@@ -9442,6 +9442,7 @@ const TRANSLATIONS = {
     guest_reason_checkout: "Pour passer votre commande et être livré(e), connectez-vous ou créez votre compte.",
     guest_cart_kept: "Votre panier sera conservé.",
     guest_back: "Retour aux articles",
+    guest_added_to_cart: "Ajouté au panier",
     addr_landmark_known: "Donner le nom d'un endroit près de chez vous très connu",
     addr_landmark_placeholder: "Ex : face à la mosquée",
     addr_exact_position: "Position exacte (optionnel — précise le tarif)",
@@ -11142,6 +11143,7 @@ const TRANSLATIONS = {
     guest_reason_checkout: "To place your order and get it delivered, sign in or create your account.",
     guest_cart_kept: "Your cart will be kept.",
     guest_back: "Back to products",
+    guest_added_to_cart: "Added to cart",
     addr_landmark_known: "Give the name of a well-known place near you",
     addr_landmark_placeholder: "e.g. facing the mosque",
     addr_exact_position: "Exact location (optional — refines the price)",
@@ -12842,6 +12844,7 @@ const TRANSLATIONS = {
     guest_reason_checkout: "अपना ऑर्डर देने और डिलीवरी पाने के लिए, साइन इन करें या अपना खाता बनाएं।",
     guest_cart_kept: "आपकी कार्ट सुरक्षित रहेगी।",
     guest_back: "उत्पादों पर वापस जाएं",
+    guest_added_to_cart: "कार्ट में जोड़ा गया",
     addr_landmark_known: "अपने पास की किसी प्रसिद्ध जगह का नाम दें",
     addr_landmark_placeholder: "उदा: मस्जिद के सामने",
     addr_exact_position: "सटीक स्थान (वैकल्पिक — कीमत को सटीक बनाता है)",
@@ -19175,7 +19178,9 @@ var GUEST_ALLOWED_ACTIONS = {
 function renderGuestHeader() {
   var count = cartCount();
   var html = '<header style="position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:10px;padding:10px 14px;padding-top:calc(10px + env(safe-area-inset-top, 0px));background:var(--bg-card, #fff);border-bottom:1px solid var(--border-color);">';
-  html += '<button type="button" data-action="go" data-value="market" style="all:unset;cursor:pointer;font-weight:900;font-size:18px;letter-spacing:.5px;color:var(--accent);flex:1;">SOUNSOUNI</button>';
+  html += '<button type="button" data-action="go" data-value="market" style="all:unset;cursor:pointer;display:flex;align-items:center;gap:8px;flex:1;">';
+  html += '<img src="' + SOUNSOUNI_HEADER_ICON + '" style="width:32px;height:32px;border-radius:8px;object-fit:cover;" alt="Sounsouni" />';
+  html += '<span style="font-weight:900;font-size:18px;letter-spacing:.5px;color:var(--accent);">SOUNSOUNI</span></button>';
   html += '<button type="button" data-action="go" data-value="cart" style="position:relative;background:none;border:none;padding:6px;color:var(--text-primary, #222);cursor:pointer;" aria-label="Panier">' + renderCartIcon(20) + (count > 0 ? '<span class="nav-badge" style="position:absolute;top:-4px;right:-6px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;border-radius:999px;padding:1px 6px;">' + count + '</span>' : '') + '</button>';
   html += '<button type="button" class="btn-primary" style="width:auto;padding:8px 14px;font-size:12.5px;margin:0;" data-action="guest-open-auth"><i class="fa-solid fa-user"></i> ' + t("guest_login_btn") + '</button>';
   html += '</header>';
@@ -19211,6 +19216,7 @@ function renderGuestShell() {
   if (state.showFilterPanel) html += renderFilterPanel();
   if (state.lightboxOpen) html += renderLightbox();
   if (state.showGuestAuthPrompt) html += renderGuestAuthPrompt();
+  if (state.toastMsg) html += '<div class="toast">' + esc(state.toastMsg) + '</div>';
   return html;
 }
 
@@ -19494,7 +19500,17 @@ function interleaveDiscovery(sortedIds, allIds, discoveryRatio) {
 
 function getRecommendations(limit) {
   limit = limit || 6;
-  if (!state.profile) return [];
+  if (!state.profile) {
+    // Visiteur (mode visiteur du site) : pas d'historique personnel, donc
+    // on recommande les articles les plus populaires du moment (ventes et
+    // vues des 30 derniers jours), puis les plus récents.
+    var sinceGuest = Date.now() - getTrendingWindowMs();
+    var guestPool = state.products.filter(function(p) { return !isProductHiddenFromPublic(p) && p.stock !== 0; });
+    return guestPool.map(function(p) {
+      return { p: p, s: getProductRecentSalesCount(p.id, sinceGuest) * 3 + getProductRecentViewCount(p.id, sinceGuest) };
+    }).sort(function(a, b) { return (b.s - a.s) || ((b.p.createdAt || 0) - (a.p.createdAt || 0)); })
+      .slice(0, limit).map(function(x) { return x.p; });
+  }
   var scores = computeRelevanceScores(state.profile);
   // Table de correspondance id -> produit, construite une seule fois (au
   // lieu de reparcourir tout state.products pour retrouver CHAQUE produit
@@ -33200,8 +33216,14 @@ root.addEventListener("click", function(e) {
       return;
     }
     if (action === "add-cart" || action === "quick-add-cart") {
+      var guestCartBefore = cartCount();
       if (action === "add-cart") addToCart(value, state.selectedQty, state.selectedColor, state.selectedSize);
       else addToCart(value, 1, null, null);
+      if (cartCount() > guestCartBefore) {
+        try { flyToCart(btn); } catch (e) {}
+        showToast("✅ " + t("guest_added_to_cart"));
+      }
+      render();
       return;
     }
     if (action === "buy-now" || action === "go-checkout-from-cart") {
