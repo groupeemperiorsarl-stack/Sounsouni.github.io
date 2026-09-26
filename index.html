@@ -8116,6 +8116,10 @@ function defaultState() {
     showProfileInfoModal: false,
     showUserTestPanel: false,
     reportProductId: null,
+    guestAuthRequested: false,
+    guestPendingCheckout: false,
+    showGuestAuthPrompt: false,
+    guestAuthReason: "",
     showHistoryModal: false,
     historyTab: "achats",
     showFindAccountModal: false,
@@ -8410,6 +8414,10 @@ function mergeWithDefaults(saved) {
   if (!Array.isArray(merged.productDraft.images)) merged.productDraft.images = [];
   if (!Array.isArray(merged.products) || merged.products.length === 0) merged.products = d.products;
   if (!Array.isArray(merged.cart)) merged.cart = [];
+  // Une demande de connexion "visiteur" ne doit jamais survivre à un
+  // rechargement : on revient toujours aux articles.
+  merged.guestAuthRequested = false;
+  merged.showGuestAuthPrompt = false;
   if (!Array.isArray(merged.orders)) merged.orders = [];
   if (!Array.isArray(merged.notifications)) merged.notifications = [];
   if (!Array.isArray(merged.accounts)) merged.accounts = [];
@@ -9423,6 +9431,15 @@ const TRANSLATIONS = {
     addr_commune: "Commune *",
     addr_quartier: "Quartier *",
     addr_quartier_proche_de: "Quartier proche de",
+    guest_welcome: "Bienvenue sur Sounsouni",
+    guest_login_btn: "Se connecter",
+    guest_prompt_title: "Connectez-vous pour continuer",
+    guest_prompt_cta: "Se connecter ou créer un compte",
+    guest_continue: "Continuer mes achats",
+    guest_reason_default: "Cette action nécessite un compte Sounsouni.",
+    guest_reason_checkout: "Pour passer votre commande et être livré(e), connectez-vous ou créez votre compte.",
+    guest_cart_kept: "Votre panier sera conservé.",
+    guest_back: "Retour aux articles",
     addr_landmark_known: "Donner le nom d'un endroit près de chez vous très connu",
     addr_landmark_placeholder: "Ex : face à la mosquée",
     addr_exact_position: "Position exacte (optionnel — précise le tarif)",
@@ -11114,6 +11131,15 @@ const TRANSLATIONS = {
     addr_commune: "Commune *",
     addr_quartier: "Neighborhood *",
     addr_quartier_proche_de: "Area near",
+    guest_welcome: "Welcome to Sounsouni",
+    guest_login_btn: "Sign in",
+    guest_prompt_title: "Sign in to continue",
+    guest_prompt_cta: "Sign in or create an account",
+    guest_continue: "Continue shopping",
+    guest_reason_default: "This action requires a Sounsouni account.",
+    guest_reason_checkout: "To place your order and get it delivered, sign in or create your account.",
+    guest_cart_kept: "Your cart will be kept.",
+    guest_back: "Back to products",
     addr_landmark_known: "Give the name of a well-known place near you",
     addr_landmark_placeholder: "e.g. facing the mosque",
     addr_exact_position: "Exact location (optional — refines the price)",
@@ -12805,6 +12831,15 @@ const TRANSLATIONS = {
     addr_commune: "कम्यून *",
     addr_quartier: "मोहल्ला *",
     addr_quartier_proche_de: "के पास का इलाका",
+    guest_welcome: "Sounsouni में आपका स्वागत है",
+    guest_login_btn: "साइन इन करें",
+    guest_prompt_title: "जारी रखने के लिए साइन इन करें",
+    guest_prompt_cta: "साइन इन करें या खाता बनाएं",
+    guest_continue: "खरीदारी जारी रखें",
+    guest_reason_default: "इस कार्य के लिए Sounsouni खाते की आवश्यकता है।",
+    guest_reason_checkout: "अपना ऑर्डर देने और डिलीवरी पाने के लिए, साइन इन करें या अपना खाता बनाएं।",
+    guest_cart_kept: "आपकी कार्ट सुरक्षित रहेगी।",
+    guest_back: "उत्पादों पर वापस जाएं",
     addr_landmark_known: "अपने पास की किसी प्रसिद्ध जगह का नाम दें",
     addr_landmark_placeholder: "उदा: मस्जिद के सामने",
     addr_exact_position: "सटीक स्थान (वैकल्पिक — कीमत को सटीक बनाता है)",
@@ -15297,7 +15332,7 @@ function addToCart(productId, qty, color, size) {
   var lineId = cartLineId(productId, color, size);
   var existing = null;
   for (var j = 0; j < state.cart.length; j++) {
-    if (state.cart[j].lineId === lineId && state.cart[j].buyerId === state.profile.id) {
+    if (state.cart[j].lineId === lineId && state.cart[j].buyerId === cartOwnerId()) {
       existing = state.cart[j];
       break;
     }
@@ -15305,7 +15340,7 @@ function addToCart(productId, qty, color, size) {
   if (existing) {
     existing.qty = Math.min(existing.qty + quantity, product.stock);
   } else {
-    state.cart.push({ lineId: lineId, buyerId: state.profile.id, productId: productId, qty: Math.min(quantity, product.stock), color: color || null, size: size || null });
+    state.cart.push({ lineId: lineId, buyerId: cartOwnerId(), productId: productId, qty: Math.min(quantity, product.stock), color: color || null, size: size || null });
   }
   save();
   showToast(t("dt_added_to_cart") + product.name);
@@ -15318,7 +15353,7 @@ function addToCart(productId, qty, color, size) {
 function setCartQty(lineId, qty) {
   var item = null;
   for (var i = 0; i < state.cart.length; i++) {
-    if (state.cart[i].lineId === lineId && state.cart[i].buyerId === state.profile.id) {
+    if (state.cart[i].lineId === lineId && state.cart[i].buyerId === cartOwnerId()) {
       item = state.cart[i];
       break;
     }
@@ -15332,7 +15367,7 @@ function setCartQty(lineId, qty) {
     }
   }
   if (qty <= 0) {
-    state.cart = state.cart.filter(function(it) { return it.lineId !== lineId || it.buyerId !== state.profile.id; });
+    state.cart = state.cart.filter(function(it) { return it.lineId !== lineId || it.buyerId !== cartOwnerId(); });
   } else if (product && product.sellerType === "international" && product.moq && qty < Number(product.moq)) {
     // On ne bloque pas silencieusement : on remonte directement au seuil
     // minimum plutôt que de laisser une quantité invalide dans le panier.
@@ -15349,7 +15384,7 @@ function cartDetails() {
   var result = [];
   for (var i = 0; i < state.cart.length; i++) {
     var item = state.cart[i];
-    if (item.buyerId !== state.profile.id) continue;
+    if (item.buyerId !== cartOwnerId()) continue;
     var product = null;
     for (var j = 0; j < state.products.length; j++) {
       if (state.products[j].id === item.productId) {
@@ -15376,7 +15411,7 @@ function cartTotal() {
 function cartCount() {
   var count = 0;
   for (var i = 0; i < state.cart.length; i++) {
-    if (state.cart[i].buyerId !== state.profile.id) continue;
+    if (state.cart[i].buyerId !== cartOwnerId()) continue;
     var exists = false;
     for (var j = 0; j < state.products.length; j++) {
       if (state.products[j].id === state.cart[i].productId) { exists = true; break; }
@@ -19102,6 +19137,81 @@ function getProductSalesCount(productId) {
   return count;
 }
 
+// ---------- MODE VISITEUR (site web uniquement) ----------
+// Sur le site sounsouni.pro, un visiteur non connecté peut parcourir les
+// articles et remplir son panier sans compte — la connexion n'est demandée
+// qu'au moment de payer ou pour une action liée à un compte (favoris,
+// message au vendeur...). L'application installée (Capacitor) garde son
+// fonctionnement habituel : inscription dès le démarrage.
+function isNativeAppForGuest() {
+  return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+}
+function isGuestBrowsingMode() {
+  return !state.profile && !isNativeAppForGuest() && !state.guestAuthRequested;
+}
+// Propriétaire du panier : le compte connecté, ou "guest" pour un visiteur.
+// Les articles "guest" sont rattachés au compte dès la connexion.
+function cartOwnerId() {
+  return state.profile ? state.profile.id : "guest";
+}
+// Actions possibles sans compte : tout ce qui sert à regarder, chercher,
+// filtrer et remplir le panier. Toute autre action affiche l'invitation à
+// se connecter, pour qu'aucun écran prévu pour un compte connecté ne
+// s'ouvre avec un visiteur.
+var GUEST_ALLOWED_ACTIONS = {
+  "open-product": 1, "close-product": 1, "modal-qty": 1, "select-color": 1, "select-size": 1,
+  "set-active-image": 1, "open-lightbox": 1, "close-lightbox": 1, "lightbox-next": 1, "lightbox-prev": 1,
+  "download-lightbox-image": 1, "share-product": 1, "view-cart-from-product": 1, "view-seller-shop": 1,
+  "close-shop-page": 1, "cart-qty": 1, "remove-cart-item": 1, "continue-shopping": 1,
+  "toggle-filter-panel": 1, "close-filter-panel": 1, "apply-filter-panel": 1, "reset-market-filters": 1,
+  "set-category": 1, "set-market-sort": 1, "set-sector-filter": 1, "toggle-market-filter": 1,
+  "clear-category-filter": 1, "clear-sector-filter": 1, "clear-shop-filter": 1, "open-new-arrivals-all": 1,
+  "close-category-page": 1, "close-search-page": 1, "whatsapp-coming-soon": 1,
+  "guest-open-auth": 1, "guest-close-auth-prompt": 1
+};
+
+function renderGuestHeader() {
+  var count = cartCount();
+  var html = '<header style="position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:10px;padding:10px 14px;padding-top:calc(10px + env(safe-area-inset-top, 0px));background:var(--bg-card, #fff);border-bottom:1px solid var(--border-color);">';
+  html += '<button type="button" data-action="go" data-value="market" style="all:unset;cursor:pointer;font-weight:900;font-size:18px;letter-spacing:.5px;color:var(--accent);flex:1;">SOUNSOUNI</button>';
+  html += '<button type="button" data-action="go" data-value="cart" style="position:relative;background:none;border:none;padding:6px;color:var(--text-primary, #222);cursor:pointer;" aria-label="Panier">' + renderCartIcon(20) + (count > 0 ? '<span class="nav-badge" style="position:absolute;top:-4px;right:-6px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;border-radius:999px;padding:1px 6px;">' + count + '</span>' : '') + '</button>';
+  html += '<button type="button" class="btn-primary" style="width:auto;padding:8px 14px;font-size:12.5px;margin:0;" data-action="guest-open-auth"><i class="fa-solid fa-user"></i> ' + t("guest_login_btn") + '</button>';
+  html += '</header>';
+  return html;
+}
+
+function renderGuestAuthPrompt() {
+  var reason = t(state.guestAuthReason || "guest_reason_default");
+  var html = '<div class="modal-overlay" data-action="guest-close-auth-prompt">';
+  html += '<div class="modal-sheet" style="text-align:center;">';
+  html += '<button class="modal-close" data-action="guest-close-auth-prompt"><i class="fa-solid fa-xmark"></i></button>';
+  html += '<div style="font-size:38px;margin:6px 0 8px;"><i class="fa-solid fa-circle-user" style="color:var(--accent);"></i></div>';
+  html += '<div class="section-title" style="margin-bottom:6px;">' + t("guest_prompt_title") + '</div>';
+  html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:16px;">' + esc(reason) + (cartCount() > 0 ? ' ' + t("guest_cart_kept") : '') + '</div>';
+  html += '<button class="btn-primary" data-action="guest-open-auth"><i class="fa-solid fa-right-to-bracket"></i> ' + t("guest_prompt_cta") + '</button>';
+  html += '<button class="btn-secondary" style="margin-top:8px;" data-action="guest-close-auth-prompt">' + t("guest_continue") + '</button>';
+  html += '</div></div>';
+  return html;
+}
+
+function renderGuestShell() {
+  var allowedViews = ["market", "categoryPage", "searchPage", "shop", "cart"];
+  if (allowedViews.indexOf(state.view) === -1) state.view = "market";
+  var html = renderGuestHeader();
+  html += '<main>';
+  if (state.view === "market") html += renderMarket();
+  else if (state.view === "categoryPage") html += renderCategoryPage();
+  else if (state.view === "searchPage") html += renderSearchPage();
+  else if (state.view === "shop") html += renderShopPage();
+  else if (state.view === "cart") html += renderCart();
+  html += '</main>';
+  if (state.detailProductId) html += renderProductModal();
+  if (state.showFilterPanel) html += renderFilterPanel();
+  if (state.lightboxOpen) html += renderLightbox();
+  if (state.showGuestAuthPrompt) html += renderGuestAuthPrompt();
+  return html;
+}
+
 // ---------- MODÉRATION DES ARTICLES ----------
 // Un article "en attente" (signalé plusieurs fois, ou plus tard repéré par
 // le filtre automatique) ou "refusé" par l'Admin n'apparaît plus nulle part
@@ -20414,6 +20524,14 @@ function buildHTML() {
   }
   if (state.forcePreviewIntro) return renderOnboardingIntro();
   if (!state.profile) {
+    // Site web : le visiteur voit directement les articles (mode visiteur).
+    if (!isNativeAppForGuest() && !state.guestAuthRequested) return renderGuestShell();
+    // Visiteur du site qui a demandé à se connecter : directement le
+    // formulaire (sans choix de langue ni présentation), avec un bouton
+    // pour revenir aux articles.
+    if (!isNativeAppForGuest() && state.guestAuthRequested) {
+      return renderOnboarding() + '<button type="button" data-action="guest-back-to-browsing" style="position:fixed;top:calc(10px + env(safe-area-inset-top, 0px));left:10px;z-index:9999;background:rgba(255,255,255,0.95);border:1px solid var(--border-color);border-radius:999px;padding:7px 12px;font-size:12px;font-weight:700;color:var(--text-primary, #222);box-shadow:0 2px 8px rgba(0,0,0,0.12);"><i class="fa-solid fa-arrow-left"></i> ' + t("guest_back") + '</button>';
+    }
     // Choix explicite de la langue, une seule fois par appareil — avant
     // même la détection automatique basée sur la langue du téléphone.
     // localStorage("sounsouni_language") n'est écrit QUE par setLanguage(),
@@ -20424,6 +20542,20 @@ function buildHTML() {
     if (!languageAlreadyChosen && !state.forceSkipLanguagePicker) return renderLanguagePickerGate();
     if (!state.introSeen) return renderOnboardingIntro();
     return renderOnboarding();
+  }
+  // Juste après une connexion depuis le mode visiteur : le panier rempli
+  // sans compte est rattaché au compte, et si la personne voulait payer,
+  // elle arrive directement à l'étape de paiement.
+  if (state.guestAuthRequested || state.guestPendingCheckout || state.cart.some(function(it) { return it.buyerId === "guest"; })) {
+    for (var gci = 0; gci < state.cart.length; gci++) {
+      if (state.cart[gci].buyerId === "guest") state.cart[gci].buyerId = state.profile.id;
+    }
+    var guestGoCheckout = state.guestPendingCheckout && state.profile.role === "acheteur" && cartCount() > 0;
+    state.guestAuthRequested = false;
+    state.guestPendingCheckout = false;
+    state.showGuestAuthPrompt = false;
+    if (guestGoCheckout) state.view = "checkout";
+    save();
   }
   if (state.view === "onboarding") return renderOnboarding();
   // Le centre de contrôle admin a sa propre barre supérieure dédiée
@@ -24523,10 +24655,13 @@ function renderHeader() {
 // recherche elle-meme (meme id) reapparait aussi en haut de la page de
 // resultats, pour ne jamais perdre le focus en tapant.
 function renderMarketTopSection(compact) {
-  if (state.profile.role !== "acheteur" && state.view !== "market") return '';
+  if (state.profile && state.profile.role !== "acheteur" && state.view !== "market") return '';
   var html = '<div class="gems-market-top-card' + (compact ? ' gems-market-top-card-compact' : '') + '">';
 
-  if (!compact) {
+  if (!compact && !state.profile) {
+    html += '<div class="gems-greeting-row"><div><div class="gems-greeting-name">' + t("guest_welcome") + ' \ud83d\udc4b</div>';
+    html += '<div class="gems-greeting-sub">' + t("market_search_prompt") + '</div></div></div>';
+  } else if (!compact) {
     html += '<div class="gems-greeting-row">';
     if (state.profile.avatarPhoto) {
       html += '<img loading="lazy" class="gems-greeting-avatar" src="' + state.profile.avatarPhoto + '" alt="" />';
@@ -32972,6 +33107,56 @@ root.addEventListener("click", function(e) {
   var value = btn.dataset.value;
   var _viewBeforeAction = state.view;
 
+  // Mode visiteur (site web) : seules les actions de consultation et de
+  // panier passent ; le reste invite à se connecter.
+  if (action === "guest-back-to-browsing") {
+    state.guestAuthRequested = false;
+    state.view = "market";
+    render();
+    return;
+  }
+  if (isGuestBrowsingMode()) {
+    if (action === "guest-open-auth") {
+      state.showGuestAuthPrompt = false;
+      state.detailProductId = null;
+      state.guestAuthRequested = true;
+      render();
+      return;
+    }
+    if (action === "guest-close-auth-prompt") {
+      state.showGuestAuthPrompt = false;
+      state.guestPendingCheckout = false;
+      render();
+      return;
+    }
+    if (action === "go") {
+      state.view = (value === "cart") ? "cart" : "market";
+      state.detailProductId = null;
+      render();
+      return;
+    }
+    if (action === "add-cart" || action === "quick-add-cart") {
+      if (action === "add-cart") addToCart(value, state.selectedQty, state.selectedColor, state.selectedSize);
+      else addToCart(value, 1, null, null);
+      return;
+    }
+    if (action === "buy-now" || action === "go-checkout-from-cart") {
+      if (action === "buy-now") addToCart(value, state.selectedQty, state.selectedColor, state.selectedSize);
+      state.guestPendingCheckout = true;
+      state.guestAuthReason = "guest_reason_checkout";
+      state.detailProductId = null;
+      state.showGuestAuthPrompt = true;
+      render();
+      return;
+    }
+    if (!GUEST_ALLOWED_ACTIONS[action]) {
+      state.guestAuthReason = "guest_reason_default";
+      state.showGuestAuthPrompt = true;
+      render();
+      return;
+    }
+  }
+
   // Garde-fou générique pour TOUTES les fenêtres (actuelles et futures) :
   // si le data-action trouvé appartient au fond de l'overlay lui-même
   // (parce que l'élément réellement cliqué — un champ de saisie, un
@@ -35608,7 +35793,7 @@ root.addEventListener("click", function(e) {
     case "cart-qty": {
       var item = null;
       for (var ci = 0; ci < state.cart.length; ci++) {
-        if (state.cart[ci].lineId === value && state.cart[ci].buyerId === state.profile.id) { item = state.cart[ci]; break; }
+        if (state.cart[ci].lineId === value && state.cart[ci].buyerId === cartOwnerId()) { item = state.cart[ci]; break; }
       }
       var current = item ? item.qty : 0;
       setCartQty(value, current + Number(btn.dataset.delta));
