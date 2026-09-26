@@ -5235,7 +5235,7 @@ function runBackgroundResync() {
   var PAGE_SIZE = 900;
 
   function fetchAllResyncPages(offset, accumulated) {
-    var pageQuery = sb.from("app_data").select("*").neq("collection", "products").range(offset, offset + PAGE_SIZE - 1);
+    var pageQuery = sb.from("app_data").select("*").not("collection", "in", "(products,orders,notifications,conversations)").range(offset, offset + PAGE_SIZE - 1);
     if (!needsFullSync) pageQuery = pageQuery.gt("updated_at", lastSyncAt);
     return pageQuery.then(function(res) {
       if (res.error) return res;
@@ -5257,7 +5257,7 @@ function runBackgroundResync() {
         });
         // Même règle qu'au démarrage : les articles ne sont pas dans cette
         // requête, on ne remplace donc jamais leur liste par du vide.
-        SHARED_KEYS.forEach(function(name) { if (name === "products") return; state[name] = byCollection[name]; });
+        SHARED_KEYS.forEach(function(name) { if (name === "products" || PERSONAL_KEYS.indexOf(name) !== -1) return; state[name] = byCollection[name]; });
       } else {
         res.data.forEach(function(row) {
           if (SHARED_KEYS.indexOf(row.collection) === -1) return;
@@ -5267,6 +5267,7 @@ function runBackgroundResync() {
         });
       }
       localStorage.setItem(LAST_SYNC_KEY, computeNextSyncWatermark(res.data, lastSyncAt));
+        syncPersonalCollections();
       refreshProfileFromAccounts();
       for (var oi = 0; oi < state.orders.length; oi++) {
         if (!Array.isArray(state.orders[oi].items)) state.orders[oi].items = [];
@@ -19437,6 +19438,7 @@ function renderPublicDiagnosticPage() {
     "Articles visibles au marché : " + visible,
     "Statuts : " + JSON.stringify(modCounts),
     "Comptes en mémoire : " + (state.accounts || []).length,
+    "Chargement ciblé : " + (window._personalSyncStatus ? ("commandes=" + window._personalSyncStatus.orders + ", notifications=" + window._personalSyncStatus.notifications + ", conversations=" + window._personalSyncStatus.conversations + (window._personalSyncStatus.full ? " (accès complet)" : " (personnel)")) : "pas encore effectué"),
     "Catégorie : " + state.category + " · Recherche : \"" + (state.search || "") + "\"",
     "Filtre boutique : " + (state.shopFilterSellerId || "aucun") + " · Filtre secteur : " + (state.sectorFilter || "aucun")
   ];
@@ -20512,6 +20514,10 @@ function setupMarketInfiniteScroll() {
 
 function render() {
   window._renderTick = (window._renderTick || 0) + 1;
+  if (window._personalSyncIdentity !== undefined && typeof bootDone !== "undefined" && bootDone && window._personalSyncIdentity !== personalSyncIdentityKey()) {
+    window._personalSyncIdentity = personalSyncIdentityKey();
+    setTimeout(syncPersonalCollections, 0);
+  }
   if (window._apiModeActive) return; // réponse JSON déjà envoyée, ne rien redessiner par-dessus
   // Nouvelle disposition à chaque fois qu'on REVIENT sur le marché (pas à
   // chaque rendu à l'intérieur — sinon un simple ajout aux favoris
@@ -39371,6 +39377,129 @@ function maybeSignalBootReady() {
   }
 }
 
+// ---------- CHARGEMENT CIBLÉ (commandes, notifications, conversations) ----------
+// Avant : chaque téléphone téléchargeait les commandes, notifications et
+// conversations de TOUTE la plateforme. Désormais, chacun ne charge que ce
+// qui le concerne ; l'Admin et les agents de sourcing gardent tout.
+var PERSONAL_KEYS = ["orders", "notifications", "conversations"];
+// Statuts où une commande est encore "en cours" pour les livreurs (ils
+// voient celles qui sont disponibles, en plus des leurs).
+var COURIER_INACTIVE_STATUSES = ["Annulée", "Non livrable", "Refusée au retrait", "Livrée", "En boutique"];
+
+function isFullDataViewer() {
+  if (state.adminUnlocked) return true;
+  var p = state.profile;
+  return !!(p && (p.role === "agent_sourcing" || p.isSourcingAgent));
+}
+// Tous les comptes de ce téléphone : le compte connecté, les autres comptes
+// du même numéro, et ceux déjà utilisés sur cet appareil (pastilles de
+// notifications quand on change de compte).
+function myIdentityIds() {
+  var ids = {};
+  if (state.profile && state.profile.id) {
+    ids[state.profile.id] = true;
+    var ph = state.profile.phone;
+    if (ph) (state.accounts || []).forEach(function(a) { if (a.phone === ph) ids[a.id] = true; });
+  }
+  (state.deviceAccountIds || []).forEach(function(id) { if (id) ids[id] = true; });
+  return Object.keys(ids);
+}
+function isPersonalRowForMe(collection, d) {
+  if (isFullDataViewer()) return true;
+  if (!d) return false;
+  var ids = myIdentityIds();
+  var mine = function(x) { return !!x && ids.indexOf(x) !== -1; };
+  if (collection === "notifications") return mine(d.userId);
+  if (collection === "conversations") return mine(d.buyerId) || mine(d.sellerId);
+  if (collection === "orders") {
+    if (mine(d.buyerId) || mine(d.livreurId) || mine(d.relaisShopId)) return true;
+    if ((d.items || []).some(function(it) { return mine(it.sellerId); })) return true;
+    if ((d.sellerIds || []).some(mine)) return true;
+    if (state.profile && state.profile.role === "livreur" && COURIER_INACTIVE_STATUSES.indexOf(d.status) === -1) return true;
+    return false;
+  }
+  return true;
+}
+
+function fetchAllPages(buildQuery) {
+  var PAGE = 900;
+  function page(offset, acc) {
+    return buildQuery().range(offset, offset + PAGE - 1).then(function(res) {
+      if (res.error) return { error: res.error, data: acc };
+      var all = acc.concat(res.data || []);
+      if (res.data && res.data.length === PAGE) return page(offset + PAGE, all);
+      return { error: null, data: all };
+    });
+  }
+  return page(0, []);
+}
+
+var _personalSyncSeq = 0;
+function syncPersonalCollections() {
+  if (!FIREBASE_ENABLED || typeof sb === "undefined" || !sb) return;
+  var seq = ++_personalSyncSeq;
+  var ids = myIdentityIds();
+  window._personalSyncIdentity = personalSyncIdentityKey();
+  var queries = [];
+  function q() { return sb.from("app_data").select("*"); }
+  if (isFullDataViewer()) {
+    queries.push(fetchAllPages(function() { return q().in("collection", PERSONAL_KEYS); }));
+  } else if (ids.length > 0) {
+    queries.push(fetchAllPages(function() { return q().eq("collection", "notifications").in("data->>userId", ids); }));
+    queries.push(fetchAllPages(function() { return q().eq("collection", "conversations").in("data->>buyerId", ids); }));
+    queries.push(fetchAllPages(function() { return q().eq("collection", "conversations").in("data->>sellerId", ids); }));
+    if (state.profile) {
+      queries.push(fetchAllPages(function() { return q().eq("collection", "orders").in("data->>buyerId", ids); }));
+      queries.push(fetchAllPages(function() { return q().eq("collection", "orders").in("data->>livreurId", ids); }));
+      queries.push(fetchAllPages(function() { return q().eq("collection", "orders").in("data->>relaisShopId", ids); }));
+      ids.forEach(function(id) {
+        queries.push(fetchAllPages(function() { return q().eq("collection", "orders").contains("data", { items: [{ sellerId: id }] }); }));
+      });
+      if (state.profile.role === "livreur") {
+        queries.push(fetchAllPages(function() {
+          return q().eq("collection", "orders").not("data->>status", "in", "(" + COURIER_INACTIVE_STATUSES.map(function(x) { return '"' + x + '"'; }).join(",") + ")");
+        }));
+      }
+    }
+  }
+  Promise.all(queries).then(function(results) {
+    if (seq !== _personalSyncSeq) return; // une synchro plus récente a pris le relais
+    var failed = results.some(function(r) { return r.error; });
+    if (failed) {
+      var firstErr = results.filter(function(r) { return r.error; })[0].error;
+      console.error("Chargement ciblé : erreur", firstErr);
+      try { pushDebugLog("error", "Chargement ciblé des commandes/notifications échoué", firstErr.message || JSON.stringify(firstErr)); } catch (e) {}
+      return; // on garde ce qu'on avait plutôt que d'effacer
+    }
+    var byKey = { orders: {}, notifications: {}, conversations: {} };
+    results.forEach(function(r) {
+      (r.data || []).forEach(function(row) {
+        if (byKey[row.collection] && row.data && row.data.id) byKey[row.collection][row.data.id] = row.data;
+      });
+    });
+    // Commandes créées sur ce téléphone et pas encore confirmées par le
+    // serveur (file d'attente d'envoi) : on les garde.
+    var pendingIds = {};
+    (state.pendingSyncQueue || []).forEach(function(it) { if (it && it.data && it.data.id) pendingIds[it.data.id] = true; if (it && it.id) pendingIds[it.id] = true; });
+    PERSONAL_KEYS.forEach(function(key) {
+      var fresh = byKey[key];
+      (state[key] || []).forEach(function(local) {
+        if (!local || !local.id || fresh[local.id]) return;
+        var justCreated = (Date.now() - (local.createdAt || local.time || 0)) < 2 * 60 * 1000 && isPersonalRowForMe(key, local);
+        if (pendingIds[local.id] || justCreated) fresh[local.id] = local;
+      });
+      state[key] = Object.keys(fresh).map(function(k) { return fresh[k]; });
+    });
+    state.notifications.sort(function(a, b) { return (b.time || 0) - (a.time || 0); });
+    window._personalSyncStatus = { at: Date.now(), orders: state.orders.length, notifications: state.notifications.length, conversations: state.conversations.length, full: isFullDataViewer() };
+    save();
+    render();
+  });
+}
+function personalSyncIdentityKey() {
+  return (state.profile ? state.profile.id + ":" + (state.profile.role || "") : "visiteur") + ":" + (isFullDataViewer() ? "tout" : "perso");
+}
+
 // Trace du dernier chargement des articles depuis le serveur — affichée
 // par la page de diagnostic (#diag), accessible même sans connexion.
 window._productsLoadStatus = { step: "pas encore lancé" };
@@ -39724,7 +39853,7 @@ function bootAppWithLocalData() {
 
     var PAGE_SIZE = 900;
     function fetchAllSyncPages(offset, accumulated) {
-      var pageQuery = sb.from("app_data").select("*").neq("collection", "products").range(offset, offset + PAGE_SIZE - 1);
+      var pageQuery = sb.from("app_data").select("*").not("collection", "in", "(products,orders,notifications,conversations)").range(offset, offset + PAGE_SIZE - 1);
       if (!needsFullSync) pageQuery = pageQuery.gt("updated_at", lastSyncAt);
       return pageQuery.then(function(res) {
         if (res.error) return res;
@@ -39761,7 +39890,7 @@ function bootAppWithLocalData() {
           // state.products par la liste vide reçue ici effaçait les articles
           // déjà arrivés : marché vide pour tout nouveau visiteur, et
           // "je ne vois que mes propres articles" après plus de 24 h.
-          SHARED_KEYS.forEach(function(name) { if (name === "products") return; state[name] = byCollection[name]; });
+          SHARED_KEYS.forEach(function(name) { if (name === "products" || PERSONAL_KEYS.indexOf(name) !== -1) return; state[name] = byCollection[name]; });
         } else {
           // Incrémental : on met seulement à jour/ajoute les lignes reçues,
           // le reste du cache local reste tel quel.
@@ -39773,6 +39902,7 @@ function bootAppWithLocalData() {
           });
         }
         localStorage.setItem(LAST_SYNC_KEY, computeNextSyncWatermark(res.data, lastSyncAt));
+        syncPersonalCollections();
         refreshProfileFromAccounts();
         // Sécurité : le contenu (items/subtotal/total) arrive séparément
         // désormais (voir fetchMyOrderDetails) — en attendant qu'il
@@ -39806,6 +39936,9 @@ function bootAppWithLocalData() {
       .on("postgres_changes", { event: "*", schema: "public", table: "app_data" }, function(payload) {
         var row = payload.new && Object.keys(payload.new).length ? payload.new : payload.old;
         if (!row || !byCollectionExists(row.collection)) return;
+        // Commandes, notifications et conversations : seulement celles qui
+        // concernent ce téléphone (sauf Admin / agent de sourcing).
+        if (PERSONAL_KEYS.indexOf(row.collection) !== -1 && payload.eventType !== "DELETE" && !isPersonalRowForMe(row.collection, row.data)) return;
         var list = state[row.collection] || [];
         var changed = true;
         var previousItem = null;
