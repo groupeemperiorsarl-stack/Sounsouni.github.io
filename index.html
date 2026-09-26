@@ -1563,6 +1563,18 @@ button:active {
   transform: scale(1.15);
   z-index: 0;
 }
+/* Le fond flouté est désormais une vraie image "lazy" (chargée seulement
+   quand elle devient visible) au lieu d'un fond CSS, que le navigateur
+   téléchargeait immédiatement pour CHAQUE photo de CHAQUE carte. */
+.product-image img.product-image-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+  pointer-events: none;
+}
 
 .product-image .emoji-placeholder {
   font-size: 50px;
@@ -1883,6 +1895,11 @@ html.has-bg-pattern .modal-sheet {
   object-fit: contain;
   position: relative;
   z-index: 1;
+}
+/* Dans la fiche produit, ce fond flouté n'a jamais été affiché : on le
+   garde masqué (et une image masquée "lazy" n'est pas téléchargée). */
+.modal-image img.product-image-backdrop {
+  display: none;
 }
 
 .modal-image .click-hint {
@@ -5298,7 +5315,10 @@ function uploadToStorageRaw(file, folder, onDone) {
   }
   try {
     var path = folder + "/" + Date.now() + "_" + uid() + "_" + file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-    sb.storage.from("photo").upload(path, file).then(function(res) {
+    // Conservation 1 an dans le téléphone : chaque nom de fichier est unique
+    // (date + identifiant), une photo ne change donc jamais à la même
+    // adresse — inutile de la retélécharger toutes les heures.
+    sb.storage.from("photo").upload(path, file, { cacheControl: "31536000" }).then(function(res) {
       if (res.error) {
         console.error("Erreur d'envoi vers Supabase Storage :", res.error);
         onDone(res.error);
@@ -25455,10 +25475,16 @@ function productCard(p, disableImageSwipe, compactBadgeLine, marketBadges) {
   if (hasImage) {
     if (p.images.length > 1 && !disableImageSwipe) {
       html += '<div class="carousel-track">';
+      // Économie de données : seule la 1re photo est chargée d'office. Les
+      // suivantes ne le sont qu'au moment où la personne pose le doigt sur
+      // la carte pour la faire glisser (voir hydrateCarouselImages) — sans
+      // ça, CHAQUE carte téléchargeait toutes ses photos (jusqu'à 8) dès
+      // qu'elle apparaissait, même si personne ne les regardait.
       for (var pci = 0; pci < p.images.length; pci++) {
+        var slideSrcAttr = (pci === 0 || (window._hydratedCarousels && window._hydratedCarousels[p.id])) ? 'src="' + p.images[pci] + '"' : 'data-src="' + p.images[pci] + '"';
         html += '<div style="position:relative;width:100%;height:100%;flex-shrink:0;overflow:hidden;">';
-        html += '<div class="product-image-backdrop" style="background-image:url(\'' + p.images[pci] + '\');"></div>';
-        html += '<img loading="lazy" src="' + p.images[pci] + '" alt="' + esc(p.name) + '" style="object-position:' + imagePositionCss(p.imagePositions, pci) + ';" />';
+        html += '<img loading="lazy" class="product-image-backdrop" ' + slideSrcAttr + ' alt="" aria-hidden="true" />';
+        html += '<img loading="lazy" ' + slideSrcAttr + ' alt="' + esc(p.name) + '" style="object-position:' + imagePositionCss(p.imagePositions, pci) + ';" />';
         html += '</div>';
       }
       html += '</div>';
@@ -25468,7 +25494,7 @@ function productCard(p, disableImageSwipe, compactBadgeLine, marketBadges) {
       }
       html += '</div>';
     } else {
-      html += '<div class="product-image-backdrop" style="background-image:url(\'' + p.images[0] + '\');"></div>';
+      html += '<img loading="lazy" class="product-image-backdrop" src="' + p.images[0] + '" alt="" aria-hidden="true" />';
       html += '<img loading="lazy" src="' + p.images[0] + '" alt="' + esc(p.name) + '" style="object-position:' + imagePositionCss(p.imagePositions, 0) + ';" />';
     }
   } else {
@@ -31572,7 +31598,7 @@ function renderProductModal() {
     html += '<div class="carousel-track" style="transform:translateX(-' + (state.activeImageIndex * 100) + '%);">';
     for (var pmi = 0; pmi < p.images.length; pmi++) {
       html += '<div style="position:relative;width:100%;height:100%;flex-shrink:0;overflow:hidden;">';
-      html += '<div class="product-image-backdrop" style="background-image:url(\'' + p.images[pmi] + '\');"></div>';
+      html += '<img loading="lazy" class="product-image-backdrop" src="' + p.images[pmi] + '" alt="" aria-hidden="true" />';
       html += '<img loading="lazy" src="' + p.images[pmi] + '" alt="' + esc(p.name) + '" />';
       html += '</div>';
     }
@@ -31583,7 +31609,7 @@ function renderProductModal() {
     }
     html += '</div>';
   } else if (mainImage) {
-    html += '<div class="product-image-backdrop" style="background-image:url(\'' + mainImage + '\');"></div>';
+    html += '<img loading="lazy" class="product-image-backdrop" src="' + mainImage + '" alt="" aria-hidden="true" />';
     html += '<img loading="lazy" src="' + mainImage + '" alt="' + esc(p.name) + '" />';
   } else {
     html += p.emoji;
@@ -33067,6 +33093,33 @@ function paintFrameEditor(configId) {
 // l'app qu'à la fin, et seulement pour la fiche produit (pour rester
 // synchronisé avec les vignettes et la visionneuse plein écran) — les
 // cartes du marché, elles, n'ont besoin d'aucune mémoire entre deux rendus.
+// Charge les photos suivantes d'une carte au moment où on commence à la
+// faire glisser. Mémorisé par article, pour qu'un redessin de l'écran ne
+// les "décharge" pas ensuite.
+window._hydratedCarousels = window._hydratedCarousels || {};
+function hydrateCarouselImages(el) {
+  if (!el) return;
+  var pid = el.dataset && el.dataset.value;
+  if (pid) window._hydratedCarousels[pid] = true;
+  var pending = el.querySelectorAll("img[data-src]");
+  for (var hi = 0; hi < pending.length; hi++) {
+    var hUrl = pending[hi].getAttribute("data-src");
+    pending[hi].setAttribute("src", hUrl);
+    pending[hi].removeAttribute("data-src");
+    // Téléchargement immédiat, pour que la photo soit prête avant même la
+    // fin du geste de glissement (sinon, blanc bref possible).
+    if (!pending[hi].classList.contains("product-image-backdrop")) { var pre = new Image(); pre.src = hUrl; }
+  }
+}
+root.addEventListener("pointerdown", function(e) {
+  var car = e.target.closest && e.target.closest(".swipeable-carousel");
+  if (car) hydrateCarouselImages(car);
+}, true);
+root.addEventListener("touchstart", function(e) {
+  var car = e.target.closest && e.target.closest(".swipeable-carousel");
+  if (car) hydrateCarouselImages(car);
+}, { capture: true, passive: true });
+
 (function() {
   var dragging = null; // { el, track, count, startX, startIndex, width, moved }
 
