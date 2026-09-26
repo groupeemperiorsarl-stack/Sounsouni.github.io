@@ -19212,6 +19212,50 @@ function renderGuestShell() {
   return html;
 }
 
+// ---------- PAGE DE DIAGNOSTIC PUBLIQUE (#diag) ----------
+// Accessible sans connexion (sounsouni.pro/#diag) : montre si les articles
+// arrivent bien du serveur, pour diagnostiquer un marché vide.
+function renderPublicDiagnosticPage() {
+  var st = window._productsLoadStatus || {};
+  var visible = 0;
+  try { visible = filteredProducts(true).length; } catch (e) { visible = "erreur : " + e.message; }
+  var modCounts = {};
+  (state.products || []).forEach(function(p) { var k = p.moderationStatus || "normal"; modCounts[k] = (modCounts[k] || 0) + 1; });
+  var lines = [
+    "Date : " + new Date().toLocaleString(),
+    "Serveur configuré : " + (FIREBASE_ENABLED ? "oui" : "NON"),
+    "Connecté : " + (state.profile ? "oui (" + (state.profile.role || "?") + ")" : "non (visiteur)"),
+    "Application installée : " + (isNativeAppForGuest() ? "oui" : "non (site web)"),
+    "",
+    "--- Chargement des articles ---",
+    "Étape : " + (st.step || "?"),
+    "Durée : " + (st.ms != null ? st.ms + " ms" : "?"),
+    "Articles reçus du serveur : " + (st.rows != null ? st.rows : "?"),
+    "Erreur : " + (st.error || "aucune"),
+    "Code : " + (st.code || "—"),
+    "Repli (chargement complet) : " + (st.fallback ? ("reçus=" + st.fallback.rows + ", erreur=" + (st.fallback.error || "aucune") + ", " + st.fallback.ms + " ms") : "non utilisé"),
+    "",
+    "--- En mémoire sur cet appareil ---",
+    "Articles en mémoire : " + (state.products || []).length,
+    "Articles visibles au marché : " + visible,
+    "Statuts : " + JSON.stringify(modCounts),
+    "Comptes en mémoire : " + (state.accounts || []).length,
+    "Catégorie : " + state.category + " · Recherche : \"" + (state.search || "") + "\"",
+    "Filtre boutique : " + (state.shopFilterSellerId || "aucun") + " · Filtre secteur : " + (state.sectorFilter || "aucun")
+  ];
+  window._diagText = lines.join("\n");
+  var html = '<div style="padding:18px;max-width:640px;margin:0 auto;">';
+  html += '<div class="section-title" style="margin-bottom:10px;"><i class="fa-solid fa-stethoscope"></i> Diagnostic Sounsouni</div>';
+  html += '<div style="display:flex;gap:8px;margin-bottom:12px;">';
+  html += '<button class="btn-primary" style="flex:1;" data-action="diag-copy"><i class="fa-solid fa-copy"></i> Copier</button>';
+  html += '<button class="btn-secondary" style="flex:1;" data-action="diag-retry"><i class="fa-solid fa-rotate"></i> Réessayer</button>';
+  html += '</div>';
+  html += '<div class="glass-card" style="padding:12px;font-family:monospace;font-size:11.5px;white-space:pre-wrap;word-break:break-word;">' + esc(window._diagText) + '</div>';
+  html += '<button class="link-btn" style="margin-top:14px;" data-action="diag-close"><i class="fa-solid fa-arrow-left"></i> Retour au site</button>';
+  html += '</div>';
+  return html;
+}
+
 // ---------- MODÉRATION DES ARTICLES ----------
 // Un article "en attente" (signalé plusieurs fois, ou plus tard repéré par
 // le filtre automatique) ou "refusé" par l'Admin n'apparaît plus nulle part
@@ -20518,6 +20562,9 @@ function buildHTML() {
   // sans être connecté (mais il faut un compte pour cotiser).
   if (window.location.hash.indexOf("#cagnotte=") === 0 && !state.profile) {
     return renderPublicCagnottePage(window.location.hash.slice("#cagnotte=".length));
+  }
+  if (window.location.hash === "#diag") {
+    return renderPublicDiagnosticPage();
   }
   if (window.location.hash === "#partner-dashboard") {
     return renderPartnerDashboard();
@@ -33109,6 +33156,21 @@ root.addEventListener("click", function(e) {
 
   // Mode visiteur (site web) : seules les actions de consultation et de
   // panier passent ; le reste invite à se connecter.
+  if (action === "diag-copy") {
+    copyTextToClipboard(window._diagText || "").then(function(ok) { showToast(ok ? "✅ Copié" : "❌ Impossible de copier"); });
+    return;
+  }
+  if (action === "diag-retry") {
+    showToast("Nouvelle tentative de chargement…");
+    syncProductsInitialBatch();
+    setTimeout(render, 4000);
+    return;
+  }
+  if (action === "diag-close") {
+    window.location.hash = "";
+    render();
+    return;
+  }
   if (action === "guest-back-to-browsing") {
     state.guestAuthRequested = false;
     state.view = "market";
@@ -39034,11 +39096,24 @@ function maybeSignalBootReady() {
   }
 }
 
+// Trace du dernier chargement des articles depuis le serveur — affichée
+// par la page de diagnostic (#diag), accessible même sans connexion.
+window._productsLoadStatus = { step: "pas encore lancé" };
 function syncProductsInitialBatch() {
+  var loadStartedAt = Date.now();
+  window._productsLoadStatus = { step: "en cours", startedAt: loadStartedAt };
   sb.from("app_data").select("*").eq("collection", "products")
     .order("updated_at", { ascending: false })
     .limit(PRODUCTS_BATCH_SIZE)
     .then(function(res) {
+      window._productsLoadStatus = {
+        step: "lot initial terminé",
+        ms: Date.now() - loadStartedAt,
+        rows: res.data ? res.data.length : null,
+        error: res.error ? (res.error.message || JSON.stringify(res.error)) : null,
+        code: res.error ? (res.error.code || res.status || null) : null
+      };
+      if (res.error) { try { pushDebugLog("error", "Chargement des articles échoué", window._productsLoadStatus.error); } catch (e) {} }
       if (res.error || !res.data) {
         // Filet de sécurité : si cette requête échoue pour une raison
         // quelconque (syntaxe encore mal éprouvée, réseau...), on
@@ -39046,6 +39121,11 @@ function syncProductsInitialBatch() {
         // de laisser le marché vide pour de bon.
         console.error("Échec du chargement initial des produits, repli sur le chargement complet :", res.error);
         sb.from("app_data").select("*").eq("collection", "products").then(function(fallbackRes) {
+          window._productsLoadStatus.fallback = {
+            ms: Date.now() - loadStartedAt,
+            rows: fallbackRes.data ? fallbackRes.data.length : null,
+            error: fallbackRes.error ? (fallbackRes.error.message || JSON.stringify(fallbackRes.error)) : null
+          };
           if (!fallbackRes.error && fallbackRes.data) {
             state.products = fallbackRes.data.map(function(row) { return row.data; });
             _productsFullyLoaded = true;
