@@ -6466,10 +6466,10 @@ var ADMIN_RESTRICTED_ACTIONS = [
   "toggle-section-style-bold", "set-brand-image-field", "set-section-style-field", "save-market-display-config",
   "admin-cancel-boost", "approve-relais-edit", "reject-relais-edit",
   "admin-add-quartier", "admin-remove-quartier", "undo-quartier-change",
-  "admin-add-quartier-proche", "admin-remove-quartier-proche", "undo-quartier-proche-change", "toggle-user-test-mode",
+  "admin-add-quartier-proche", "admin-remove-quartier-proche", "undo-quartier-proche-change", "toggle-user-test-mode", "moderation-approve", "moderation-reject",
   "send-admin-broadcast", "toggle-employee-permission", "add-boost-tier", "remove-boost-tier", "save-boost-tiers",
   "save-vip-rotation-seconds", "save-delivery-base-config", "admin-add-commune", "admin-remove-commune",
-  "save-admin-product-edit", "admin-delete-account", "save-relais-commission", "save-delivery-fees", "save-intercity-delivery-fees",
+  "save-admin-product-edit", "admin-delete-account", "save-relais-commission", "save-delivery-fees", "save-intercity-delivery-fees", "save-international-shipping-rates",
   "save-affiliate-rate", "submit-vip-ad", "edit-vip-ad", "remove-vipad-image", "set-vip-config", "delete-vip-ad",
   "toggle-bgpattern-enabled", "remove-bgpattern-icon", "regenerate-bg-pattern",
   "add-webhook-partner", "toggle-webhook-partner", "remove-webhook-partner", "test-webhook-partner",
@@ -8115,6 +8115,7 @@ function defaultState() {
     addressDraft: null,
     showProfileInfoModal: false,
     showUserTestPanel: false,
+    reportProductId: null,
     showHistoryModal: false,
     historyTab: "achats",
     showFindAccountModal: false,
@@ -8249,7 +8250,7 @@ function emptyProductDraft(profileForDefault) {
     matiereArtisanat: "", origineArtisanat: "", faitMainArtisanat: "oui",
     typeProduitSante: "", usagePosologieSante: "",
     typeBureautique: "", etatBureautique: "neuf",
-    moq: "", poidsKg: "", volumeM3: "", transportModes: "both"
+    moq: "", poidsKg: "", volumeM3: "", dimL: "", dimW: "", dimH: "", transportModes: "both"
   };
 }
 
@@ -10592,6 +10593,13 @@ const TRANSLATIONS = {
     sfield_poids_kg: "Poids unitaire (kg)",
     ph_poids_kg: "Ex : 0.5",
     sfield_volume_m3: "Volume unitaire (m³)",
+    sfield_dimensions_cm: "Dimensions du colis emballé (cm) *",
+    ph_dim_l: "Longueur",
+    ph_dim_w: "Largeur",
+    ph_dim_h: "Hauteur",
+    dim_volume_calc: "Volume calculé automatiquement",
+    toast_intl_weight_required: "❌ Indiquez le poids du colis (en kg) — il sert à calculer le transport.",
+    toast_intl_dims_required: "❌ Indiquez les 3 dimensions du colis (longueur, largeur, hauteur en cm).",
     ph_volume_m3: "Ex : 0.02",
     sfield_transport_modes: "Modes de transport disponibles",
     opt_transport_maritime: "Maritime (moins cher, plus lent)",
@@ -12276,6 +12284,13 @@ const TRANSLATIONS = {
     sfield_poids_kg: "Unit weight (kg)",
     ph_poids_kg: "e.g. 0.5",
     sfield_volume_m3: "Unit volume (m³)",
+    sfield_dimensions_cm: "Packed parcel dimensions (cm) *",
+    ph_dim_l: "Length",
+    ph_dim_w: "Width",
+    ph_dim_h: "Height",
+    dim_volume_calc: "Automatically calculated volume",
+    toast_intl_weight_required: "❌ Enter the parcel weight (kg) — it is used to calculate shipping.",
+    toast_intl_dims_required: "❌ Enter all 3 parcel dimensions (length, width, height in cm).",
     ph_volume_m3: "e.g. 0.02",
     sfield_transport_modes: "Available shipping methods",
     opt_transport_maritime: "Sea freight (cheaper, slower)",
@@ -13960,6 +13975,13 @@ const TRANSLATIONS = {
     sfield_poids_kg: "इकाई वज़न (किग्रा)",
     ph_poids_kg: "उदा: 0.5",
     sfield_volume_m3: "इकाई आयतन (m³)",
+    sfield_dimensions_cm: "पैक किए गए पार्सल के आयाम (cm) *",
+    ph_dim_l: "लंबाई",
+    ph_dim_w: "चौड़ाई",
+    ph_dim_h: "ऊंचाई",
+    dim_volume_calc: "स्वचालित रूप से गणना की गई मात्रा",
+    toast_intl_weight_required: "❌ पार्सल का वजन (kg) दर्ज करें — इसका उपयोग शिपिंग की गणना के लिए होता है।",
+    toast_intl_dims_required: "❌ पार्सल के तीनों आयाम दर्ज करें (लंबाई, चौड़ाई, ऊंचाई cm में)।",
     ph_volume_m3: "उदा: 0.02",
     sfield_transport_modes: "उपलब्ध शिपिंग तरीके",
     opt_transport_maritime: "समुद्री माल ढुलाई (सस्ता, धीमा)",
@@ -14153,6 +14175,17 @@ function registerAccount() {
   console.log("=== DEBUT registerAccount ===");
   
   var d = state.onboardDraft;
+  // Engagement obligatoire de tout vendeur à ne vendre aucun produit
+  // interdit — exigé par notre partenaire de paiement, et protège
+  // juridiquement Sounsouni en engageant clairement la responsabilité du
+  // vendeur. Demandé juste avant la création du compte, quel que soit le
+  // type de vendeur.
+  if (d.role === "vendeur" && !d.prohibitedGoodsConsent) {
+    d.prohibitedConsentReturnStep = state.onboardStep;
+    state.onboardStep = "prohibitedGoodsConsent";
+    render();
+    return;
+  }
   console.log("d =", d);
   
   // 1. Nom
@@ -15221,6 +15254,10 @@ function addToCart(productId, qty, color, size) {
   }
   if (!product || product.stock <= 0) {
     showToast(t("toast_out_of_stock"));
+    return;
+  }
+  if (isProductHiddenFromPublic(product)) {
+    showToast("Cet article n'est pas disponible pour le moment.");
     return;
   }
   if (blockedByMissingInternationalLogistics(product)) {
@@ -19065,11 +19102,26 @@ function getProductSalesCount(productId) {
   return count;
 }
 
+// ---------- MODÉRATION DES ARTICLES ----------
+// Un article "en attente" (signalé plusieurs fois, ou plus tard repéré par
+// le filtre automatique) ou "refusé" par l'Admin n'apparaît plus nulle part
+// pour le public — seuls son propre vendeur (pour savoir où il en est) et
+// l'Admin (pour décider) peuvent encore le voir.
+var PRODUCT_REPORT_THRESHOLD = 3;
+function isProductHiddenFromPublic(p) {
+  if (!p) return true;
+  if (p.moderationStatus !== "pending" && p.moderationStatus !== "rejected") return false;
+  if (state.profile && p.sellerId === state.profile.id) return false;
+  if (state.view === "admin" && state.adminUnlocked) return false;
+  return true;
+}
+
 function filteredProducts(skipValueFilters) {
   var f = state.marketFilters;
   var result = [];
   for (var i = 0; i < state.products.length; i++) {
     var p = state.products[i];
+    if (isProductHiddenFromPublic(p)) continue;
     var matchCat = state.category === "Tout" || p.category === state.category;
     var search = state.search.trim();
     var matchSearch = !search || p.name.toLowerCase().indexOf(search.toLowerCase()) !== -1 || p.shopName.toLowerCase().indexOf(search.toLowerCase()) !== -1 || (p.barcode || "") === search;
@@ -19865,6 +19917,7 @@ var OVERLAY_REGISTRY = [
   { key: "historyModal", isOpen: function () { return state.showHistoryModal; }, close: function () { state.showHistoryModal = false; } },
   { key: "profileInfo", isOpen: function () { return state.showProfileInfoModal; }, close: function () { state.showProfileInfoModal = false; } },
   { key: "userTestPanel", isOpen: function () { return state.showUserTestPanel; }, close: function () { state.showUserTestPanel = false; } },
+  { key: "reportProduct", isOpen: function () { return !!state.reportProductId; }, close: function () { state.reportProductId = null; } },
   { key: "shopPicker", isOpen: function () { return state.showShopPicker; }, close: function () { state.showShopPicker = false; } },
   { key: "userGuide", isOpen: function () { return state.showUserGuide; }, close: function () { state.showUserGuide = false; } },
   { key: "profileScreen", isOpen: function () { return state.showProfileScreen; }, close: function () { state.showProfileScreen = false; } }
@@ -20440,6 +20493,7 @@ function buildHTML() {
   if (state.adminViewingConversationId) html += renderAdminConversationViewModal();
   if (state.showProfileInfoModal) html += renderProfileInfoModal();
   if (state.showUserTestPanel) html += renderUserTestPanel();
+  if (state.reportProductId) html += renderReportProductModal();
   if (state.showHistoryModal) html += renderHistoryModal();
   if (state.showShopPicker) html += renderShopPickerModal();
   if (state.showAffiliateProgram) html += renderAffiliateProgramModal();
@@ -20762,6 +20816,7 @@ function renderOnboarding() {
   else if (step === "internationalDetails") bodyHtml = renderOnboardStepInternational(d);
   else if (step === "relaisDetails") bodyHtml = renderOnboardStepRelais(d);
   else if (step === "commissionConsent") bodyHtml = renderOnboardStepCommissionConsent(d);
+  else if (step === "prohibitedGoodsConsent") bodyHtml = renderOnboardStepProhibitedGoods(d);
   else bodyHtml = renderOnboardStepIdentity(d);
 
   var showHero = step === "identity";
@@ -21385,6 +21440,31 @@ function renderOnboardStepCommissionConsent(d) {
   return html;
 }
 
+function renderOnboardStepProhibitedGoods(d) {
+  var backStep = d.prohibitedConsentReturnStep || "vendorType";
+  if (backStep === "prohibitedGoodsConsent" || backStep === "commissionConsent") backStep = d.commissionConsentReturnStep || "vendorType";
+  var html = '<button class="link-btn" style="margin-bottom:14px" data-action="onboard-back-step" data-value="' + backStep + '"><i class="fa-solid fa-arrow-left"></i> Retour</button>';
+  html += '<div class="section-title" style="margin-bottom:14px;"><i class="fa-solid fa-scale-balanced"></i> Engagement du vendeur</div>';
+  html += '<div class="glass-card" style="padding:16px;font-size:13px;line-height:1.6;background:rgba(255,255,255,0.92);">';
+  html += '<p style="margin:0 0 10px;">Sur Sounsouni, il est strictement interdit de vendre des produits interdits par la loi malienne, notamment :</p>';
+  html += '<ul style="margin:0 0 10px;padding-left:18px;">';
+  html += '<li>armes, munitions et explosifs</li>';
+  html += '<li>drogues et stupéfiants</li>';
+  html += '<li>médicaments sans autorisation</li>';
+  html += '<li>produits contrefaits</li>';
+  html += '<li>produits volés ou d\'origine douteuse</li>';
+  html += '<li>tout autre produit dont la vente est interdite au Mali</li>';
+  html += '</ul>';
+  html += '<p style="margin:0;">Tout article interdit sera retiré, et le compte du vendeur pourra être suspendu. Le vendeur reste seul responsable des produits qu\'il met en vente.</p>';
+  html += '</div>';
+  html += '<label style="display:flex;gap:10px;align-items:flex-start;margin:16px 0;font-size:13px;background:rgba(255,255,255,0.94);border-radius:10px;padding:12px;cursor:pointer;">';
+  html += '<input type="checkbox" id="prohibited-goods-checkbox" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;" />';
+  html += '<span>Je m\'engage à ne vendre aucun produit interdit par la loi malienne, et j\'accepte que mes articles et mon compte puissent être retirés en cas de non-respect.</span>';
+  html += '</label>';
+  html += '<button class="btn-primary" data-action="accept-prohibited-goods-consent"><i class="fa-solid fa-check"></i> Je m\'engage — Créer mon compte</button>';
+  return html;
+}
+
 // Écran de lecture seule, accessible depuis la boutique à tout moment.
 function renderSellerPolicyStandalone() {
   var html = '<button class="link-btn" style="margin-bottom:14px" data-action="close-seller-policy-view"><i class="fa-solid fa-arrow-left"></i> Retour</button>';
@@ -21782,6 +21862,21 @@ function renderProfileModal() {
 
   html += '<button class="link-btn" style="color:var(--danger);margin-top:18px;width:100%;text-align:center;" data-action="logout"><i class="fa-solid fa-right-from-bracket"></i> ' + t("profile_logout") + '</button>';
   html += '<button class="link-btn" style="color:var(--text-dim);margin-top:10px;width:100%;text-align:center;font-size:11.5px;" data-action="open-delete-account"><i class="fa-solid fa-trash-can"></i> ' + t("profile_delete_account") + '</button>';
+  html += '</div></div>';
+  return html;
+}
+
+// ---------- Signalement d'un article par un utilisateur ----------
+var PRODUCT_REPORT_REASONS = ["Produit interdit ou illégal", "Contrefaçon", "Arnaque ou fausse annonce", "Contenu choquant", "Autre"];
+function renderReportProductModal() {
+  var html = '<div class="modal-overlay" data-action="close-report-product">';
+  html += '<div class="modal-sheet">';
+  html += '<button class="modal-close" data-action="close-report-product"><i class="fa-solid fa-xmark"></i></button>';
+  html += '<div class="section-title" style="margin-bottom:6px;"><i class="fa-regular fa-flag"></i> Signaler cet article</div>';
+  html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">Pourquoi signalez-vous cet article ? Votre signalement reste anonyme pour le vendeur.</div>';
+  for (var ri = 0; ri < PRODUCT_REPORT_REASONS.length; ri++) {
+    html += '<button class="btn-secondary" style="width:100%;margin-bottom:8px;text-align:left;" data-action="submit-report-product" data-value="' + esc(PRODUCT_REPORT_REASONS[ri]) + '">' + esc(PRODUCT_REPORT_REASONS[ri]) + '</button>';
+  }
   html += '</div></div>';
   return html;
 }
@@ -23971,7 +24066,7 @@ function getContextualRecommendations(limit, category, sectorKey) {
     var moreInContext = state.products.filter(function(p) { return matchesContext(p) && already2.indexOf(p.id) === -1; });
     result = result.concat(moreInContext.slice(0, limit - result.length));
   }
-  return result.slice(0, limit);
+  return result.filter(function(p) { return !isProductHiddenFromPublic(p); }).slice(0, limit);
 }
 
 function renderRecommendationsCircles(items) {
@@ -24014,10 +24109,10 @@ function getNextInlineRecoBatch(count, category, sectorKey, excludeIds) {
   var result = pool.filter(function(p) { return excludeIds.indexOf(p.id) === -1; });
   if (result.length < count) {
     var already = excludeIds.concat(result.map(function(p) { return p.id; }));
-    var fallback = state.products.filter(function(p) { return already.indexOf(p.id) === -1; });
+    var fallback = state.products.filter(function(p) { return already.indexOf(p.id) === -1 && !isProductHiddenFromPublic(p); });
     result = result.concat(fallback.slice(0, count - result.length));
   }
-  return result.slice(0, count);
+  return result.filter(function(p) { return !isProductHiddenFromPublic(p); }).slice(0, count);
 }
 
 function renderInlineRecommendationCarousel(items, title) {
@@ -24958,6 +25053,9 @@ function getAccountsIndex() {
 }
 
 function productCard(p, disableImageSwipe, compactBadgeLine, marketBadges) {
+  // Filet de sécurité : quelle que soit la liste qui l'affiche (carrousels,
+  // articles similaires, boutique...), un article masqué n'apparaît jamais.
+  if (isProductHiddenFromPublic(p)) return '';
   var discount = discountPercent(p);
   var fav = isFavorite(p.id);
   var hasImage = p.images && p.images.length > 0;
@@ -26174,7 +26272,19 @@ function renderSellerProducts() {
     // aérien — jamais optionnels pour ce type de vendeur.
     typeFields = '<label class="field-label">' + t("sfield_moq") + '</label><input class="input" type="number" min="1" placeholder="' + t("ph_moq") + '" value="' + esc(d.moq || '') + '" data-bind="productDraft.moq" />';
     typeFields += '<label class="field-label">' + t("sfield_poids_kg") + '</label><input class="input" type="number" step="0.01" min="0" placeholder="' + t("ph_poids_kg") + '" value="' + esc(d.poidsKg || '') + '" data-bind="productDraft.poidsKg" />';
-    typeFields += '<label class="field-label">' + t("sfield_volume_m3") + '</label><input class="input" type="number" step="0.001" min="0" placeholder="' + t("ph_volume_m3") + '" value="' + esc(d.volumeM3 || '') + '" data-bind="productDraft.volumeM3" />';
+    // Volume : trois dimensions en cm, bien plus faciles à mesurer qu'un
+    // volume en m³ (peu de vendeurs savent qu'une boîte de 30×20×10 cm fait
+    // 0,006 m³). Le m³ est calculé automatiquement à la publication.
+    typeFields += '<label class="field-label">' + t("sfield_dimensions_cm") + '</label>';
+    typeFields += '<div style="display:flex;gap:6px;">';
+    typeFields += '<input class="input" style="flex:1;min-width:0;" type="number" step="0.1" min="0" placeholder="' + t("ph_dim_l") + '" value="' + esc(d.dimL || '') + '" data-bind="productDraft.dimL" />';
+    typeFields += '<input class="input" style="flex:1;min-width:0;" type="number" step="0.1" min="0" placeholder="' + t("ph_dim_w") + '" value="' + esc(d.dimW || '') + '" data-bind="productDraft.dimW" />';
+    typeFields += '<input class="input" style="flex:1;min-width:0;" type="number" step="0.1" min="0" placeholder="' + t("ph_dim_h") + '" value="' + esc(d.dimH || '') + '" data-bind="productDraft.dimH" />';
+    typeFields += '</div>';
+    var dimVolPreview = (Number(d.dimL) > 0 && Number(d.dimW) > 0 && Number(d.dimH) > 0) ? (Number(d.dimL) * Number(d.dimW) * Number(d.dimH) / 1000000) : (Number(d.volumeM3) || 0);
+    if (dimVolPreview > 0) {
+      typeFields += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:3px;">' + t("dim_volume_calc") + ' : ' + dimVolPreview.toFixed(4) + ' m³</div>';
+    }
     typeFields += '<label class="field-label">' + t("sfield_transport_modes") + '</label><select class="input" data-bind="productDraft.transportModes"><option value="both" ' + (d.transportModes === 'both' || !d.transportModes ? 'selected' : '') + '>' + t("opt_transport_both") + '</option><option value="maritime" ' + (d.transportModes === 'maritime' ? 'selected' : '') + '>' + t("opt_transport_maritime") + '</option><option value="aerien" ' + (d.transportModes === 'aerien' ? 'selected' : '') + '>' + t("opt_transport_aerien") + '</option></select>';
     // Deux champs simples et optionnels, en plus des 4 champs logistiques
     // ci-dessus — comme le font les grandes plateformes B2B (Alibaba,
@@ -27464,6 +27574,7 @@ var ADMIN_MODULES_META = {
   security:           { icon: "fa-shield-halved",       get name() { return t("admin_mod_security"); },     get sub() { return t("admin_mod_security_sub"); } },
   reviews:            { icon: "fa-star",                 get name() { return t("admin_mod_reviews"); },      get sub() { return t("admin_mod_reviews_sub"); } },
   filature:           { icon: "fa-user-secret",           get name() { return t("admin_mod_filature"); },     get sub() { return t("admin_mod_filature_sub"); } },
+  moderation:         { icon: "fa-shield-virus",           name: "Modération des articles", sub: "Articles signalés ou suspects, en attente de ta décision" },
   test:               { icon: "fa-bug",                    name: "Test", sub: "Journaux d'erreurs et diagnostics" }
 };
 
@@ -27589,7 +27700,8 @@ function computeAdminBadgeCounts() {
     comptes: 0, vendeurs: pendingVerif, disputes: activeDisputes,
     relaisapplications: pendingRelais, livreurapplications: pendingLivreur, quartiers: pendingQuartier,
     messagerie: unreadMsg, tarifs: 0, pub: pendingBoost, apparence: 0,
-    partenaires: pendingParcel, international: 0, security: pendingRecovery, reviews: 0
+    partenaires: pendingParcel, international: 0, security: pendingRecovery, reviews: 0,
+    moderation: (state.products || []).filter(function(p) { return p.moderationStatus === "pending"; }).length
   };
 }
 
@@ -27658,8 +27770,8 @@ function renderAdmin() {
   }
 
   // ---- Modules valides pour ce rôle (Groupe 1 complet, Groupe 2 restreint) ----
-  var validTabsOwner = ["dashboard","comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","filature","test"];
-  var validTabsEmployee = ["dashboard","comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","pub","reviews","partenaires"];
+  var validTabsOwner = ["dashboard","comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","moderation","filature","test"];
+  var validTabsEmployee = ["dashboard","comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","pub","reviews","moderation","partenaires"];
   var validTabs = isOwner ? validTabsOwner : validTabsEmployee;
   if (validTabs.indexOf(state.adminTab) === -1) state.adminTab = "dashboard";
 
@@ -27692,6 +27804,7 @@ function renderAdmin() {
   else if (state.adminTab === "quartiers") html += renderAdminQuartiers();
   else if (state.adminTab === "messagerie") html += renderAdminMessagerie();
   else if (state.adminTab === "tarifs") html += renderAdminTarifs();
+  else if (state.adminTab === "moderation") html += renderAdminModeration();
   else if (state.adminTab === "pub") html += renderAdminPubMiseEnAvant();
   else if (state.adminTab === "apparence") html += renderAdminApparenceMerged();
   else if (state.adminTab === "partenaires") html += renderAdminPartenairesMerged();
@@ -29182,6 +29295,46 @@ function renderAdminPointsVente() {
 }
 
 // ---------- ADMIN : TARIFS LIVRAISON (éditeur) ----------
+// ---------- ADMIN : MODÉRATION DES ARTICLES ----------
+function renderAdminModeration() {
+  var pending = (state.products || []).filter(function(p) { return p.moderationStatus === "pending" && inAdminScope(p); });
+  var rejected = (state.products || []).filter(function(p) { return p.moderationStatus === "rejected" && inAdminScope(p); });
+  var html = '';
+  html += renderAdminCollapsibleList("moderationPending", '<i class="fa-solid fa-hourglass-half"></i> En attente de validation', pending, function(p) {
+    var card = '<div class="glass-card" style="padding:12px;margin-bottom:10px;">';
+    card += '<div style="display:flex;gap:10px;">';
+    card += (p.images && p.images[0]) ? '<img loading="lazy" src="' + p.images[0] + '" style="width:64px;height:64px;border-radius:10px;object-fit:cover;flex-shrink:0;" />' : '<div class="emoji-thumb" style="width:64px;height:64px;font-size:24px;">' + (p.emoji || '📦') + '</div>';
+    card += '<div style="flex:1;min-width:0;">';
+    card += '<div style="font-weight:700;font-size:13px;">' + esc(p.name) + '</div>';
+    card += '<div style="font-size:11px;color:var(--text-dim);">' + esc(p.shopName || '') + ' · ' + money(p.price) + '</div>';
+    card += '<div style="font-size:11px;color:#c77700;margin-top:4px;"><i class="fa-solid fa-circle-info"></i> ' + esc(p.moderationReason || 'Raison non précisée') + '</div>';
+    card += '</div></div>';
+    if (Array.isArray(p.reportReasons) && p.reportReasons.length) {
+      card += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:8px;">Motifs : ' + p.reportReasons.map(function(r) { return esc(r.reason); }).join(' · ') + '</div>';
+    }
+    if (p.description) card += '<div style="font-size:11px;margin-top:6px;">' + esc(p.description.slice(0, 160)) + (p.description.length > 160 ? '…' : '') + '</div>';
+    card += '<div style="display:flex;gap:8px;margin-top:10px;">';
+    card += '<button class="btn-primary" style="flex:1;padding:9px;font-size:12px;" data-action="moderation-approve" data-value="' + p.id + '"><i class="fa-solid fa-check"></i> Approuver</button>';
+    card += '<button class="btn-secondary" style="flex:1;padding:9px;font-size:12px;color:var(--danger);border-color:var(--danger);" data-action="moderation-reject" data-value="' + p.id + '"><i class="fa-solid fa-ban"></i> Refuser</button>';
+    card += '</div>';
+    card += '</div>';
+    return card;
+  }, {
+    emptyText: "Aucun article en attente. 👍",
+    searchPlaceholder: "Rechercher par article ou boutique...",
+    searchFn: function(p, q) { return (p.name || "").toLowerCase().indexOf(q) !== -1 || (p.shopName || "").toLowerCase().indexOf(q) !== -1; }
+  });
+  html += renderAdminCollapsibleList("moderationRejected", '<i class="fa-solid fa-ban"></i> Articles refusés', rejected, function(p) {
+    var row = '<div class="card-row">';
+    row += '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:12.5px;">' + esc(p.name) + '</div><div style="font-size:10.5px;color:var(--text-dim);">' + esc(p.shopName || '') + '</div></div>';
+    row += '<button class="link-btn" style="font-size:11px;" data-action="moderation-approve" data-value="' + p.id + '">Rétablir</button>';
+    row += '<button class="link-btn" style="color:var(--danger);margin-left:8px;" data-action="admin-delete-product" data-value="' + p.id + '"><i class="fa-solid fa-trash"></i></button>';
+    row += '</div>';
+    return row;
+  }, { emptyText: "Aucun article refusé." });
+  return html;
+}
+
 function renderAdminTarifs() {
   var cfg = getDeliveryFeesConfig();
   var rate = getRelaisCommissionRate();
@@ -29377,8 +29530,8 @@ function renderAdminDashboard(stats) {
 
   // ---- Grille des modules — cœur de la navigation du centre de contrôle ----
   var tileList = state.adminIsOwner
-    ? ["comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","test"]
-    : ["comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","pub","reviews","partenaires"];
+    ? ["comptes","vendeurs","disputes","moderation","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","test"]
+    : ["comptes","vendeurs","disputes","moderation","relaisapplications","livreurapplications","quartiers","messagerie","pub","reviews","partenaires"];
   html += '<div class="section-head" style="display:flex;align-items:baseline;justify-content:space-between;margin:20px 0 12px;"><h2 style="font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--mc-dim);font-weight:700;margin:0;">' + t("ad_modules_title") + '</h2></div>';
   html += renderAdminTileGrid(tileList);
 
@@ -30470,6 +30623,26 @@ function renderAdminInternational() {
     }
     html += '</div>';
 
+    // ---- Tarifs de transport international (vendeurs internationaux) ----
+    // En roupies (INR), comme les prix des vendeurs indiens — convertis en
+    // FCFA au paiement avec le taux du jour. Le transport facturé = le plus
+    // élevé entre le poids réel et le poids volumétrique (volume × 167),
+    // multiplié par le tarif au kilo, avec un minimum par envoi.
+    var isCfg = getInternationalShippingConfig();
+    html += '<div class="glass-card" style="padding:14px;margin-top:20px;">';
+    html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-ship"></i> Tarifs de transport international</div>';
+    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:12px;">En roupies (INR), convertis automatiquement en FCFA au paiement. Le poids facturé est le plus élevé entre le poids réel et le poids volumétrique (volume × 167).</div>';
+    html += '<div style="display:flex;gap:10px;">';
+    html += '<div style="flex:1;"><label class="field-label" style="margin-top:0;font-size:10.5px;"><i class="fa-solid fa-ship"></i> Bateau : prix / kg</label><input class="input" type="number" min="0" id="intl-rate-maritime-kg" value="' + isCfg.maritimePerKg + '" /></div>';
+    html += '<div style="flex:1;"><label class="field-label" style="margin-top:0;font-size:10.5px;"><i class="fa-solid fa-plane"></i> Avion : prix / kg</label><input class="input" type="number" min="0" id="intl-rate-aerien-kg" value="' + isCfg.aerienPerKg + '" /></div>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:10px;">';
+    html += '<div style="flex:1;"><label class="field-label" style="font-size:10.5px;">Bateau : minimum par envoi</label><input class="input" type="number" min="0" id="intl-rate-maritime-min" value="' + isCfg.minCostInrMaritime + '" /></div>';
+    html += '<div style="flex:1;"><label class="field-label" style="font-size:10.5px;">Avion : minimum par envoi</label><input class="input" type="number" min="0" id="intl-rate-aerien-min" value="' + isCfg.minCostInrAerien + '" /></div>';
+    html += '</div>';
+    html += '<button class="btn-primary" style="margin-top:14px;" data-action="save-international-shipping-rates"><i class="fa-solid fa-floppy-disk"></i> Enregistrer les tarifs de transport</button>';
+    html += '</div>';
+
     // ---- Service de géocodage (global, pas spécifique à un pays) ----
     var geoCfg = getGeocodingConfig();
     html += '<div class="glass-card" style="padding:14px;margin-top:20px;">';
@@ -31233,6 +31406,24 @@ function renderProductModal() {
     html += '<div class="new-arrivals-scroll">';
     for (var mp = 0; mp < marketSample.length; mp++) html += productCard(marketSample[mp]);
     html += '</div></div>';
+  }
+
+  // ---- Signalement d'un article (pas pour son propre vendeur) ----
+  var isOwnProduct = state.profile && p.sellerId === state.profile.id;
+  if (isOwnProduct && (p.moderationStatus === "pending" || p.moderationStatus === "rejected")) {
+    html += '<div class="glass-card" style="margin-top:18px;padding:12px;background:rgba(255,159,10,0.12);border:1.5px solid #ff9f0a;font-size:12px;">';
+    html += p.moderationStatus === "pending"
+      ? '<i class="fa-solid fa-hourglass-half"></i> <strong>En attente de validation</strong> — cet article est temporairement masqué au public, le temps que l\'équipe Sounsouni le vérifie.'
+      : '<i class="fa-solid fa-ban"></i> <strong>Article refusé</strong> — il n\'est pas visible par le public. Contactez l\'administration pour plus d\'informations.';
+    html += '</div>';
+  }
+  if (state.profile && !isOwnProduct) {
+    var alreadyReported = Array.isArray(p.reportedBy) && p.reportedBy.indexOf(state.profile.id) !== -1;
+    html += '<div style="text-align:center;margin-top:18px;">';
+    html += alreadyReported
+      ? '<span style="font-size:11.5px;color:var(--text-dim);"><i class="fa-solid fa-flag"></i> Vous avez déjà signalé cet article — merci.</span>'
+      : '<button class="link-btn" style="font-size:11.5px;color:var(--text-dim);" data-action="open-report-product" data-value="' + p.id + '"><i class="fa-regular fa-flag"></i> Signaler cet article</button>';
+    html += '</div>';
   }
   
   html += '</div></div>';
@@ -32086,6 +32277,14 @@ function submitProductDraft() {
     var stock = parseInt(d.stock, 10);
     if (isNaN(stock) || stock < 0) { showToast(t("toast_stock_invalid")); return; }
     if (!d.category || d.category === "Tout") { showToast(t("toast_choose_category")); return; }
+    // Vendeur international : poids et dimensions obligatoires — sans eux,
+    // le transport serait facturé au minimum quel que soit le vrai colis,
+    // et la différence resterait à la charge de Sounsouni.
+    if (state.profile.sellerType === "international") {
+      if (!(Number(d.poidsKg) > 0)) { showToast(t("toast_intl_weight_required")); return; }
+      if (!(Number(d.dimL) > 0 && Number(d.dimW) > 0 && Number(d.dimH) > 0)) { showToast(t("toast_intl_dims_required")); return; }
+      d.volumeM3 = Math.round(Number(d.dimL) * Number(d.dimW) * Number(d.dimH)) / 1000000;
+    }
 
     // Vérifier les paliers de prix dégressif (normalise les valeurs en nombres)
     var tieredPricing = [];
@@ -32251,7 +32450,7 @@ var SECTOR_SPECIFIC_FIELD_NAMES = ['tempsPreparation', 'ingredients', 'disponibl
   'typeProduitSante', 'usagePosologieSante',
   'typeBureautique', 'etatBureautique',
   'typePrestationDeco', 'delaiPreparationDeco', 'typeEvenement', 'capaciteEvenement',
-  'moq', 'poidsKg', 'volumeM3', 'transportModes'];
+  'moq', 'poidsKg', 'volumeM3', 'dimL', 'dimW', 'dimH', 'transportModes'];
 
 // Donne UNIQUEMENT les champs qui appartiennent réellement au type de
 // vendeur / secteur / catégorie choisi pour CE produit précis — c'est cette
@@ -32263,7 +32462,7 @@ var SECTOR_SPECIFIC_FIELD_NAMES = ['tempsPreparation', 'ingredients', 'disponibl
 function getRelevantSectorFields(sellerType, sellerSector, category) {
   if (sellerType === "restaurant") return ["tempsPreparation", "ingredients", "disponibleAujourdhui"];
   if (sellerType === "agriculteur") return ["provenance"];
-  if (sellerType === "international") return ["moq", "poidsKg", "volumeM3", "transportModes", "materiau", "garantie"];
+  if (sellerType === "international") return ["moq", "poidsKg", "volumeM3", "dimL", "dimW", "dimH", "transportModes", "materiau", "garantie"];
   if (sellerType === "entreprise") {
     if (sellerSector === "education") return ["dureeFormation", "niveauRequis", "diplomeDelivre", "modeFormation", "prochaineRentree"];
     if (sellerSector === "sante") return ["dureeActe", "surRendezVous"];
@@ -33283,6 +33482,17 @@ root.addEventListener("click", function(e) {
       registerAccount();
       break;
     }
+    case "accept-prohibited-goods-consent": {
+      var pgBox = document.getElementById("prohibited-goods-checkbox");
+      if (!pgBox || !pgBox.checked) {
+        showToast("Cochez la case d'engagement pour continuer.");
+        break;
+      }
+      state.onboardDraft.prohibitedGoodsConsent = true;
+      state.onboardDraft.prohibitedGoodsConsentAt = Date.now();
+      registerAccount();
+      break;
+    }
     case "accept-commission-consent": {
       if (!isPolicyBoxScrolledToBottom("sellerPolicyBox")) {
         var sellerBox = document.getElementById("sellerPolicyBox");
@@ -33839,7 +34049,7 @@ root.addEventListener("click", function(e) {
       // Efface tous les champs propres au vendeur et retire ce rôle de la
       // fiche — la personne redevient un simple compte Acheteur, tout le
       // reste (favoris, adresses personnelles, historique) reste intact.
-      var vendorFieldsToClear = ["sellerType", "sellerSector", "shopName", "shopPhone", "shopAddress", "shopCommune", "shopQuartier", "shopRepere", "shopLat", "shopLng", "shopCoverPhoto", "shopProfilePhoto", "cuisineType", "openingHours", "deliveryZone", "productionType", "domaineEnseigne", "specialiteSante", "servicesBeaute", "servicesAuto", "servicesDecoration", "servicesEvenementiel", "typeEtablissement", "nombreChambres", "vendorCommissionAccepted", "commissionConsent"];
+      var vendorFieldsToClear = ["sellerType", "sellerSector", "shopName", "shopPhone", "shopAddress", "shopCommune", "shopQuartier", "shopRepere", "shopLat", "shopLng", "shopCoverPhoto", "shopProfilePhoto", "cuisineType", "openingHours", "deliveryZone", "productionType", "domaineEnseigne", "specialiteSante", "servicesBeaute", "servicesAuto", "servicesDecoration", "servicesEvenementiel", "typeEtablissement", "nombreChambres", "vendorCommissionAccepted", "commissionConsent", "prohibitedGoodsConsent"];
       vendorFieldsToClear.forEach(function(vf) { dsp[vf] = null; });
       if (Array.isArray(dsp.roles)) dsp.roles = dsp.roles.filter(function(r) { return r !== "vendeur"; });
       dsp.role = "acheteur";
@@ -34807,6 +35017,62 @@ root.addEventListener("click", function(e) {
       render();
       break;
     }
+    case "moderation-approve":
+    case "moderation-reject": {
+      var modProd = null;
+      for (var mdi = 0; mdi < state.products.length; mdi++) { if (state.products[mdi].id === value) { modProd = state.products[mdi]; break; } }
+      if (!modProd) break;
+      if (action === "moderation-approve") {
+        modProd.moderationStatus = "approved";
+        modProd.moderationReason = null;
+        // Remise à zéro des signalements : il faudra de NOUVEAUX
+        // signalements pour le remasquer, pas les anciens déjà examinés.
+        modProd.reportedBy = [];
+        modProd.reportReasons = [];
+        modProd.reportCount = 0;
+        addNotification("whatsapp", "✅ Votre article \"" + modProd.name + "\" a été validé et est de nouveau visible sur Sounsouni.", modProd.sellerId);
+        showToast("✅ Article approuvé — de nouveau visible.");
+      } else {
+        modProd.moderationStatus = "rejected";
+        addNotification("whatsapp", "❌ Votre article \"" + modProd.name + "\" a été retiré car il ne respecte pas les règles de Sounsouni (produits interdits par la loi malienne, contrefaçon, annonce trompeuse...). Contactez l'administration pour plus d'informations.", modProd.sellerId);
+        showToast("Article refusé — masqué au public.");
+      }
+      save();
+      saveDoc("products", modProd);
+      render();
+      break;
+    }
+    case "open-report-product": {
+      if (!state.profile) { showToast("Connectez-vous pour signaler un article."); break; }
+      state.reportProductId = value;
+      render();
+      break;
+    }
+    case "close-report-product": state.reportProductId = null; render(); break;
+    case "submit-report-product": {
+      var repProd = null;
+      for (var rpi = 0; rpi < state.products.length; rpi++) { if (state.products[rpi].id === state.reportProductId) { repProd = state.products[rpi]; break; } }
+      state.reportProductId = null;
+      if (!repProd || !state.profile) { render(); break; }
+      if (!Array.isArray(repProd.reportedBy)) repProd.reportedBy = [];
+      if (repProd.reportedBy.indexOf(state.profile.id) !== -1) { showToast("Vous avez déjà signalé cet article."); render(); break; }
+      repProd.reportedBy.push(state.profile.id);
+      if (!Array.isArray(repProd.reportReasons)) repProd.reportReasons = [];
+      // Le motif est gardé, mais jamais l'identité de la personne à côté —
+      // seul l'Admin consulte cette liste, et le vendeur ne voit jamais qui
+      // l'a signalé.
+      repProd.reportReasons.push({ reason: value, at: Date.now() });
+      repProd.reportCount = repProd.reportedBy.length;
+      if (repProd.reportCount >= PRODUCT_REPORT_THRESHOLD && repProd.moderationStatus !== "rejected") {
+        repProd.moderationStatus = "pending";
+        repProd.moderationReason = "Signalé " + repProd.reportCount + " fois par des utilisateurs";
+      }
+      save();
+      saveDoc("products", repProd);
+      showToast("✅ Merci, votre signalement a bien été envoyé.");
+      render();
+      break;
+    }
     case "copy-user-test-panel": {
       copyTextToClipboard(buildUserTestPanelText()).then(function(ok) {
         showToast(ok ? "✅ Copié — colle-le dans la conversation pour l'envoyer." : "❌ Impossible de copier, réessaie.");
@@ -35224,6 +35490,12 @@ root.addEventListener("click", function(e) {
       });
       break;
     case "open-product": {
+      var openTarget = null;
+      for (var oti = 0; oti < state.products.length; oti++) { if (state.products[oti].id === value) { openTarget = state.products[oti]; break; } }
+      if (openTarget && isProductHiddenFromPublic(openTarget)) {
+        showToast("Cet article n'est pas disponible pour le moment.");
+        break;
+      }
       state.detailProductId = value; state.activeImageIndex = 0; state.selectedQty = 1; state.selectedColor = null; state.selectedSize = null;
       state.filatureProductOpenedAt = Date.now();
       var filatureProd = null;
@@ -36663,6 +36935,14 @@ root.addEventListener("click", function(e) {
         }
       }
       saveDeliveryFeesConfig(newZones);
+      break;
+    }
+    case "save-international-shipping-rates": {
+      var readRate = function(id) { var el = document.getElementById(id); var v = el ? parseFloat(el.value) : NaN; return isNaN(v) || v < 0 ? null : v; };
+      var mKg = readRate("intl-rate-maritime-kg"), aKg = readRate("intl-rate-aerien-kg");
+      var mMin = readRate("intl-rate-maritime-min"), aMin = readRate("intl-rate-aerien-min");
+      if (mKg == null || aKg == null || mMin == null || aMin == null) { showToast("❌ Tous les tarifs doivent être des nombres valides."); break; }
+      saveInternationalShippingConfig({ maritimePerKg: mKg, aerienPerKg: aKg, minCostInrMaritime: mMin, minCostInrAerien: aMin });
       break;
     }
     case "save-intercity-delivery-fees": {
