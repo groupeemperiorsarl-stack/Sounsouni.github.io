@@ -5235,7 +5235,9 @@ function runBackgroundResync() {
         res.data.forEach(function(row) {
           if (byCollection[row.collection]) byCollection[row.collection].push(row.data);
         });
-        SHARED_KEYS.forEach(function(name) { state[name] = byCollection[name]; });
+        // Même règle qu'au démarrage : les articles ne sont pas dans cette
+        // requête, on ne remplace donc jamais leur liste par du vide.
+        SHARED_KEYS.forEach(function(name) { if (name === "products") return; state[name] = byCollection[name]; });
       } else {
         res.data.forEach(function(row) {
           if (SHARED_KEYS.indexOf(row.collection) === -1) return;
@@ -39481,7 +39483,12 @@ function bootAppWithLocalData() {
           res.data.forEach(function(row) {
             if (byCollection[row.collection]) byCollection[row.collection].push(row.data);
           });
-          SHARED_KEYS.forEach(function(name) { state[name] = byCollection[name]; });
+          // Les articles ne font PAS partie de cette requête (chargés à part,
+          // par lots — voir syncProductsInitialBatch). Remplacer
+          // state.products par la liste vide reçue ici effaçait les articles
+          // déjà arrivés : marché vide pour tout nouveau visiteur, et
+          // "je ne vois que mes propres articles" après plus de 24 h.
+          SHARED_KEYS.forEach(function(name) { if (name === "products") return; state[name] = byCollection[name]; });
         } else {
           // Incrémental : on met seulement à jour/ajoute les lignes reçues,
           // le reste du cache local reste tel quel.
