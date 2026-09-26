@@ -8122,6 +8122,8 @@ function defaultState() {
     guestPendingCheckout: false,
     showGuestAuthPrompt: false,
     guestAuthReason: "",
+    showGuestInstallGuide: false,
+    showGuestDownloadNudge: false,
     showHistoryModal: false,
     historyTab: "achats",
     showFindAccountModal: false,
@@ -9443,6 +9445,17 @@ const TRANSLATIONS = {
     guest_cart_kept: "Votre panier sera conservé.",
     guest_back: "Retour aux articles",
     guest_added_to_cart: "Ajouté au panier",
+    gi_btn: "App",
+    gi_nudge: "Profitez d'une meilleure expérience — <b>téléchargez l'app Android</b>",
+    gi_nudge_cta: "Télécharger",
+    gi_title: "Avant d'installer",
+    gi_intro: "C'est normal et sans danger : l'application Sounsouni ne vient pas encore du Play Store, donc votre téléphone demande une autorisation une seule fois.",
+    gi_s1: "Une fois le fichier téléchargé, appuyez dessus pour l'ouvrir.",
+    gi_s2: "Un message apparaît : « Installation bloquée » ou « Source inconnue ». Appuyez sur <b>Paramètres</b>.",
+    gi_s3: "Activez l'interrupteur <b>« Autoriser depuis cette source »</b> (uniquement pour votre navigateur).",
+    gi_s4: "Revenez en arrière et appuyez de nouveau sur <b>Installer</b> : l'installation se termine normalement.",
+    gi_download: "J'ai compris, télécharger",
+    gi_later: "Plus tard",
     addr_landmark_known: "Donner le nom d'un endroit près de chez vous très connu",
     addr_landmark_placeholder: "Ex : face à la mosquée",
     addr_exact_position: "Position exacte (optionnel — précise le tarif)",
@@ -11144,6 +11157,17 @@ const TRANSLATIONS = {
     guest_cart_kept: "Your cart will be kept.",
     guest_back: "Back to products",
     guest_added_to_cart: "Added to cart",
+    gi_btn: "App",
+    gi_nudge: "Enjoy a better experience — <b>download the Android app</b>",
+    gi_nudge_cta: "Download",
+    gi_title: "Before installing",
+    gi_intro: "This is normal and safe: the Sounsouni app is not on the Play Store yet, so your phone asks for permission just once.",
+    gi_s1: "Once the file is downloaded, tap it to open it.",
+    gi_s2: "A message appears: “Install blocked” or “Unknown source”. Tap <b>Settings</b>.",
+    gi_s3: "Turn on <b>“Allow from this source”</b> (only for your browser).",
+    gi_s4: "Go back and tap <b>Install</b> again: the installation completes normally.",
+    gi_download: "Got it, download",
+    gi_later: "Later",
     addr_landmark_known: "Give the name of a well-known place near you",
     addr_landmark_placeholder: "e.g. facing the mosque",
     addr_exact_position: "Exact location (optional — refines the price)",
@@ -12845,6 +12869,17 @@ const TRANSLATIONS = {
     guest_cart_kept: "आपकी कार्ट सुरक्षित रहेगी।",
     guest_back: "उत्पादों पर वापस जाएं",
     guest_added_to_cart: "कार्ट में जोड़ा गया",
+    gi_btn: "ऐप",
+    gi_nudge: "बेहतर अनुभव के लिए — <b>Android ऐप डाउनलोड करें</b>",
+    gi_nudge_cta: "डाउनलोड",
+    gi_title: "इंस्टॉल करने से पहले",
+    gi_intro: "यह सामान्य और सुरक्षित है: Sounsouni ऐप अभी Play Store पर नहीं है, इसलिए आपका फ़ोन केवल एक बार अनुमति मांगता है।",
+    gi_s1: "फ़ाइल डाउनलोड होने के बाद, उसे खोलने के लिए उस पर टैप करें।",
+    gi_s2: "एक संदेश दिखेगा: “इंस्टॉल अवरुद्ध” या “अज्ञात स्रोत”। <b>सेटिंग्स</b> पर टैप करें।",
+    gi_s3: "<b>“इस स्रोत से अनुमति दें”</b> चालू करें (केवल आपके ब्राउज़र के लिए)।",
+    gi_s4: "वापस जाएं और फिर से <b>इंस्टॉल</b> पर टैप करें: इंस्टॉलेशन सामान्य रूप से पूरा हो जाएगा।",
+    gi_download: "समझ गया, डाउनलोड करें",
+    gi_later: "बाद में",
     addr_landmark_known: "अपने पास की किसी प्रसिद्ध जगह का नाम दें",
     addr_landmark_placeholder: "उदा: मस्जिद के सामने",
     addr_exact_position: "सटीक स्थान (वैकल्पिक — कीमत को सटीक बनाता है)",
@@ -19172,7 +19207,7 @@ var GUEST_ALLOWED_ACTIONS = {
   "set-category": 1, "set-market-sort": 1, "set-sector-filter": 1, "toggle-market-filter": 1,
   "clear-category-filter": 1, "clear-sector-filter": 1, "clear-shop-filter": 1, "open-new-arrivals-all": 1,
   "close-category-page": 1, "close-search-page": 1, "whatsapp-coming-soon": 1,
-  "guest-open-auth": 1, "guest-close-auth-prompt": 1
+  "guest-open-auth": 1, "guest-close-auth-prompt": 1, "guest-open-install": 1, "guest-close-install": 1, "guest-install-download": 1, "guest-close-nudge": 1
 };
 
 function renderGuestHeader() {
@@ -19182,8 +19217,48 @@ function renderGuestHeader() {
   html += '<img src="' + SOUNSOUNI_HEADER_ICON + '" style="width:32px;height:32px;border-radius:8px;object-fit:cover;" alt="Sounsouni" />';
   html += '<span style="font-weight:900;font-size:18px;letter-spacing:.5px;color:var(--accent);">SOUNSOUNI</span></button>';
   html += '<button type="button" data-action="go" data-value="cart" style="position:relative;background:none;border:none;padding:6px;color:var(--text-primary, #222);cursor:pointer;" aria-label="Panier">' + renderCartIcon(20) + (count > 0 ? '<span class="nav-badge" style="position:absolute;top:-4px;right:-6px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;border-radius:999px;padding:1px 6px;">' + count + '</span>' : '') + '</button>';
+  if (isAndroidWebBrowser()) {
+    html += '<button type="button" data-action="guest-open-install" style="background:rgba(61,220,132,0.12);border:1px solid #3ddc84;color:#1f9d57;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:5px;cursor:pointer;"><i class="fa-brands fa-android"></i> ' + t("gi_btn") + '</button>';
+  }
   html += '<button type="button" class="btn-primary" style="width:auto;padding:8px 14px;font-size:12.5px;margin:0;" data-action="guest-open-auth"><i class="fa-solid fa-user"></i> ' + t("guest_login_btn") + '</button>';
   html += '</header>';
+  return html;
+}
+
+// L'APK ne s'installe que sur Android : inutile de le proposer ailleurs.
+function isAndroidWebBrowser() {
+  return /android/i.test(navigator.userAgent || "") && !isNativeAppForGuest();
+}
+
+// Guide d'installation de la page visiteur — séparé de celui de la page
+// principale (même contenu rassurant), pour que les deux restent
+// indépendants.
+function renderGuestInstallGuide() {
+  var html = '<div class="modal-overlay" data-action="guest-close-install">';
+  html += '<div class="modal-sheet">';
+  html += '<button class="modal-close" data-action="guest-close-install"><i class="fa-solid fa-xmark"></i></button>';
+  html += '<div class="section-title" style="margin-bottom:6px;"><i class="fa-brands fa-android" style="color:#3ddc84;"></i> ' + t("gi_title") + '</div>';
+  html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:16px;"><i class="fa-solid fa-shield-halved"></i> ' + t("gi_intro") + '</div>';
+  var steps = ["gi_s1", "gi_s2", "gi_s3", "gi_s4"];
+  for (var gs = 0; gs < steps.length; gs++) {
+    html += '<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:14px;">';
+    html += '<div style="flex-shrink:0;width:26px;height:26px;border-radius:50%;background:var(--accent-glow);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;">' + (gs + 1) + '</div>';
+    html += '<div style="font-size:13px;line-height:1.5;padding-top:3px;">' + t(steps[gs]) + '</div>';
+    html += '</div>';
+  }
+  html += '<button class="btn-primary" style="width:100%;margin-top:6px;" data-action="guest-install-download"><i class="fa-solid fa-download"></i> ' + t("gi_download") + '</button>';
+  html += '<button class="link-btn" style="width:100%;text-align:center;margin-top:10px;font-size:12.5px;" data-action="guest-close-install">' + t("gi_later") + '</button>';
+  html += '</div></div>';
+  return html;
+}
+
+function renderGuestDownloadNudge() {
+  var html = '<div style="position:fixed;left:12px;right:12px;bottom:16px;z-index:60;background:var(--bg-card, #fff);border:1px solid var(--border-color);border-radius:14px;padding:12px 14px;box-shadow:0 6px 20px rgba(0,0,0,0.15);display:flex;align-items:center;gap:10px;">';
+  html += '<i class="fa-brands fa-android" style="color:#3ddc84;font-size:20px;"></i>';
+  html += '<div style="flex:1;font-size:12.5px;line-height:1.3;">' + t("gi_nudge") + '</div>';
+  html += '<button data-action="guest-open-install" style="background:var(--accent);color:white;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;white-space:nowrap;">' + t("gi_nudge_cta") + '</button>';
+  html += '<button data-action="guest-close-nudge" style="background:transparent;border:none;color:var(--text-dim);font-size:16px;padding:2px 4px;">✕</button>';
+  html += '</div>';
   return html;
 }
 
@@ -19216,6 +19291,8 @@ function renderGuestShell() {
   if (state.showFilterPanel) html += renderFilterPanel();
   if (state.lightboxOpen) html += renderLightbox();
   if (state.showGuestAuthPrompt) html += renderGuestAuthPrompt();
+  if (state.showGuestInstallGuide) html += renderGuestInstallGuide();
+  else if (state.showGuestDownloadNudge && !state.showGuestAuthPrompt) html += renderGuestDownloadNudge();
   if (state.toastMsg) html += '<div class="toast">' + esc(state.toastMsg) + '</div>';
   return html;
 }
@@ -33215,6 +33292,25 @@ root.addEventListener("click", function(e) {
       render();
       return;
     }
+    if (action === "guest-open-install") {
+      state.showGuestDownloadNudge = false;
+      state.showGuestInstallGuide = true;
+      render();
+      return;
+    }
+    if (action === "guest-close-install") { state.showGuestInstallGuide = false; render(); return; }
+    if (action === "guest-close-nudge") { state.showGuestDownloadNudge = false; render(); return; }
+    if (action === "guest-install-download") {
+      state.showGuestInstallGuide = false;
+      render();
+      var gdl = document.createElement("a");
+      gdl.href = "./app-release.apk";
+      gdl.download = "Sounsouni.apk";
+      document.body.appendChild(gdl);
+      gdl.click();
+      document.body.removeChild(gdl);
+      return;
+    }
     if (action === "add-cart" || action === "quick-add-cart") {
       var guestCartBefore = cartCount();
       if (action === "add-cart") addToCart(value, state.selectedQty, state.selectedColor, state.selectedSize);
@@ -33222,6 +33318,14 @@ root.addEventListener("click", function(e) {
       if (cartCount() > guestCartBefore) {
         try { flyToCart(btn); } catch (e) {}
         showToast("✅ " + t("guest_added_to_cart"));
+        // Proposition de l'app : une seule fois, juste après le premier
+        // ajout au panier (premier vrai signe d'intérêt), et sur Android.
+        var gNudgeShown = false;
+        try { gNudgeShown = sessionStorage.getItem("sounsouni_guest_nudge") === "1"; } catch (e) {}
+        if (!gNudgeShown && isAndroidWebBrowser()) {
+          try { sessionStorage.setItem("sounsouni_guest_nudge", "1"); } catch (e) {}
+          state.showGuestDownloadNudge = true;
+        }
       }
       render();
       return;
@@ -39666,6 +39770,7 @@ function triggerDownloadNudgeIfAllowed() {
   var shownCount = parseInt(sessionStorage.getItem("sounsouni_dl_nudge_count") || "0", 10);
   if (shownCount >= DOWNLOAD_NUDGE_MAX_SHOWS) return;
   if (state.showDownloadNudge) return; // déjà affiché, ne pas empiler
+  if (isGuestBrowsingMode()) return; // page visiteur : proposition séparée, après le 1er ajout au panier
   sessionStorage.setItem("sounsouni_dl_nudge_count", String(shownCount + 1));
   state.showDownloadNudge = true;
   render();
