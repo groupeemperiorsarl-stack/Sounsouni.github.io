@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-09-27-d";
+    window.SOUNSOUNI_VERSION = "2026-09-27-f";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -8901,23 +8901,32 @@ function subscribeToFcmIfCapacitor(silent) {
       var token = tokenResult.value;
       var quiet = window._fcmSilentCall;
       if (!quiet) showToast("✅ Jeton reçu (" + token.length + " caractères) — enregistrement dans Supabase...");
-      var existingEntry = (state.fcmTokens || []).find(function(t) { return t.token === token && t.accountId === state.profile.id; });
-      var entry = {
-        id: existingEntry ? existingEntry.id : uid(),
-        accountId: state.profile.id,
-        token: token,
-        createdAt: existingEntry ? existingEntry.createdAt : Date.now()
-      };
+      // Le téléphone est inscrit pour TOUS les comptes liés au même numéro
+      // (ex. compte acheteur + boutique) : sinon, un message reçu par la
+      // boutique ne déclenchait aucune notification si l'app était ouverte
+      // sur le compte acheteur (le serveur ne trouvait aucun téléphone
+      // inscrit pour la boutique).
       if (!state.fcmTokens) state.fcmTokens = [];
-      if (existingEntry) {
-        for (var i = 0; i < state.fcmTokens.length; i++) {
-          if (state.fcmTokens[i].id === existingEntry.id) { state.fcmTokens[i] = entry; break; }
+      var fcmAccountIds = (typeof getLinkedAccountIds === "function" ? getLinkedAccountIds() : [state.profile.id]).slice();
+      if (fcmAccountIds.indexOf(state.profile.id) === -1) fcmAccountIds.push(state.profile.id);
+      fcmAccountIds.forEach(function(fcmAccId) {
+        var existingEntry = state.fcmTokens.find(function(t) { return t.token === token && t.accountId === fcmAccId; });
+        var entry = {
+          id: existingEntry ? existingEntry.id : uid(),
+          accountId: fcmAccId,
+          token: token,
+          createdAt: existingEntry ? existingEntry.createdAt : Date.now()
+        };
+        if (existingEntry) {
+          for (var i = 0; i < state.fcmTokens.length; i++) {
+            if (state.fcmTokens[i].id === existingEntry.id) { state.fcmTokens[i] = entry; break; }
+          }
+        } else {
+          state.fcmTokens.push(entry);
         }
-      } else {
-        state.fcmTokens.push(entry);
-      }
+        saveDoc("fcmTokens", entry);
+      });
       save();
-      saveDoc("fcmTokens", entry);
       if (!quiet) showToast(t("toast_notif_enabled"));
       render();
     });
@@ -19285,7 +19294,10 @@ function getConversationMessages(conversationId) {
   if (state.profile) {
     var linkedIdsForRead = getLinkedAccountIds();
     if ((linkedIdsForRead.indexOf(conv.sellerId) !== -1 && conv.unreadForSeller) || (linkedIdsForRead.indexOf(conv.buyerId) !== -1 && conv.unreadForBuyer)) {
-      if (linkedIdsForRead.indexOf(conv.sellerId) !== -1) conv.unreadForSeller = 0; else conv.unreadForBuyer = 0;
+      // Les deux côtés peuvent être à soi (conversation avec son propre
+      // compte lié) : on remet à zéro chaque côté qui nous appartient.
+      if (linkedIdsForRead.indexOf(conv.sellerId) !== -1) conv.unreadForSeller = 0;
+      if (linkedIdsForRead.indexOf(conv.buyerId) !== -1) conv.unreadForBuyer = 0;
       save();
       secureSocialWrite({ operation: "mark_conversation_read", conversationId: conv.id }, function() { saveDoc("conversations", conv); });
     }
@@ -32126,10 +32138,18 @@ function renderChatWidget() {
         var myConvAccountId = myLinkedIdsForList.indexOf(c.sellerId) !== -1 ? c.sellerId : c.buyerId;
         var myConvAcc = null;
         for (var mca = 0; mca < state.accounts.length; mca++) { if (state.accounts[mca].id === myConvAccountId) { myConvAcc = state.accounts[mca]; break; } }
-        var myConvAccLabel = myConvAcc ? (myConvAcc.shopName || myConvAcc.name) : '';
+        // On affiche la personne qui écrit (l'autre partie), pas son propre
+        // compte — "Vous-même" si les deux côtés sont à soi (compte lié).
+        var otherPartyId = myConvAccountId === c.sellerId ? c.buyerId : c.sellerId;
+        var otherPartyIsMine = myLinkedIdsForList.indexOf(otherPartyId) !== -1;
+        var otherPartyAcc = null;
+        for (var opa = 0; opa < state.accounts.length; opa++) { if (state.accounts[opa].id === otherPartyId) { otherPartyAcc = state.accounts[opa]; break; } }
+        var myConvAccLabel = otherPartyIsMine ? "Vous-même" : (otherPartyAcc ? (otherPartyId === c.sellerId ? (otherPartyAcc.shopName || otherPartyAcc.name) : otherPartyAcc.name) : '');
         html += '<div style="padding:10px;border-bottom:1px solid var(--border-color);cursor:pointer;" data-action="open-chat" data-value="' + c.id + '">';
         html += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;"><div style="font-weight:700;font-size:13px;">' + (product ? esc(product.name) : t("chat_product_default")) + '</div>' + (myConvAccLabel ? '<div style="font-size:10px;color:var(--accent);font-weight:700;white-space:nowrap;">' + esc(myConvAccLabel) + '</div>' : '') + '</div>';
-        html += '<div style="font-size:12px;color:var(--text-dim);">' + esc(c.lastMessage || t("chat_new_conversation")) + '</div>';
+        var convLastMsg = c.lastMessage;
+        if (!convLastMsg && Array.isArray(c.messages) && c.messages.length) { var lm = c.messages[c.messages.length - 1]; convLastMsg = lm ? (lm.audioUrl || lm.type === "audio" ? "🎤 Message vocal" : (lm.message || lm.text || "")) : ""; }
+        html += '<div style="font-size:12px;color:var(--text-dim);">' + esc(convLastMsg || t("chat_new_conversation")) + '</div>';
         if (unreadForMe(c) > 0) {
           html += '<span style="background:var(--danger);color:white;font-size:10px;padding:1px 8px;border-radius:999px;">' + unreadForMe(c) + '</span>';
         }
@@ -39744,6 +39764,19 @@ function applyPersonalResults(results, seq, via) {
       previousByKey[key] = {};
       (state[key] || []).forEach(function(d) { if (d && d.id) previousByKey[key][d.id] = d; });
     });
+    // Même principe pour les conversations : les messages sont gardés à part
+    // (zone protégée) et récupérés séparément — on garde ceux déjà reçus,
+    // sinon la conversation ouverte clignote à chaque rechargement.
+    var localConvsById = {};
+    (state.conversations || []).forEach(function(c) { if (c && c.id) localConvsById[c.id] = c; });
+    Object.keys(byKey.conversations).forEach(function(cid) {
+      var srvC = byKey.conversations[cid], locC = localConvsById[cid];
+      if (!locC) return;
+      if (Array.isArray(locC.messages) && locC.messages.length && (!Array.isArray(srvC.messages) || srvC.messages.length < locC.messages.length)) {
+        srvC.messages = locC.messages;
+      }
+      if (!srvC.lastMessage && locC.lastMessage) srvC.lastMessage = locC.lastMessage;
+    });
     PERSONAL_KEYS.forEach(function(key) {
       var fresh = byKey[key];
       (state[key] || []).forEach(function(local) {
@@ -40385,8 +40418,12 @@ scheduleDownloadNudge();
 // provoquer.
 function notifyIfRelevant(collection, data, previousItem, isNewInsert) {
   var me = state.profile.id;
+  // Comptes liés (même numéro) : un message reçu par sa boutique doit
+  // alerter même si l'app est ouverte sur son compte acheteur, et inversement.
+  var myLinked = (typeof getLinkedAccountIds === "function" ? getLinkedAccountIds() : [me]);
+  var isMine = function(id) { return !!id && (id === me || myLinked.indexOf(id) !== -1); };
   if (collection === "notifications") {
-    if (isNewInsert && data.userId === me) {
+    if (isNewInsert && isMine(data.userId)) {
       playNotificationSound();
       showSystemNotification(data.message);
     }
@@ -40394,10 +40431,10 @@ function notifyIfRelevant(collection, data, previousItem, isNewInsert) {
   }
   if (collection === "conversations") {
     if (!previousItem) return; // une conversation qu'on découvre à l'instant n'est pas "un nouveau message"
-    if (data.sellerId === me && (data.unreadForSeller || 0) > (previousItem.unreadForSeller || 0)) {
+    if (isMine(data.sellerId) && (data.unreadForSeller || 0) > (previousItem.unreadForSeller || 0)) {
       playNotificationSound();
       showSystemNotification("💬 " + (data.lastMessage || "Nouveau message"));
-    } else if (data.buyerId === me && (data.unreadForBuyer || 0) > (previousItem.unreadForBuyer || 0)) {
+    } else if (isMine(data.buyerId) && (data.unreadForBuyer || 0) > (previousItem.unreadForBuyer || 0)) {
       playNotificationSound();
       showSystemNotification("💬 " + (data.lastMessage || "Nouveau message"));
     }
