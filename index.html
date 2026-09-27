@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-09-27-n";
+    window.SOUNSOUNI_VERSION = "2026-09-27-o";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -8960,21 +8960,12 @@ function subscribeToFcmIfCapacitor(silent) {
       return;
     }
     if (!silent) showToast(t("toast_firebase_registering"));
-    // Canal de notification Android (obligatoire depuis Android 8) :
-    // importance maximale = son, vibration et bandeau en haut de l'écran.
-    // Sans lui, Android rangeait les notifications dans une catégorie
-    // générique ("Divers"), souvent silencieuse ou désactivée. Le serveur
-    // (send-push-fcm) envoie les notifications dans ce même canal.
-    if (typeof PushNotifications.createChannel === "function") {
-      PushNotifications.createChannel({
-        id: "sounsouni_messages",
-        name: "Messages et commandes",
-        description: "Nouveaux messages, commandes et alertes Sounsouni",
-        importance: 5,
-        visibility: 1,
-        vibration: true,
-        lights: true
-      }).catch(function(err) { console.log("[FCM] Création du canal impossible :", err); });
+    // Retour à la configuration qui fonctionnait : on N'utilise PLUS de canal
+    // personnalisé. Le canal "sounsouni_messages" ajouté le 27/09 est
+    // supprimé du téléphone : Android se rabat alors sur le canal par
+    // défaut (celui qui affichait bien les notifications en arrière-plan).
+    if (typeof PushNotifications.deleteChannel === "function") {
+      PushNotifications.deleteChannel({ id: "sounsouni_messages" }).catch(function() {});
     }
     PushNotifications.register();
   }).catch(function(err) {
