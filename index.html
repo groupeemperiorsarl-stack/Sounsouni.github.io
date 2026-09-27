@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-09-27-j";
+    window.SOUNSOUNI_VERSION = "2026-09-27-l";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -20456,6 +20456,21 @@ function closeOverlayByKey(k) {
 // provoquait un empilement puis un retour en arrière immédiat qui
 // annulait la navigation qu'on venait de faire. Ici, ce genre de double
 // changement REMPLACE l'étape du dessus au lieu d'empiler puis reculer.
+// Nombre d'étapes que L'APPLICATION a elle-même ajoutées à l'historique du
+// navigateur : tant qu'il en reste, un "retour" reste dans l'app ; à zéro,
+// un "retour" sortirait du site — les boutons Retour de l'app ramènent
+// alors à l'accueil de l'app au lieu de quitter.
+var _snsHistoryDepth = 0;
+var _overlayHasOwnEntry = false;
+function safeHistoryBack(fallbackFn) {
+  if (_snsHistoryDepth > 0) { history.back(); return; }
+  if (fallbackFn) fallbackFn();
+}
+function goToAppHome() {
+  state.view = (state.profile && ROLE_HOME_VIEW[state.profile.role]) || "market";
+  render();
+}
+
 function syncHistoryForNav() {
   if (!state.profile) return;
   var newView = state.view;
@@ -20475,30 +20490,44 @@ function syncHistoryForNav() {
   if (lastHistoryView === null) {
     // Tout premier rendu après connexion.
     history.replaceState({ view: newView, overlay: newOverlay }, "");
+    _overlayHasOwnEntry = false;
   } else if (overlayChanged && !viewChanged && newOverlay !== null && lastHistoryOverlayKey === null) {
     // Une fenêtre s'ouvre seule, rien d'autre ne change → on empile une
     // étape pour qu'un retour la referme.
     window.scrollTo(0, 0);
     history.pushState({ view: newView, overlay: newOverlay }, "");
+    _snsHistoryDepth++;
+    _overlayHasOwnEntry = true;
   } else if (overlayChanged && !viewChanged && newOverlay === null && lastHistoryOverlayKey !== null) {
     // Une fenêtre se ferme seule, autrement qu'avec le retour (bouton
     // "X", validation...) → on retire l'étape qu'on avait ajoutée pour
-    // elle, pour ne pas laisser une étape fantôme.
-    suppressHistoryPush = true;
-    history.back();
+    // elle, pour ne pas laisser une étape fantôme. UNIQUEMENT si une étape
+    // avait vraiment été ajoutée pour elle : sinon ce "retour" reculait
+    // d'une vraie page — et sortait du site (fenêtre des messages, fiche
+    // compte de l'Admin...).
+    var hadOwnEntry = _overlayHasOwnEntry;
+    _overlayHasOwnEntry = false;
     lastHistoryView = newView;
     lastHistoryOverlayKey = newOverlay;
+    if (hadOwnEntry && _snsHistoryDepth > 0) {
+      suppressHistoryPush = true;
+      history.back();
+    }
     return;
   } else if (viewChanged && !overlayChanged) {
     // Changement de page classique, aucune fenêtre impliquée.
     window.scrollTo(0, 0);
     history.pushState({ view: newView, overlay: newOverlay }, "");
+    _snsHistoryDepth++;
   } else {
     // Les deux changent en même temps (fenêtre + page), ou une fenêtre en
     // remplace une autre : on REMPLACE l'étape du dessus plutôt que
-    // d'empiler puis de revenir en arrière.
+    // d'empiler puis de revenir en arrière. Une fenêtre qui en remplace
+    // une autre reprend son étape ; une fenêtre ouverte avec un changement
+    // de page n'a pas d'étape à elle.
     window.scrollTo(0, 0);
     history.replaceState({ view: newView, overlay: newOverlay }, "");
+    if (!(lastHistoryOverlayKey !== null && newOverlay !== null)) _overlayHasOwnEntry = false;
   }
   lastHistoryView = newView;
   lastHistoryOverlayKey = newOverlay;
@@ -26420,6 +26449,10 @@ function renderOrders() {
       allMyOrders.push(state.orders[i]);
     }
   }
+  // Le dernier achat en haut, toujours — tri explicite par date, pour ne
+  // plus jamais dépendre de l'ordre de rangement en mémoire.
+  allMyOrders.sort(function(a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+
   if (allMyOrders.length === 0) {
     return '<div class="orders-view"><div class="empty-state"><i class="fa-solid fa-box"></i><div class="title">' + t("orders_no_purchase") + '</div></div></div>';
   }
@@ -36133,7 +36166,7 @@ root.addEventListener("click", function(e) {
         render();
       } else {
         state.shopPageOrigin = null;
-        history.back();
+        safeHistoryBack(function() { state.view = "market"; state.shopFilterSellerId = null; render(); });
       }
       break;
     }
@@ -36152,7 +36185,7 @@ root.addEventListener("click", function(e) {
     }
     case "clear-sector-filter": state.sectorFilter = null; state.view = "market"; render(); break;
     case "clear-category-filter": state.category = "Tout"; state.view = "market"; render(); break;
-    case "go-back": history.back(); break;
+    case "go-back": safeHistoryBack(goToAppHome); break;
     case "close-category-page": {
       state.category = "Tout";
       state.sectorFilter = null;
@@ -39345,6 +39378,8 @@ function runStarCycle() {
 // runStarCycle();
 
 window.addEventListener("popstate", function(e) {
+  if (_snsHistoryDepth > 0) _snsHistoryDepth--;
+  _overlayHasOwnEntry = false;
   if (suppressHistoryPush) {
     // Ce popstate vient de notre propre history.back() (nettoyage d'une
     // étape fantôme après fermeture d'une fenêtre via son bouton "X",
@@ -39388,8 +39423,9 @@ window.addEventListener("popstate", function(e) {
 // fonctionne à l'identique dans les deux versions.
 if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
   window.Capacitor.Plugins.App.addListener("backButton", function() {
-    if (window.history.length > 1) {
-      window.history.back();
+    if (_snsHistoryDepth > 0 || currentOverlayKey()) {
+      if (_snsHistoryDepth > 0) window.history.back();
+      else { closeOverlayByKey(currentOverlayKey()); render(); }
     } else {
       // Plus rien à dépiler (écran d'accueil) — on met l'app en arrière-
       // plan comme le fait tout Android normal, plutôt que de la fermer
@@ -39854,6 +39890,10 @@ function applyPersonalResults(results, seq, via) {
       state[key] = Object.keys(fresh).map(function(k) { return fresh[k]; });
     });
     state.notifications.sort(function(a, b) { return (b.time || 0) - (a.time || 0); });
+    // Commandes : la plus récente en premier — même convention que
+    // l'ajout d'une nouvelle commande (en tête). Sans ce tri, l'ordre était
+    // celui renvoyé par le serveur, et le dernier achat pouvait finir en bas.
+    state.orders.sort(function(a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
     // Mêmes alertes qu'avec les mises à jour en direct (son, notification
     // système) pour ce qui est nouveau ou a changé depuis le dernier
     // chargement — pas au tout premier chargement.
@@ -40369,7 +40409,9 @@ function bootAppWithLocalData() {
           var idx = list.findIndex(function(item) { return item.id === row.data.id; });
           if (idx === -1) {
             isNewInsert = true;
-            list.push(row.data);
+            // Une nouvelle commande reçue en direct va en tête de liste
+            // (la plus récente en premier), pas en bas.
+            if (row.collection === "orders") list.unshift(row.data); else list.push(row.data);
           } else {
             previousItem = list[idx];
             // Écho de notre propre écriture (l'appareil reçoit en retour ce
