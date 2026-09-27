@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-09-27-g";
+    window.SOUNSOUNI_VERSION = "2026-09-27-i";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -8952,6 +8952,22 @@ function subscribeToFcmIfCapacitor(silent) {
       return;
     }
     if (!silent) showToast(t("toast_firebase_registering"));
+    // Canal de notification Android (obligatoire depuis Android 8) :
+    // importance maximale = son, vibration et bandeau en haut de l'écran.
+    // Sans lui, Android rangeait les notifications dans une catégorie
+    // générique ("Divers"), souvent silencieuse ou désactivée. Le serveur
+    // (send-push-fcm) envoie les notifications dans ce même canal.
+    if (typeof PushNotifications.createChannel === "function") {
+      PushNotifications.createChannel({
+        id: "sounsouni_messages",
+        name: "Messages et commandes",
+        description: "Nouveaux messages, commandes et alertes Sounsouni",
+        importance: 5,
+        visibility: 1,
+        vibration: true,
+        lights: true
+      }).catch(function(err) { console.log("[FCM] Création du canal impossible :", err); });
+    }
     PushNotifications.register();
   }).catch(function(err) {
     if (!silent) showToast("❌ requestPermissions() a échoué : " + (err && err.message ? err.message : String(err)));
@@ -19320,6 +19336,9 @@ function getConversationMessages(conversationId) {
 function unreadForMe(conv) {
   if (!state.profile) return 0;
   var linkedIds = getLinkedAccountIds();
+  // Conversation avec soi-même (acheteur ET vendeur sont ses propres
+  // comptes) : on est l'auteur de tous les messages, donc jamais "non lu".
+  if (linkedIds.indexOf(conv.sellerId) !== -1 && linkedIds.indexOf(conv.buyerId) !== -1) return 0;
   var total = 0;
   if (linkedIds.indexOf(conv.sellerId) !== -1) total += conv.unreadForSeller || 0;
   if (linkedIds.indexOf(conv.buyerId) !== -1) total += conv.unreadForBuyer || 0;
