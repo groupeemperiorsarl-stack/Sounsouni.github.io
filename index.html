@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-09-27-b";
+    window.SOUNSOUNI_VERSION = "2026-09-27-c";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -39614,6 +39614,9 @@ function syncPersonalCollections() {
       queries.push(lazyPages(function() { return q().eq("collection", "orders").in("data->>livreurId", ids); }));
       queries.push(lazyPages(function() { return q().eq("collection", "orders").in("data->>relaisShopId", ids); }));
       ids.forEach(function(id) {
+        // Les commandes publiques portent "sellerIds" (le détail des articles
+        // est gardé à part, protégé) — les anciennes ont encore "items".
+        queries.push(lazyPages(function() { return q().eq("collection", "orders").contains("data", { sellerIds: [id] }); }));
         queries.push(lazyPages(function() { return q().eq("collection", "orders").contains("data", { items: [{ sellerId: id }] }); }));
       });
       if (state.profile.role === "livreur") {
@@ -39675,6 +39678,17 @@ function applyPersonalResults(results, seq, via) {
     // serveur (file d'attente d'envoi) : on les garde.
     var pendingIds = {};
     (state.pendingSyncQueue || []).forEach(function(it) { if (it && it.data && it.data.id) pendingIds[it.data.id] = true; if (it && it.id) pendingIds[it.id] = true; });
+    // Le détail des articles et les contacts ne sont pas dans la commande
+    // publique (gardés à part, protégés) : on conserve ceux déjà récupérés
+    // pour éviter qu'une commande s'affiche un instant sans ses articles.
+    var localOrdersById = {};
+    (state.orders || []).forEach(function(o) { if (o && o.id) localOrdersById[o.id] = o; });
+    Object.keys(byKey.orders).forEach(function(oid) {
+      var srv = byKey.orders[oid], loc = localOrdersById[oid];
+      if (loc && Array.isArray(loc.items) && loc.items.length && (!Array.isArray(srv.items) || srv.items.length === 0)) {
+        byKey.orders[oid] = Object.assign({}, loc, srv, { items: loc.items });
+      }
+    });
     PERSONAL_KEYS.forEach(function(key) {
       var fresh = byKey[key];
       (state[key] || []).forEach(function(local) {
@@ -39685,6 +39699,10 @@ function applyPersonalResults(results, seq, via) {
       state[key] = Object.keys(fresh).map(function(k) { return fresh[k]; });
     });
     state.notifications.sort(function(a, b) { return (b.time || 0) - (a.time || 0); });
+    if (state.profile) {
+      try { fetchMyOrderContacts(); } catch (e) {}
+      try { fetchMyOrderDetails(); } catch (e) {}
+    }
     window._personalSyncStatus = { at: Date.now(), orders: state.orders.length, notifications: state.notifications.length, conversations: state.conversations.length, full: isFullDataViewer(), via: via, fallback: via === "direct" ? (window._personalSyncFallbackReason || null) : null };
     save();
     render();
