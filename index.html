@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-09-27-f";
+    window.SOUNSOUNI_VERSION = "2026-09-27-g";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -19299,7 +19299,17 @@ function getConversationMessages(conversationId) {
       if (linkedIdsForRead.indexOf(conv.sellerId) !== -1) conv.unreadForSeller = 0;
       if (linkedIdsForRead.indexOf(conv.buyerId) !== -1) conv.unreadForBuyer = 0;
       save();
-      secureSocialWrite({ operation: "mark_conversation_read", conversationId: conv.id }, function() { saveDoc("conversations", conv); });
+      // Anti-boucle : cette fonction est appelée à chaque affichage de la
+      // conversation. On ne prévient le serveur qu'une fois toutes les 10 s
+      // pour une même conversation, et on retient l'heure pour ne pas
+      // prendre un compteur pas encore mis à jour côté serveur pour un
+      // nouveau message (voir applyPersonalResults).
+      window._recentConvMarkRead = window._recentConvMarkRead || {};
+      var lastMark = window._recentConvMarkRead[conv.id] || 0;
+      window._recentConvMarkRead[conv.id] = Date.now();
+      if (Date.now() - lastMark > 10000) {
+        secureSocialWrite({ operation: "mark_conversation_read", conversationId: conv.id }, function() { saveDoc("conversations", conv); });
+      }
     }
   }
   return conv.messages || [];
@@ -39776,6 +39786,16 @@ function applyPersonalResults(results, seq, via) {
         srvC.messages = locC.messages;
       }
       if (!srvC.lastMessage && locC.lastMessage) srvC.lastMessage = locC.lastMessage;
+      // Conversation marquée comme lue il y a moins de 20 s : le serveur n'a
+      // peut-être pas encore pris en compte la remise à zéro. On garde le
+      // "lu" local pour les côtés qui nous appartiennent (évite la boucle
+      // lu -> signal -> rechargement -> "nouveau message" -> son).
+      var markedAt = window._recentConvMarkRead && window._recentConvMarkRead[cid];
+      if (markedAt && Date.now() - markedAt < 20000) {
+        var linkedForMark = (typeof getLinkedAccountIds === "function") ? getLinkedAccountIds() : [];
+        if (linkedForMark.indexOf(srvC.sellerId) !== -1 && (locC.unreadForSeller || 0) === 0) srvC.unreadForSeller = 0;
+        if (linkedForMark.indexOf(srvC.buyerId) !== -1 && (locC.unreadForBuyer || 0) === 0) srvC.unreadForBuyer = 0;
+      }
     });
     PERSONAL_KEYS.forEach(function(key) {
       var fresh = byKey[key];
@@ -40431,6 +40451,9 @@ function notifyIfRelevant(collection, data, previousItem, isNewInsert) {
   }
   if (collection === "conversations") {
     if (!previousItem) return; // une conversation qu'on découvre à l'instant n'est pas "un nouveau message"
+    // Conversation avec soi-même (les deux côtés sont à soi) : jamais de son,
+    // c'est forcément un message qu'on vient d'envoyer.
+    if (isMine(data.sellerId) && isMine(data.buyerId)) return;
     if (isMine(data.sellerId) && (data.unreadForSeller || 0) > (previousItem.unreadForSeller || 0)) {
       playNotificationSound();
       showSystemNotification("💬 " + (data.lastMessage || "Nouveau message"));
