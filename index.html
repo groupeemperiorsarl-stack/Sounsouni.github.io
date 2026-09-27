@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-09-26-e";
+    window.SOUNSOUNI_VERSION = "2026-09-27-b";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -9045,11 +9045,29 @@ function requestPushPermissionAndSubscribe() {
   });
 }
 
+// Étape 3b : écritures des notifications et des conversations via la
+// fonction serveur sécurisée "social-write". Repli sur l'ancienne écriture
+// directe UNIQUEMENT si la fonction n'est pas (encore) déployée ou si le
+// réseau échoue — jamais quand le serveur refuse explicitement.
+function secureSocialWrite(payload, fallbackFn, useAdminToken) {
+  var token = useAdminToken ? state.adminSessionToken : state.sessionToken;
+  if (!FIREBASE_ENABLED || !token) { if (fallbackFn) fallbackFn(); return Promise.resolve({ success: false, fallback: true }); }
+  return fetch(supabaseConfig.url + "/functions/v1/social-write", { method: "POST", headers: authHeaders({}, !!useAdminToken), body: JSON.stringify(payload) })
+    .then(function(r) {
+      if (r.status === 404) { if (fallbackFn) fallbackFn(); return { success: false, fallback: true }; }
+      return r.json().then(function(res) {
+        if (!res.success) { try { pushDebugLog("error", "social-write refusé : " + payload.operation, JSON.stringify(res)); } catch (e) {} }
+        return res;
+      });
+    })
+    .catch(function(err) { if (fallbackFn) fallbackFn(); return { success: false, fallback: true, error: String(err) }; });
+}
+
 function addNotification(channel, message, userId, target) {
   var notif = { id: uid(), channel: channel, message: message, userId: userId || null, time: Date.now(), read: false, target: target || null };
   state.notifications.unshift(notif);
   save();
-  saveDoc("notifications", notif);
+  secureSocialWrite({ operation: "create_notification", notification: notif }, function() { saveDoc("notifications", notif); });
   triggerPushNotification(userId, message);
 }
 
@@ -14898,11 +14916,15 @@ function mergeAccountsByPhone(primaryId) {
     if (changed) saveDoc("bookings", b);
   });
 
+  // Conversations et notifications : réattribuées côté serveur (jeton
+  // Admin), l'app se contentant de mettre à jour sa copie locale.
+  var mergeDupIds = dupIds.slice();
+  var mergeLocalConvs = [];
   state.conversations.forEach(function(c) {
     var changed = false;
     if (isDup(c.buyerId)) { c.buyerId = primaryId; changed = true; }
     if (isDup(c.sellerId)) { c.sellerId = primaryId; changed = true; }
-    if (changed) saveDoc("conversations", c);
+    if (changed) mergeLocalConvs.push(c);
   });
 
   state.reviews.forEach(function(r) {
@@ -14913,9 +14935,14 @@ function mergeAccountsByPhone(primaryId) {
     }
   });
 
+  var mergeLocalNotifs = [];
   state.notifications.forEach(function(n) {
-    if (isDup(n.userId)) { n.userId = primaryId; saveDoc("notifications", n); }
+    if (isDup(n.userId)) { n.userId = primaryId; mergeLocalNotifs.push(n); }
   });
+  secureSocialWrite({ operation: "admin_merge_accounts", primaryId: primaryId, duplicateIds: mergeDupIds }, function() {
+    mergeLocalConvs.forEach(function(c) { saveDoc("conversations", c); });
+    mergeLocalNotifs.forEach(function(n) { saveDoc("notifications", n); });
+  }, true);
 
   state.boosts.forEach(function(bo) {
     if (isDup(bo.sellerId)) {
@@ -18869,7 +18896,7 @@ function createConversation(productId, sellerId, orderId) {
   };
   state.conversations.push(conv);
   save();
-  saveDoc("conversations", conv);
+  secureSocialWrite({ operation: "create_conversation", conversation: conv }, function() { saveDoc("conversations", conv); });
   return conv.id;
 }
 
@@ -19257,14 +19284,10 @@ function getConversationMessages(conversationId) {
   if (!conv) return [];
   if (state.profile) {
     var linkedIdsForRead = getLinkedAccountIds();
-    if (linkedIdsForRead.indexOf(conv.sellerId) !== -1 && conv.unreadForSeller) {
-      conv.unreadForSeller = 0;
+    if ((linkedIdsForRead.indexOf(conv.sellerId) !== -1 && conv.unreadForSeller) || (linkedIdsForRead.indexOf(conv.buyerId) !== -1 && conv.unreadForBuyer)) {
+      if (linkedIdsForRead.indexOf(conv.sellerId) !== -1) conv.unreadForSeller = 0; else conv.unreadForBuyer = 0;
       save();
-      saveDoc("conversations", conv);
-    } else if (linkedIdsForRead.indexOf(conv.buyerId) !== -1 && conv.unreadForBuyer) {
-      conv.unreadForBuyer = 0;
-      save();
-      saveDoc("conversations", conv);
+      secureSocialWrite({ operation: "mark_conversation_read", conversationId: conv.id }, function() { saveDoc("conversations", conv); });
     }
   }
   return conv.messages || [];
@@ -35886,11 +35909,18 @@ root.addEventListener("click", function(e) {
     }
     case "toggle-notif": {
       state.showNotifPanel = true;
+      var readNotifIds = [], readNotifDocs = [];
       for (var ni = 0; ni < state.notifications.length; ni++) {
         if (state.profile && state.notifications[ni].userId === state.profile.id && !state.notifications[ni].read) {
           state.notifications[ni].read = true;
-          saveDoc("notifications", state.notifications[ni]);
+          readNotifIds.push(state.notifications[ni].id);
+          readNotifDocs.push(state.notifications[ni]);
         }
+      }
+      if (readNotifIds.length) {
+        secureSocialWrite({ operation: "mark_notifications_read", ids: readNotifIds }, function() {
+          readNotifDocs.forEach(function(n) { saveDoc("notifications", n); });
+        });
       }
       save();
       render();
@@ -39968,6 +39998,12 @@ function trySplashFinish() {
     bootStep("affichage", render);
   }
 }
+
+// Taper "#diag" (ou le retirer) à la fin de l'adresse affiche la page de
+// diagnostic sans recharger la page — donc sans perdre la connexion.
+window.addEventListener("hashchange", function() {
+  if (typeof _splashFinished !== "undefined" && _splashFinished) render();
+});
 
 // Filet de sécurité : si, pour une raison imprévue, le logo de chargement
 // est toujours affiché 15 secondes après le démarrage, on force l'affichage.
