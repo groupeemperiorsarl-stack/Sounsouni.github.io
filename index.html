@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-09-27-m";
+    window.SOUNSOUNI_VERSION = "2026-09-27-n";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -6562,7 +6562,7 @@ var ADMIN_RESTRICTED_ACTIONS = [
   "toggle-section-style-bold", "set-brand-image-field", "set-section-style-field", "save-market-display-config",
   "admin-cancel-boost", "approve-relais-edit", "reject-relais-edit",
   "admin-add-quartier", "admin-remove-quartier", "undo-quartier-change",
-  "admin-add-quartier-proche", "admin-remove-quartier-proche", "undo-quartier-proche-change", "toggle-user-test-mode", "moderation-approve", "moderation-reject",
+  "admin-add-quartier-proche", "admin-remove-quartier-proche", "undo-quartier-proche-change", "toggle-user-test-mode", "moderation-approve", "moderation-reject", "run-full-push-diagnostic",
   "send-admin-broadcast", "toggle-employee-permission", "add-boost-tier", "remove-boost-tier", "save-boost-tiers",
   "save-vip-rotation-seconds", "save-delivery-base-config", "admin-add-commune", "admin-remove-commune",
   "save-admin-product-edit", "admin-delete-account", "save-relais-commission", "save-delivery-fees", "save-intercity-delivery-fees", "save-international-shipping-rates",
@@ -30684,6 +30684,16 @@ function renderAdminAccountDetail(accountId) {
     }
     html += '</div>';
   }
+  // ---- Diagnostic COMPLET des notifications : un bouton, un rapport ----
+  html += '<div class="glass-card" style="padding:14px;margin-top:10px;border:1.5px solid var(--accent);">';
+  html += '<div style="font-weight:800;font-size:13.5px;margin-bottom:6px;"><i class="fa-solid fa-stethoscope"></i> Diagnostic complet des notifications</div>';
+  html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;">Teste tout en une fois (jetons, abonnements, envois, et réglages du téléphone si lancé depuis l\'application). Lancez-le depuis l\'application installée sur le téléphone concerné, puis copiez le rapport.</div>';
+  html += '<button class="btn-primary" style="width:100%;" data-action="run-full-push-diagnostic" data-value="' + a.id + '"><i class="fa-solid fa-play"></i> Lancer le diagnostic complet</button>';
+  if (state.pushDiagReport && state.pushDiagReportFor === a.id) {
+    html += '<div style="font-family:monospace;font-size:10.5px;white-space:pre-wrap;word-break:break-word;background:var(--bg-body);border-radius:8px;padding:10px;margin-top:10px;">' + esc(state.pushDiagReport) + '</div>';
+    html += '<button class="btn-secondary" style="width:100%;margin-top:8px;" data-action="copy-push-diagnostic"><i class="fa-solid fa-copy"></i> Copier le rapport</button>';
+  }
+  html += '</div>';
   // ---- Sécurité (visible uniquement par l'administration) ----
   html += '<div class="glass-card" style="padding:14px;margin-top:10px;">';
   html += '<div style="font-weight:800;font-size:13.5px;margin-bottom:8px;"><i class="fa-solid fa-shield-halved"></i> Sécurité (réservé à l\'administration)</div>';
@@ -35974,6 +35984,56 @@ root.addEventListener("click", function(e) {
       save();
       showToast(t("toast_notifications_disabled"));
       render();
+      break;
+    }
+    case "copy-push-diagnostic": {
+      copyTextToClipboard(state.pushDiagReport || "").then(function(ok) { showToast(ok ? "✅ Rapport copié" : "❌ Copie impossible"); });
+      break;
+    }
+    case "run-full-push-diagnostic": {
+      var diagAccId = value;
+      var diagAcc = state.accounts.find(function(x) { return x.id === diagAccId; }) || {};
+      var L = [];
+      L.push("=== Diagnostic notifications — " + fmtDateTime(Date.now()) + " ===");
+      L.push("Version de l'app : " + (window.SOUNSOUNI_VERSION || "?"));
+      L.push("Compte testé : " + (diagAcc.shopName || diagAcc.name || "?") + " (" + diagAccId + ")");
+      var isApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+      L.push("Lancé depuis : " + (isApp ? "l'application installée" : "un navigateur (réglages du téléphone non testables ici)"));
+      var toks = (state.fcmTokens || []).filter(function(t2) { return t2.accountId === diagAccId; });
+      L.push("", "--- 1. Jetons Firebase (application) ---", "Nombre : " + toks.length);
+      toks.forEach(function(t2) { L.push("• …" + String(t2.token || "").slice(-8) + " — enregistré le " + fmtDateTime(t2.createdAt) + (window._fcmCurrentToken && t2.token === window._fcmCurrentToken ? "  ← CE TÉLÉPHONE" : "")); });
+      if (isApp) L.push("Jeton actuel de ce téléphone : " + (window._fcmCurrentToken ? "…" + window._fcmCurrentToken.slice(-8) : "pas encore reçu") + (window._fcmLastError ? " (erreur : " + window._fcmLastError + ")" : ""));
+      var subs = (state.pushSubscriptions || []).filter(function(s2) { return s2.accountId === diagAccId; });
+      L.push("", "--- 2. Abonnements navigateur (Web Push) ---", "Nombre : " + subs.length);
+      subs.forEach(function(s2) { L.push("• " + String(s2.endpoint || "").replace(/^https?:\/\//, "").slice(0, 40) + "… — le " + fmtDateTime(s2.createdAt)); });
+      state.pushDiagReport = L.join("\n") + "\n\n⏳ Tests en cours…";
+      state.pushDiagReportFor = diagAccId;
+      render();
+      var P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications;
+      var tasks = [];
+      var post = function(fn) {
+        return fetch(supabaseConfig.url + "/functions/v1/" + fn, { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+          body: JSON.stringify({ userId: diagAccId, title: "Sounsouni — Diagnostic", body: "Test du diagnostic complet (" + fn + ")" }) })
+          .then(function(r) { return r.text().then(function(txt) { return "HTTP " + r.status + " — " + txt.slice(0, 700); }); })
+          .catch(function(e) { return "ERREUR RÉSEAU : " + e; });
+      };
+      tasks.push(post("send-push-fcm").then(function(r) { return "--- 3. Envoi test Firebase (application) ---\n" + r; }));
+      tasks.push(post("send-push").then(function(r) { return "--- 4. Envoi test navigateur (Web Push) ---\n" + r; }));
+      if (isApp && P) {
+        tasks.push((P.checkPermissions ? P.checkPermissions() : Promise.resolve(null)).then(function(pm) { return "--- 5. Autorisation Android ---\n" + JSON.stringify(pm); }).catch(function(e) { return "--- 5. Autorisation Android ---\nErreur : " + e; }));
+        tasks.push((P.listChannels ? P.listChannels() : Promise.resolve({ channels: "fonction indisponible" })).then(function(ch) {
+          var list = (ch && Array.isArray(ch.channels)) ? ch.channels.map(function(c) { return "• " + c.id + " « " + (c.name || "") + " » importance=" + c.importance + (c.importance === 0 ? " (DÉSACTIVÉ)" : ""); }).join("\n") : JSON.stringify(ch);
+          return "--- 6. Canaux de notification sur ce téléphone ---\n" + (list || "AUCUN canal créé");
+        }).catch(function(e) { return "--- 6. Canaux de notification ---\nErreur : " + e; }));
+        tasks.push((P.getDeliveredNotifications ? P.getDeliveredNotifications() : Promise.resolve({ notifications: [] })).then(function(dn) {
+          return "--- 7. Notifications présentes dans le volet ---\n" + ((dn && dn.notifications) ? dn.notifications.length + " notification(s)" : JSON.stringify(dn));
+        }).catch(function(e) { return "--- 7. Volet ---\nErreur : " + e; }));
+      }
+      Promise.all(tasks).then(function(parts) {
+        state.pushDiagReport = L.join("\n") + "\n\n" + parts.join("\n\n") + "\n\n=== Fin du rapport ===";
+        render();
+        showToast("✅ Diagnostic terminé — copiez le rapport.");
+      });
       break;
     }
     case "self-test-push": {
