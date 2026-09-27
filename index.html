@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-09-27-l";
+    window.SOUNSOUNI_VERSION = "2026-09-27-m";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -22474,7 +22474,14 @@ function renderProfileModal() {
     else if (!window._fcmCurrentToken) fcmStatus = '<span style="color:var(--text-dim);">⏳ Inscription de ce téléphone en cours…</span>';
     else if (hasFcmToken) fcmStatus = '<span style="color:var(--success);">✅ Ce téléphone est inscrit pour recevoir les notifications (…' + esc(window._fcmCurrentToken.slice(-6)) + ')</span>';
     else fcmStatus = '<span style="color:#c77700;">⚠️ Ce téléphone n\'est pas encore enregistré sur le serveur — appuyez sur le bouton ci-dessus.</span>';
-    html += '<div style="font-size:11px;margin:-4px 4px 10px;line-height:1.4;">' + fcmStatus + '</div>';
+    html += '<div style="font-size:11px;margin:-4px 4px 6px;line-height:1.4;">' + fcmStatus + '</div>';
+    // Tests : "maintenant" (app ouverte → la notification doit s'afficher en
+    // petit message 🔔 = le téléphone la reçoit bien) et "dans 10 s" (le
+    // temps de mettre l'app en arrière-plan → teste l'affichage par Android).
+    html += '<div style="display:flex;gap:6px;margin:0 4px 12px;">';
+    html += '<button class="btn-secondary" style="flex:1;padding:8px 4px;font-size:11px;line-height:1.3;white-space:normal;" data-action="self-test-push" data-value="0"><i class="fa-solid fa-bell"></i> Tester maintenant</button>';
+    html += '<button class="btn-secondary" style="flex:1;padding:8px 4px;font-size:11px;line-height:1.3;white-space:normal;" data-action="self-test-push" data-value="10"><i class="fa-solid fa-clock"></i> Tester dans 10 s</button>';
+    html += '</div>';
   }
   html += '<button class="vendor-hub-card" data-action="open-privacy-modal" style="background:var(--bg-body);"><i class="fa-solid fa-shield-halved"></i><div><div class="vh-title">' + t("profile_privacy_policy") + '</div><div class="vh-sub">Comment nous protégeons vos données</div></div><i class="fa-solid fa-chevron-right"></i></button>';
   html += '</div>';
@@ -35967,6 +35974,29 @@ root.addEventListener("click", function(e) {
       save();
       showToast(t("toast_notifications_disabled"));
       render();
+      break;
+    }
+    case "self-test-push": {
+      if (!state.profile) break;
+      var delaySec = parseInt(value, 10) || 0;
+      var sendSelfTest = function() {
+        fetch(supabaseConfig.url + "/functions/v1/send-push-fcm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+          body: JSON.stringify({ userId: state.profile.id, title: "Sounsouni — Test", body: "Si vous lisez ceci, les notifications fonctionnent ✅" })
+        }).then(function(r) { return r.json(); }).then(function(data) {
+          window._lastSelfPushResult = data;
+          if (data && data.ok) showToast("📨 Firebase : " + data.sent + "/" + data.totalTokens + " envoi(s) accepté(s). Attendez quelques secondes…");
+          else showToast("❌ Envoi refusé : " + ((data && (data.error || data.errorMessage)) || "raison inconnue"));
+        }).catch(function(err) { showToast("❌ Impossible de joindre le serveur : " + err); });
+      };
+      if (delaySec > 0) {
+        showToast("⏳ Mettez l'application en arrière-plan maintenant (bouton d'accueil) — envoi dans " + delaySec + " s.");
+        setTimeout(sendSelfTest, delaySec * 1000);
+      } else {
+        showToast("📤 Envoi de la notification test…");
+        sendSelfTest();
+      }
       break;
     }
     case "request-push-permission": {
