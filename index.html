@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-09-27-c";
+    window.SOUNSOUNI_VERSION = "2026-09-27-d";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -19537,6 +19537,7 @@ function renderPublicDiagnosticPage() {
     "Comptes en mémoire : " + (state.accounts || []).length,
     "Erreurs au démarrage : " + ((window._bootStepErrors && window._bootStepErrors.length) ? window._bootStepErrors.join(" | ") : "aucune"),
     "Chargement ciblé : " + (window._personalSyncStatus ? ("commandes=" + window._personalSyncStatus.orders + ", notifications=" + window._personalSyncStatus.notifications + ", conversations=" + window._personalSyncStatus.conversations + (window._personalSyncStatus.full ? " (accès complet)" : " (personnel)") + " — via " + (window._personalSyncStatus.via || "?") + (window._personalSyncStatus.fallback ? " [repli : " + window._personalSyncStatus.fallback + "]" : "")) : "pas encore effectué"),
+    "Signaux en direct : " + (Object.keys(_signalChannels).length ? (signalsWorking() ? "actifs (" + Object.keys(_signalChannels).join(", ") + ")" : "en connexion ou indisponibles — vérification toutes les 90 s") : "aucun (non connecté)"),
     "Catégorie : " + state.category + " · Recherche : \"" + (state.search || "") + "\"",
     "Filtre boutique : " + (state.shopFilterSellerId || "aucun") + " · Filtre secteur : " + (state.sectorFilter || "aucun")
   ];
@@ -39593,12 +39594,61 @@ function fetchAllPages(buildQuery) {
 // Requête préparée mais pas encore lancée : elle ne part que si on en a
 // vraiment besoin (repli quand la fonction sécurisée n'est pas disponible).
 function lazyPages(build) { return function() { return fetchAllPages(build); }; }
+// ---------- Étape 3c : signaux "il y a du nouveau pour toi" ----------
+// La base envoie un signal SANS DONNÉE aux comptes concernés quand une
+// commande, notification ou conversation change (voir script SQL 3c). Le
+// téléphone recharge alors ses données via la fonction sécurisée. Si les
+// signaux ne sont pas disponibles, vérification régulière de secours.
+var _signalChannels = {};
+var _signalSubscribed = {};
+var _signalDebounce = null;
+function ensureSignalChannels() {
+  if (!FIREBASE_ENABLED || typeof sb === "undefined" || !sb || !sb.channel) return;
+  var topics = [];
+  if (isFullDataViewer()) topics.push("sns-admin");
+  else if (state.profile) {
+    myIdentityIds().forEach(function(id) { topics.push("sns-u-" + id); });
+    if (state.profile.role === "livreur") topics.push("sns-couriers");
+  }
+  Object.keys(_signalChannels).forEach(function(t) {
+    if (topics.indexOf(t) === -1) {
+      try { sb.removeChannel(_signalChannels[t]); } catch (e) {}
+      delete _signalChannels[t]; delete _signalSubscribed[t];
+    }
+  });
+  topics.forEach(function(t) {
+    if (_signalChannels[t]) return;
+    var ch = sb.channel(t)
+      .on("broadcast", { event: "changed" }, function() { onPersonalSignal(); })
+      .subscribe(function(status) { _signalSubscribed[t] = status === "SUBSCRIBED"; });
+    _signalChannels[t] = ch;
+  });
+}
+function onPersonalSignal() {
+  if (_signalDebounce) clearTimeout(_signalDebounce);
+  // Plusieurs signaux rapprochés (ex. une commande + sa notification) =
+  // un seul rechargement.
+  _signalDebounce = setTimeout(function() { _signalDebounce = null; syncPersonalCollections(); }, 1200);
+}
+function signalsWorking() {
+  var t = Object.keys(_signalChannels);
+  return t.length > 0 && t.every(function(k) { return _signalSubscribed[k]; });
+}
+// Secours : toutes les 90 s, si l'app est ouverte et que les signaux ne
+// fonctionnent pas (non disponibles, connexion coupée...).
+setInterval(function() {
+  if (!state.profile || document.visibilityState !== "visible") return;
+  if (typeof bootDone !== "undefined" && !bootDone) return;
+  if (!signalsWorking()) syncPersonalCollections();
+}, 90000);
+
 var _personalSyncSeq = 0;
 function syncPersonalCollections() {
   if (window.__bootMark) window.__bootMark("chargement ciblé : début");
   if (!FIREBASE_ENABLED || typeof sb === "undefined" || !sb) return;
   var seq = ++_personalSyncSeq;
   window._personalSyncFallbackReason = null;
+  try { ensureSignalChannels(); } catch (e) { console.error("Signaux : abonnement impossible", e); }
   var ids = myIdentityIds();
   window._personalSyncIdentity = personalSyncIdentityKey();
   var queries = [];
@@ -39689,6 +39739,11 @@ function applyPersonalResults(results, seq, via) {
         byKey.orders[oid] = Object.assign({}, loc, srv, { items: loc.items });
       }
     });
+    var previousByKey = {};
+    PERSONAL_KEYS.forEach(function(key) {
+      previousByKey[key] = {};
+      (state[key] || []).forEach(function(d) { if (d && d.id) previousByKey[key][d.id] = d; });
+    });
     PERSONAL_KEYS.forEach(function(key) {
       var fresh = byKey[key];
       (state[key] || []).forEach(function(local) {
@@ -39699,6 +39754,24 @@ function applyPersonalResults(results, seq, via) {
       state[key] = Object.keys(fresh).map(function(k) { return fresh[k]; });
     });
     state.notifications.sort(function(a, b) { return (b.time || 0) - (a.time || 0); });
+    // Mêmes alertes qu'avec les mises à jour en direct (son, notification
+    // système) pour ce qui est nouveau ou a changé depuis le dernier
+    // chargement — pas au tout premier chargement.
+    // Uniquement si ce chargement concerne le MÊME compte que le précédent :
+    // à la connexion ou au changement de compte, ce qu'on découvre n'est pas
+    // "nouveau" (sinon une alerte par notification déjà existante).
+    var appliedIdentity = personalSyncIdentityKey();
+    var sameIdentityAsBefore = window._lastAppliedPersonalIdentity === appliedIdentity;
+    window._lastAppliedPersonalIdentity = appliedIdentity;
+    if (state.profile && typeof _splashFinished !== "undefined" && _splashFinished && sameIdentityAsBefore) {
+      ["notifications", "conversations"].forEach(function(key) {
+        (state[key] || []).forEach(function(d) {
+          var prev = previousByKey[key][d.id];
+          if (prev && JSON.stringify(prev) === JSON.stringify(d)) return;
+          try { notifyIfRelevant(key, d, prev ? JSON.parse(JSON.stringify(prev)) : null, !prev); } catch (e) {}
+        });
+      });
+    }
     if (state.profile) {
       try { fetchMyOrderContacts(); } catch (e) {}
       try { fetchMyOrderDetails(); } catch (e) {}
