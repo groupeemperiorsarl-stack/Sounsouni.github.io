@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-09-27-i";
+    window.SOUNSOUNI_VERSION = "2026-09-27-j";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -8899,6 +8899,11 @@ function subscribeToFcmIfCapacitor(silent) {
 
     PushNotifications.addListener("registration", function(tokenResult) {
       var token = tokenResult.value;
+      // Jeton ACTUEL de ce téléphone (sert à vérifier qu'il est bien celui
+      // enregistré sur le serveur — voir le Profil).
+      window._fcmCurrentToken = token;
+      window._fcmRegisteredFor = state.profile ? state.profile.id : null;
+      window._fcmLastError = null;
       var quiet = window._fcmSilentCall;
       if (!quiet) showToast("✅ Jeton reçu (" + token.length + " caractères) — enregistrement dans Supabase...");
       // Le téléphone est inscrit pour TOUS les comptes liés au même numéro
@@ -8932,6 +8937,8 @@ function subscribeToFcmIfCapacitor(silent) {
     });
 
     PushNotifications.addListener("registrationError", function(err) {
+      window._fcmLastError = "Enregistrement Firebase échoué : " + JSON.stringify(err);
+      try { render(); } catch (e) {}
       if (!window._fcmSilentCall) showToast("❌ Enregistrement Firebase échoué : " + JSON.stringify(err));
       else console.log("[FCM] Enregistrement échoué (appel silencieux) :", err);
     });
@@ -8948,6 +8955,7 @@ function subscribeToFcmIfCapacitor(silent) {
   PushNotifications.requestPermissions().then(function(result) {
     if (!silent) showToast("ℹ️ Permission : " + JSON.stringify(result));
     if (result.receive !== "granted") {
+      window._fcmLastError = "Autorisation des notifications refusée par le téléphone (" + result.receive + ")";
       if (!silent) showToast(t("toast_notif_refused_settings"));
       return;
     }
@@ -20655,6 +20663,13 @@ function setupMarketInfiniteScroll() {
 function render() {
   window._renderTick = (window._renderTick || 0) + 1;
   if (window.__bootMark && window._renderTick <= 6) window.__bootMark("affichage n°" + window._renderTick + " (" + state.view + (state.profile ? ", connecté" : ", visiteur") + ")");
+  // Téléphone (app) : réinscription automatique à chaque connexion ou
+  // changement de compte — avant, seulement au démarrage de l'app.
+  if (state.profile && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications
+      && typeof _splashFinished !== "undefined" && _splashFinished && window._fcmAutoRegisterFor !== state.profile.id) {
+    window._fcmAutoRegisterFor = state.profile.id;
+    setTimeout(function() { try { subscribeToFcmIfCapacitor(true); } catch (e) {} }, 0);
+  }
   if (window._personalSyncIdentity !== undefined && typeof bootDone !== "undefined" && bootDone && window._personalSyncIdentity !== personalSyncIdentityKey()) {
     window._personalSyncIdentity = personalSyncIdentityKey();
     setTimeout(syncPersonalCollections, 0);
@@ -22416,9 +22431,22 @@ function renderProfileModal() {
   // ne reflète rien de fiable — on se base plutôt sur la présence d'un
   // vrai jeton Firebase déjà enregistré pour ce compte.
   var isCapacitorApp = !!window.Capacitor;
-  var hasFcmToken = isCapacitorApp && state.profile && (state.fcmTokens || []).some(function(t) { return t.accountId === state.profile.id; });
+  // Activé seulement si le jeton de CE téléphone est enregistré (avant : il
+  // suffisait qu'un jeton existe pour le compte, même celui d'un autre
+  // appareil ou d'une ancienne installation).
+  var hasFcmToken = isCapacitorApp && state.profile && (state.fcmTokens || []).some(function(t) {
+    return t.accountId === state.profile.id && (!window._fcmCurrentToken || t.token === window._fcmCurrentToken);
+  });
   var pushIsOn = isCapacitorApp ? hasFcmToken : (typeof Notification !== "undefined" && Notification.permission === "granted");
   html += '<button class="vendor-hub-card" data-action="' + (pushIsOn ? 'disable-push-notifications' : 'request-push-permission') + '" style="background:var(--bg-body);"><i class="fa-solid fa-bell"></i><div><div class="vh-title">' + (pushIsOn ? t("profile_notifications_on") : t("profile_notifications_off")) + '</div><div class="vh-sub">' + (pushIsOn ? t("profile_notifications_on_sub") : t("profile_notifications_off_sub")) + '</div></div><div class="dark-mode-switch' + (pushIsOn ? ' on' : '') + '"><div class="dark-mode-knob"></div></div></button>';
+  if (isCapacitorApp && state.profile) {
+    var fcmStatus;
+    if (window._fcmLastError) fcmStatus = '<span style="color:var(--danger);">❌ ' + esc(window._fcmLastError) + '</span>';
+    else if (!window._fcmCurrentToken) fcmStatus = '<span style="color:var(--text-dim);">⏳ Inscription de ce téléphone en cours…</span>';
+    else if (hasFcmToken) fcmStatus = '<span style="color:var(--success);">✅ Ce téléphone est inscrit pour recevoir les notifications (…' + esc(window._fcmCurrentToken.slice(-6)) + ')</span>';
+    else fcmStatus = '<span style="color:#c77700;">⚠️ Ce téléphone n\'est pas encore enregistré sur le serveur — appuyez sur le bouton ci-dessus.</span>';
+    html += '<div style="font-size:11px;margin:-4px 4px 10px;line-height:1.4;">' + fcmStatus + '</div>';
+  }
   html += '<button class="vendor-hub-card" data-action="open-privacy-modal" style="background:var(--bg-body);"><i class="fa-solid fa-shield-halved"></i><div><div class="vh-title">' + t("profile_privacy_policy") + '</div><div class="vh-sub">Comment nous protégeons vos données</div></div><i class="fa-solid fa-chevron-right"></i></button>';
   html += '</div>';
 
