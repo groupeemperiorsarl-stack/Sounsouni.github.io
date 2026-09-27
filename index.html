@@ -8,7 +8,41 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-09-26-d";
+    window.SOUNSOUNI_VERSION = "2026-09-26-e";
+    // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
+    // dans le stockage du navigateur (écriture immédiate, qui survit même si
+    // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
+    // au bout, un rapport s'affiche au chargement suivant.
+    (function () {
+      var KEY = "sns_boot_trace";
+      var prev = null;
+      try { prev = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) {}
+      var trace = { version: window.SOUNSOUNI_VERSION, start: Date.now(), done: false, steps: [] };
+      window.__bootMark = function (label) {
+        try {
+          if (trace.done && trace.steps.length > 60) return;
+          trace.steps.push(Math.round((Date.now() - trace.start) / 100) / 10 + "s " + label);
+          if (trace.steps.length > 80) trace.steps.splice(1, trace.steps.length - 80);
+          localStorage.setItem(KEY, JSON.stringify(trace));
+        } catch (e) {}
+      };
+      window.__bootDone = function () { trace.done = true; window.__bootMark("✅ affichage réussi"); };
+      window.__bootMark("page ouverte");
+      if (prev && !prev.done && prev.steps && prev.steps.length) {
+        document.addEventListener("DOMContentLoaded", function () {
+          var txt = "Le démarrage précédent ne s'est pas terminé.\nVersion : " + prev.version + "\nDernières étapes :\n" + prev.steps.slice(-25).join("\n");
+          var bar = document.createElement("div");
+          bar.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:2147483647;background:#fff;padding:14px;font-family:sans-serif;color:#1a1a2e;box-shadow:0 4px 16px rgba(0,0,0,.2);max-height:70vh;overflow:auto;";
+          bar.innerHTML = '<div style="font-weight:800;margin-bottom:6px;">⚠️ Rapport de démarrage</div><pre id="boot-trace" style="white-space:pre-wrap;font-size:10.5px;background:#f4f4f4;border-radius:8px;padding:8px;"></pre>' +
+            '<button id="boot-trace-copy" style="background:#1a1a2e;color:#fff;border:none;padding:9px 14px;border-radius:10px;font-weight:700;margin:4px 4px 0 0;">Copier</button>' +
+            '<button id="boot-trace-close" style="background:#fff;color:#1a1a2e;border:1.5px solid #1a1a2e;padding:9px 14px;border-radius:10px;font-weight:700;margin-top:4px;">Fermer</button>';
+          document.body.appendChild(bar);
+          document.getElementById("boot-trace").textContent = txt;
+          document.getElementById("boot-trace-copy").onclick = function () { var b = this; if (navigator.clipboard) navigator.clipboard.writeText(txt).then(function () { b.textContent = "✅ Copié"; }, function () { b.textContent = "Copie impossible"; }); };
+          document.getElementById("boot-trace-close").onclick = function () { bar.remove(); };
+        });
+      }
+    })();
     window.__earlyErrors = [];
     window.addEventListener("error", function (e) {
       var where = (e.filename || "").split("/").pop() + ":" + (e.lineno || "?") + ":" + (e.colno || "?");
@@ -8379,7 +8413,9 @@ function pushDebugLog(type, message, detail) {
     // le stockage local d'un téléphone qui reste connecté des jours.
     if (state.debugLog.length > 200) state.debugLog.length = 200;
     save();
-    if (state.view === "admin" && state.adminTab === "test") render();
+    // Jamais pendant la gestion d'une erreur d'affichage : sinon boucle
+    // (l'affichage plante -> on note l'erreur -> on redessine -> il replante...).
+    if (state.view === "admin" && state.adminTab === "test" && !window._handlingRenderError) render();
     // Envoi au serveur (best-effort, jamais bloquant) pour que l'Admin
     // puisse voir les erreurs de N'IMPORTE QUEL compte à distance — voir
     // Admin > Test > "Erreurs récentes". Seulement les vraies erreurs
@@ -8519,6 +8555,7 @@ function mergeWithDefaults(saved) {
   if (!Array.isArray(merged.productDraft.images)) merged.productDraft.images = [];
   if (!Array.isArray(merged.products) || merged.products.length === 0) merged.products = d.products;
   if (!Array.isArray(merged.cart)) merged.cart = [];
+  if (Array.isArray(merged.orders)) merged.orders = merged.orders.filter(function(o) { return o && typeof o === "object"; }).map(normalizeOrderDoc);
   // Une demande de connexion "visiteur" ne doit jamais survivre à un
   // rechargement : on revient toujours aux articles.
   merged.guestAuthRequested = false;
@@ -20552,6 +20589,7 @@ function setupMarketInfiniteScroll() {
 
 function render() {
   window._renderTick = (window._renderTick || 0) + 1;
+  if (window.__bootMark && window._renderTick <= 6) window.__bootMark("affichage n°" + window._renderTick + " (" + state.view + (state.profile ? ", connecté" : ", visiteur") + ")");
   if (window._personalSyncIdentity !== undefined && typeof bootDone !== "undefined" && bootDone && window._personalSyncIdentity !== personalSyncIdentityKey()) {
     window._personalSyncIdentity = personalSyncIdentityKey();
     setTimeout(syncPersonalCollections, 0);
@@ -20571,7 +20609,12 @@ function render() {
     // disparaisse d'un coup pendant qu'on défile (par exemple juste
     // après avoir soi-même ouvert un article, ce qui compte comme une
     // vue de plus dès le rendu suivant).
-    window._newArrivalsSnapshot = getNewArrivals();
+    try { window._newArrivalsSnapshot = getNewArrivals(); } catch (naErr) {
+      // Jamais bloquant : sans cette protection, une erreur ici (en dehors
+      // de la zone protégée de l'affichage) laissait le logo à l'écran.
+      console.error("Nouveautés : calcul impossible", naErr);
+      window._newArrivalsSnapshot = state.products.slice().sort(function(a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }).slice(0, 12);
+    }
   }
   window._lastRenderedView = state.view;
   // Garde-fou : le marché est réservé aux acheteurs — si on s'y retrouve
@@ -20632,7 +20675,11 @@ function render() {
       window._scannerActive = false;
       stopScanner();
     }
+    if (window.__bootDone && typeof _splashFinished !== "undefined" && _splashFinished && !window._bootDoneMarked) { window._bootDoneMarked = true; window.__bootDone(); }
   } catch (err) {
+    if (window.__bootMark) window.__bootMark("❌ erreur d'affichage : " + (err && err.message));
+    window._handlingRenderError = true;
+    setTimeout(function() { window._handlingRenderError = false; }, 0);
     console.error("Erreur de rendu :", err);
     var detail = (err && err.message) ? err.message : String(err);
     // Où exactement ça plante : les premières lignes de la pile d'appels
@@ -24749,13 +24796,25 @@ function getNewArrivals() {
   // l'ancienne version pouvait prendre plusieurs secondes rien que pour
   // cette section — celle-ci reste rapide quel que soit le volume.
   var salesByProduct = {};
-  for (var oi = 0; oi < state.orders.length; oi++) {
-    var ord = state.orders[oi];
-    if (ord.status === "Annulée") continue;
-    if ((ord.createdAt || 0) < sinceMs) continue;
-    for (var ii = 0; ii < ord.items.length; ii++) {
-      var it = ord.items[ii];
-      salesByProduct[it.productId] = (salesByProduct[it.productId] || 0) + it.qty;
+  if (orderStatsActive()) {
+    // Ventes récentes lues dans les statistiques du serveur : justes même
+    // quand ce téléphone n'a que ses propres commandes.
+    for (var spi = 0; spi < state.products.length; spi++) {
+      var spid = state.products[spi].id;
+      var rs = productSalesFromStats(spid, sinceMs);
+      if (rs) salesByProduct[spid] = rs;
+    }
+  } else {
+    for (var oi = 0; oi < state.orders.length; oi++) {
+      var ord = state.orders[oi];
+      if (!ord || ord.status === "Annulée") continue;
+      if ((ord.createdAt || 0) < sinceMs) continue;
+      var ordItems = Array.isArray(ord.items) ? ord.items : [];
+      for (var ii = 0; ii < ordItems.length; ii++) {
+        var it = ordItems[ii];
+        if (!it) continue;
+        salesByProduct[it.productId] = (salesByProduct[it.productId] || 0) + (Number(it.qty) || 0);
+      }
     }
   }
   var viewsByProduct = {};
@@ -39382,6 +39441,7 @@ var _splashFinished = false;
 
 applyScaleMotif();
 root.innerHTML = renderSplashScreen();
+  if (window.__bootMark) window.__bootMark("logo affiché");
 refreshAutoExchangeRateIfNeeded();
 
 // ---------- HORLOGE DU CENTRE DE CONTRÔLE ADMIN ----------
@@ -39443,6 +39503,15 @@ var PERSONAL_KEYS = ["orders", "notifications", "conversations"];
 // voient celles qui sont disponibles, en plus des leurs).
 var COURIER_INACTIVE_STATUSES = ["Annulée", "Non livrable", "Refusée au retrait", "Livrée", "En boutique"];
 
+// Une commande enregistrée sans liste d'articles (enregistrement incomplet
+// sur le serveur) faisait planter tous les calculs qui parcourent les
+// articles — jusqu'à bloquer l'application sur le logo de chargement. On
+// lui donne une liste vide dès sa réception, où qu'elle arrive.
+function normalizeOrderDoc(d) {
+  if (d && typeof d === "object" && !Array.isArray(d.items)) d.items = [];
+  return d;
+}
+
 function isFullDataViewer() {
   if (state.adminUnlocked) return true;
   var p = state.profile;
@@ -39496,6 +39565,7 @@ function fetchAllPages(buildQuery) {
 function lazyPages(build) { return function() { return fetchAllPages(build); }; }
 var _personalSyncSeq = 0;
 function syncPersonalCollections() {
+  if (window.__bootMark) window.__bootMark("chargement ciblé : début");
   if (!FIREBASE_ENABLED || typeof sb === "undefined" || !sb) return;
   var seq = ++_personalSyncSeq;
   window._personalSyncFallbackReason = null;
@@ -39556,6 +39626,7 @@ function syncPersonalCollections() {
 }
 
 function applyPersonalResults(results, seq, via) {
+  if (window.__bootMark) window.__bootMark("chargement ciblé : réponse (" + via + ")");
     if (seq !== _personalSyncSeq) return; // une synchro plus récente a pris le relais
     var failed = results.some(function(r) { return r.error; });
     if (failed) {
@@ -39567,7 +39638,7 @@ function applyPersonalResults(results, seq, via) {
     var byKey = { orders: {}, notifications: {}, conversations: {} };
     results.forEach(function(r) {
       (r.data || []).forEach(function(row) {
-        if (byKey[row.collection] && row.data && row.data.id) byKey[row.collection][row.data.id] = row.data;
+        if (byKey[row.collection] && row.data && row.data.id) byKey[row.collection][row.data.id] = row.collection === "orders" ? normalizeOrderDoc(row.data) : row.data;
       });
     });
     // Commandes créées sur ce téléphone et pas encore confirmées par le
@@ -39597,6 +39668,7 @@ function personalSyncIdentityKey() {
 window._productsLoadStatus = { step: "pas encore lancé" };
 function syncProductsInitialBatch() {
   var loadStartedAt = Date.now();
+  if (window.__bootMark) window.__bootMark("demande des articles");
   window._productsLoadStatus = { step: "en cours", startedAt: loadStartedAt };
   sb.from("app_data").select("*").eq("collection", "products")
     .order("updated_at", { ascending: false })
@@ -39609,6 +39681,7 @@ function syncProductsInitialBatch() {
         error: res.error ? (res.error.message || JSON.stringify(res.error)) : null,
         code: res.error ? (res.error.code || res.status || null) : null
       };
+      if (window.__bootMark) window.__bootMark("articles reçus : " + (res.data ? res.data.length : "erreur"));
       if (res.error) { try { pushDebugLog("error", "Chargement des articles échoué", window._productsLoadStatus.error); } catch (e) {} }
       if (res.error || !res.data) {
         // Filet de sécurité : si cette requête échoue pour une raison
@@ -39653,6 +39726,7 @@ function syncProductsInitialBatch() {
 }
 
 function finishProductsBoot() {
+  if (window.__bootMark) window.__bootMark("traitement des articles");
   // Premier lancement de ce projet Supabase (table vide) : on y dépose
   // le catalogue de démo, une seule fois. Déplacé ici (plutôt que dans
   // la synchronisation générale) car c'est seulement à cet endroit
@@ -39860,6 +39934,7 @@ function trySplashFinish() {
     // et on continue — l'écran DOIT s'afficher quoi qu'il arrive. Avant, une
     // seule erreur ici laissait le logo de chargement à l'écran pour toujours.
     var bootStep = function(name, fn) {
+      if (window.__bootMark) window.__bootMark("étape : " + name);
       try { fn(); } catch (err) {
         window._bootStepErrors = window._bootStepErrors || [];
         window._bootStepErrors.push(name + " : " + (err && err.message ? err.message : String(err)));
@@ -39906,6 +39981,7 @@ setTimeout(function() {
 setTimeout(function() { _splashMinTimeDone = true; trySplashFinish(); }, 5500);
 
 function bootAppWithLocalData() {
+  if (window.__bootMark) window.__bootMark("démarrage des données");
   if (!FIREBASE_ENABLED) {
     // Mode local (test) : state est déjà prêt (chargé depuis localStorage ou
     // valeurs par défaut avec le catalogue de démo).
@@ -40053,6 +40129,7 @@ function bootAppWithLocalData() {
         // Commandes, notifications et conversations : seulement celles qui
         // concernent ce téléphone (sauf Admin / agent de sourcing).
         if (PERSONAL_KEYS.indexOf(row.collection) !== -1 && payload.eventType !== "DELETE" && !isPersonalRowForMe(row.collection, row.data)) return;
+        if (row.collection === "orders" && row.data) normalizeOrderDoc(row.data);
         var list = state[row.collection] || [];
         var changed = true;
         var previousItem = null;
