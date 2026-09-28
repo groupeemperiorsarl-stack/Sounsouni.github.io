@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-09-27-o";
+    window.SOUNSOUNI_VERSION = "2026-09-27-p";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -27537,11 +27537,11 @@ function renderLivreur() {
     else if (idx >= statusProgressIndex("Prête") && o.status !== "Livrée" && o.status !== "En boutique") toDeliver.push(o);
     else if (o.status === "Livrée") delivered.push(o);
   }
-  if (ordersToDelete.length > 0) {
-    state.orders = state.orders.filter(function(o) { return ordersToDelete.indexOf(o.id) === -1; });
-    save();
-    ordersToDelete.forEach(function(oid) { deleteRemoteDoc("orders", oid); });
-  }
+  // Commandes jamais préparées depuis plus de 7 jours : simplement masquées
+  // de l'écran du livreur. Avant, le téléphone du livreur les SUPPRIMAIT
+  // du serveur — un livreur n'a pas à supprimer des commandes (c'est le
+  // rôle de l'Admin), et après le verrouillage de la base cette
+  // suppression aurait échoué en boucle à chaque affichage.
   // Séparation claire entre ce que ce livreur a déjà pris en charge, ce
   // qui reste disponible pour n'importe qui, et ce qu'un collègue a déjà
   // pris — pour ne plus que tout le monde voie une liste indifférenciée.
@@ -36944,7 +36944,8 @@ root.addEventListener("click", function(e) {
       if (!confirm("Supprimer définitivement cette commande ? Cette action est irréversible.")) break;
       state.orders = state.orders.filter(function(o) { return o.id !== value; });
       save();
-      deleteRemoteDoc("orders", value);
+      var delOrderId = value;
+      secureSocialWrite({ operation: "admin_delete_order", orderId: delOrderId }, function() { deleteRemoteDoc("orders", delOrderId); }, true);
       state.adminOrderDetailId = null;
       showToast(t("toast_order_deleted"));
       render();
@@ -39874,18 +39875,31 @@ function syncPersonalCollections() {
   // fonction serveur sécurisée "personal-data" (identité vérifiée par le
   // jeton de session). Tant qu'elle n'est pas déployée (ou en cas de
   // souci), on garde le chargement direct ci-dessus : rien ne casse.
-  var useSecure = !isFullDataViewer() && state.profile && state.sessionToken;
+  // Admin principal / admins nationaux : jeton Admin ; employés et agents :
+  // leur jeton habituel — le serveur les reconnaît et renvoie tout.
+  var fullViewer = isFullDataViewer();
+  var secureToken = fullViewer ? (state.adminSessionToken || state.sessionToken) : state.sessionToken;
+  var useSecure = !!secureToken && (!!state.profile || fullViewer);
   function runDirect(reason) {
     if (reason) window._personalSyncFallbackReason = reason;
     Promise.all(queries.map(function(run) { return run(); })).then(function(results) { applyPersonalResults(results, seq, "direct"); });
   }
   if (useSecure) {
-    fetch(supabaseConfig.url + "/functions/v1/personal-data", { method: "POST", headers: authHeaders(), body: "{}" })
+    var pdHeaders = authHeaders();
+    pdHeaders["X-Session-Token"] = secureToken;
+    fetch(supabaseConfig.url + "/functions/v1/personal-data", { method: "POST", headers: pdHeaders, body: "{}" })
       .then(function(r) {
         if (r.status === 404) return { success: false, error: "fonction non déployée" };
         return r.json();
       })
       .then(function(res) {
+        if (res && res.success && fullViewer && res.full !== true) {
+          // Le serveur n'a pas reconnu cet accès Admin : on le signale (et on
+          // se replie, tant que la base n'est pas verrouillée).
+          try { pushDebugLog("error", "personal-data : accès complet non reconnu par le serveur", JSON.stringify({ full: res.full })); } catch (e) {}
+          runDirect("accès Admin non reconnu par le serveur");
+          return;
+        }
         if (res && res.success) {
           var rows = [];
           ["orders", "notifications", "conversations"].forEach(function(k) {
