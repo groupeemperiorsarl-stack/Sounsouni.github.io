@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-09-27-p";
+    window.SOUNSOUNI_VERSION = "2026-09-29-a";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -19454,7 +19454,7 @@ var GUEST_ALLOWED_ACTIONS = {
   "set-category": 1, "set-market-sort": 1, "set-sector-filter": 1, "toggle-market-filter": 1,
   "clear-category-filter": 1, "clear-sector-filter": 1, "clear-shop-filter": 1, "open-new-arrivals-all": 1,
   "close-category-page": 1, "close-search-page": 1, "whatsapp-coming-soon": 1,
-  "guest-open-auth": 1, "guest-close-auth-prompt": 1, "guest-open-install": 1, "guest-close-install": 1, "guest-install-download": 1, "guest-close-nudge": 1
+  "guest-open-auth": 1, "guest-close-auth-prompt": 1, "guest-open-install": 1, "guest-close-install": 1, "guest-install-download": 1, "guest-close-nudge": 1, "pick-initial-language": 1, "guest-open-language": 1, "guest-close-language": 1, "guest-set-language": 1
 };
 
 function renderGuestHeader() {
@@ -19465,6 +19465,9 @@ function renderGuestHeader() {
   html += '<button type="button" data-action="go" data-value="market" style="all:unset;cursor:pointer;display:flex;align-items:center;gap:6px;flex:1;min-width:0;">';
   html += '<img src="' + SOUNSOUNI_HEADER_ICON + '" style="width:26px;height:26px;border-radius:7px;object-fit:cover;flex-shrink:0;" alt="Sounsouni" />';
   html += '<span style="font-weight:900;font-size:13.5px;letter-spacing:.3px;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">SOUNSOUNI</span></button>';
+  // Langue : petit bouton compact (globe + code), qui ouvre le choix des 3 langues
+  var guestLangCode = { fr: "FR", en: "EN", hi: "हि" }[state.language] || "FR";
+  html += '<button type="button" data-action="guest-open-language" style="background:none;border:1px solid var(--border-color);border-radius:999px;padding:3px 7px;font-size:10.5px;font-weight:700;color:var(--text-primary, #222);cursor:pointer;flex-shrink:0;display:flex;align-items:center;gap:3px;white-space:nowrap;" aria-label="Langue"><i class="fa-solid fa-globe"></i>' + guestLangCode + '</button>';
   html += '<button type="button" data-action="go" data-value="cart" style="position:relative;background:none;border:none;padding:4px;color:var(--text-primary, #222);cursor:pointer;flex-shrink:0;" aria-label="Panier">' + renderCartIcon(20) + (count > 0 ? '<span class="nav-badge" style="position:absolute;top:-4px;right:-6px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;border-radius:999px;padding:1px 6px;">' + count + '</span>' : '') + '</button>';
   if (isAndroidWebBrowser()) {
     html += '<button type="button" data-action="guest-open-install" style="background:rgba(61,220,132,0.12);border:1px solid #3ddc84;color:#1f9d57;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:700;display:flex;align-items:center;gap:4px;cursor:pointer;flex-shrink:0;white-space:nowrap;"><i class="fa-brands fa-android"></i> ' + t("gi_btn") + '</button>';
@@ -19525,6 +19528,20 @@ function renderGuestAuthPrompt() {
   return html;
 }
 
+function renderGuestLanguageSheet() {
+  var langs = [["fr", "Français"], ["en", "English"], ["hi", "हिंदी"]];
+  var html = '<div class="modal-overlay" data-action="guest-close-language">';
+  html += '<div class="modal-sheet" style="text-align:center;">';
+  html += '<button class="modal-close" data-action="guest-close-language"><i class="fa-solid fa-xmark"></i></button>';
+  html += '<div class="section-title" style="margin-bottom:14px;"><i class="fa-solid fa-globe"></i> Langue · Language · भाषा</div>';
+  langs.forEach(function(l) {
+    var active = state.language === l[0];
+    html += '<button class="' + (active ? 'btn-primary' : 'btn-secondary') + '" style="width:100%;margin-bottom:8px;" data-action="guest-set-language" data-value="' + l[0] + '">' + (active ? '<i class="fa-solid fa-check"></i> ' : '') + l[1] + '</button>';
+  });
+  html += '</div></div>';
+  return html;
+}
+
 function renderGuestShell() {
   var allowedViews = ["market", "categoryPage", "searchPage", "shop", "cart"];
   if (allowedViews.indexOf(state.view) === -1) state.view = "market";
@@ -19540,6 +19557,7 @@ function renderGuestShell() {
   if (state.showFilterPanel) html += renderFilterPanel();
   if (state.lightboxOpen) html += renderLightbox();
   if (state.showGuestAuthPrompt) html += renderGuestAuthPrompt();
+  if (state.showGuestLanguageSheet) html += renderGuestLanguageSheet();
   if (state.showGuestInstallGuide) html += renderGuestInstallGuide();
   else if (state.showGuestDownloadNudge && !state.showGuestAuthPrompt) html += renderGuestDownloadNudge();
   if (state.toastMsg) html += '<div class="toast">' + esc(state.toastMsg) + '</div>';
@@ -20989,8 +21007,14 @@ function buildHTML() {
   }
   if (state.forcePreviewIntro) return renderOnboardingIntro();
   if (!state.profile) {
-    // Site web : le visiteur voit directement les articles (mode visiteur).
-    if (!isNativeAppForGuest() && !state.guestAuthRequested) return renderGuestShell();
+    // Site web : le visiteur voit directement les articles (mode visiteur),
+    // après avoir choisi sa langue lors de son tout premier passage.
+    if (!isNativeAppForGuest() && !state.guestAuthRequested) {
+      var guestLangChosen = false;
+      try { guestLangChosen = !!localStorage.getItem("sounsouni_language"); } catch (e) { guestLangChosen = true; }
+      if (!guestLangChosen && !state.forceSkipLanguagePicker) return renderLanguagePickerGate();
+      return renderGuestShell();
+    }
     // Visiteur du site qui a demandé à se connecter : directement le
     // formulaire (sans choix de langue ni présentation), avec un bouton
     // pour revenir aux articles.
@@ -33703,6 +33727,9 @@ root.addEventListener("click", function(e) {
       render();
       return;
     }
+    if (action === "guest-open-language") { state.showGuestLanguageSheet = true; render(); return; }
+    if (action === "guest-close-language") { state.showGuestLanguageSheet = false; render(); return; }
+    if (action === "guest-set-language") { setLanguage(value); state.showGuestLanguageSheet = false; save(); render(); return; }
     if (action === "guest-open-install") {
       state.showGuestDownloadNudge = false;
       state.showGuestInstallGuide = true;
@@ -33988,6 +34015,7 @@ root.addEventListener("click", function(e) {
     }
     case "pick-initial-language": {
       setLanguage(value);
+      save();
       render();
       break;
     }
