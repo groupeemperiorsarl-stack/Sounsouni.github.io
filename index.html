@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-09-29-a";
+    window.SOUNSOUNI_VERSION = "2026-09-29-d";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -28,7 +28,9 @@
       };
       window.__bootDone = function () { trace.done = true; window.__bootMark("✅ affichage réussi"); };
       window.__bootMark("page ouverte");
-      if (prev && !prev.done && prev.steps && prev.steps.length) {
+      var diagOn = false;
+      try { diagOn = localStorage.getItem("sns_diag_enabled") === "1"; } catch (e) {}
+      if (diagOn && prev && !prev.done && prev.steps && prev.steps.length) {
         document.addEventListener("DOMContentLoaded", function () {
           var txt = "Le démarrage précédent ne s'est pas terminé.\nVersion : " + prev.version + "\nDernières étapes :\n" + prev.steps.slice(-25).join("\n");
           var bar = document.createElement("div");
@@ -54,6 +56,17 @@
     });
     setTimeout(function () {
       if (!document.querySelector(".splash-screen")) return;
+      var diagOn2 = false;
+      try { diagOn2 = localStorage.getItem("sns_diag_enabled") === "1"; } catch (e) {}
+      if (!diagOn2) {
+        // Utilisateur ordinaire : message simple, sans détails techniques.
+        var simple = document.createElement("div");
+        simple.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;font-family:sans-serif;color:#1a1a2e;text-align:center;";
+        simple.innerHTML = '<div style="font-size:34px;margin-bottom:10px;">⏳</div><div style="font-weight:800;font-size:16px;margin-bottom:6px;">Le chargement prend plus de temps que prévu</div><div style="font-size:13px;color:#666;margin-bottom:18px;">Vérifiez votre connexion internet, puis réessayez.</div><button id="simple-reload" style="background:#7bcb3a;color:#fff;border:none;padding:12px 24px;border-radius:12px;font-weight:700;font-size:14px;">Recharger</button>';
+        document.body.appendChild(simple);
+        document.getElementById("simple-reload").onclick = function () { location.reload(); };
+        return;
+      }
       var report = "Version chargée : " + window.SOUNSOUNI_VERSION + "\nAdresse : " + location.href + "\nNavigateur : " + navigator.userAgent + "\nErreurs (" + window.__earlyErrors.length + ") :\n" + (window.__earlyErrors.length ? window.__earlyErrors.slice(0, 8).join("\n") : "aucune");
       var box = document.createElement("div");
       box.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#fff;padding:24px 18px;overflow:auto;font-family:sans-serif;color:#1a1a2e;";
@@ -4584,7 +4597,18 @@ html.has-bg-pattern .notif-panel {
       padding:0 0 40px;
       min-height:100vh;
       font-family:'Inter',sans-serif;
+      /* Dans l'Admin (thème sombre), les couleurs "claires" du reste de
+         l'application sont remplacées par leurs équivalents sombres : sans
+         ça, certains blocs gardaient un fond clair avec un texte clair
+         (invisible), ou un texte foncé sur fond foncé. */
+      --bg-body:var(--mc-panel-2);
+      --bg-card:var(--mc-panel);
+      --text-primary:var(--mc-text);
+      --text-secondary:var(--mc-dim);
+      --text-dim:var(--mc-dim);
+      --border-color:var(--mc-line);
     }
+    .mc-admin .section-title{ color:var(--mc-text) !important; }
     .mc-admin .mono{font-family:'Space Mono',monospace;}
     .mc-topbar{
       position:sticky;top:0;z-index:40;
@@ -6562,7 +6586,7 @@ var ADMIN_RESTRICTED_ACTIONS = [
   "toggle-section-style-bold", "set-brand-image-field", "set-section-style-field", "save-market-display-config",
   "admin-cancel-boost", "approve-relais-edit", "reject-relais-edit",
   "admin-add-quartier", "admin-remove-quartier", "undo-quartier-change",
-  "admin-add-quartier-proche", "admin-remove-quartier-proche", "undo-quartier-proche-change", "toggle-user-test-mode", "moderation-approve", "moderation-reject", "run-full-push-diagnostic",
+  "admin-add-quartier-proche", "admin-remove-quartier-proche", "undo-quartier-proche-change", "toggle-user-test-mode", "moderation-approve", "moderation-reject", "run-full-push-diagnostic", "toggle-diagnostics-visible",
   "send-admin-broadcast", "toggle-employee-permission", "add-boost-tier", "remove-boost-tier", "save-boost-tiers",
   "save-vip-rotation-seconds", "save-delivery-base-config", "admin-add-commune", "admin-remove-commune",
   "save-admin-product-edit", "admin-delete-account", "save-relais-commission", "save-delivery-fees", "save-intercity-delivery-fees", "save-international-shipping-rates",
@@ -8905,7 +8929,7 @@ function subscribeToFcmIfCapacitor(silent) {
       window._fcmRegisteredFor = state.profile ? state.profile.id : null;
       window._fcmLastError = null;
       var quiet = window._fcmSilentCall;
-      if (!quiet) showToast("✅ Jeton reçu (" + token.length + " caractères) — enregistrement dans Supabase...");
+      if (!quiet && diagnosticsEnabled()) showToast("✅ Jeton reçu (" + token.length + " caractères) — enregistrement dans Supabase...");
       // Le téléphone est inscrit pour TOUS les comptes liés au même numéro
       // (ex. compte acheteur + boutique) : sinon, un message reçu par la
       // boutique ne déclenchait aucune notification si l'app était ouverte
@@ -8939,7 +8963,7 @@ function subscribeToFcmIfCapacitor(silent) {
     PushNotifications.addListener("registrationError", function(err) {
       window._fcmLastError = "Enregistrement Firebase échoué : " + JSON.stringify(err);
       try { render(); } catch (e) {}
-      if (!window._fcmSilentCall) showToast("❌ Enregistrement Firebase échoué : " + JSON.stringify(err));
+      if (!window._fcmSilentCall) showToast(diagnosticsEnabled() ? "❌ Enregistrement Firebase échoué : " + JSON.stringify(err) : "❌ Impossible d'activer les notifications pour le moment.");
       else console.log("[FCM] Enregistrement échoué (appel silencieux) :", err);
     });
 
@@ -8953,7 +8977,7 @@ function subscribeToFcmIfCapacitor(silent) {
   }
 
   PushNotifications.requestPermissions().then(function(result) {
-    if (!silent) showToast("ℹ️ Permission : " + JSON.stringify(result));
+    if (!silent && diagnosticsEnabled()) showToast("ℹ️ Permission : " + JSON.stringify(result));
     if (result.receive !== "granted") {
       window._fcmLastError = "Autorisation des notifications refusée par le téléphone (" + result.receive + ")";
       if (!silent) showToast(t("toast_notif_refused_settings"));
@@ -8969,7 +8993,7 @@ function subscribeToFcmIfCapacitor(silent) {
     }
     PushNotifications.register();
   }).catch(function(err) {
-    if (!silent) showToast("❌ requestPermissions() a échoué : " + (err && err.message ? err.message : String(err)));
+    if (!silent) showToast(diagnosticsEnabled() ? "❌ requestPermissions() a échoué : " + (err && err.message ? err.message : String(err)) : "❌ Impossible d'activer les notifications pour le moment.");
     else console.log("[FCM] requestPermissions a échoué (appel silencieux) :", err);
   });
 
@@ -19424,6 +19448,27 @@ function getProductSalesCount(productId) {
   return count;
 }
 
+// ---------- OUTILS DE TEST : désactivés par défaut ----------
+// Un seul interrupteur (Admin → Test & diagnostic) les rend visibles pour
+// tout le monde en cas de besoin : rapport de démarrage, écran "démarrage
+// bloqué", détails techniques des erreurs, pages #diag/#debugboost,
+// boutons de test des notifications du Profil, messages techniques.
+function diagnosticsEnabled() {
+  var list = state.settings || [];
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].id === "diagnostics_config") return !!(list[i].config && list[i].config.enabled);
+  }
+  return false;
+}
+function syncDiagnosticsMirror() {
+  // Copie locale lue par la surveillance du démarrage (chargée avant tout).
+  var v = diagnosticsEnabled() ? "1" : "0";
+  if (window._diagMirror !== v) {
+    window._diagMirror = v;
+    try { localStorage.setItem("sns_diag_enabled", v); } catch (e) {}
+  }
+}
+
 // ---------- MODE VISITEUR (site web uniquement) ----------
 // Sur le site sounsouni.pro, un visiteur non connecté peut parcourir les
 // articles et remplir son panier sans compte — la connexion n'est demandée
@@ -19454,7 +19499,7 @@ var GUEST_ALLOWED_ACTIONS = {
   "set-category": 1, "set-market-sort": 1, "set-sector-filter": 1, "toggle-market-filter": 1,
   "clear-category-filter": 1, "clear-sector-filter": 1, "clear-shop-filter": 1, "open-new-arrivals-all": 1,
   "close-category-page": 1, "close-search-page": 1, "whatsapp-coming-soon": 1,
-  "guest-open-auth": 1, "guest-close-auth-prompt": 1, "guest-open-install": 1, "guest-close-install": 1, "guest-install-download": 1, "guest-close-nudge": 1, "pick-initial-language": 1, "guest-open-language": 1, "guest-close-language": 1, "guest-set-language": 1
+  "guest-open-auth": 1, "guest-close-auth-prompt": 1, "guest-open-install": 1, "guest-close-install": 1, "guest-install-download": 1, "guest-close-nudge": 1, "pick-initial-language": 1, "intro-next": 1, "intro-prev": 1, "intro-finish": 1, "guest-open-language": 1, "guest-close-language": 1, "guest-set-language": 1
 };
 
 function renderGuestHeader() {
@@ -20700,6 +20745,7 @@ function setupMarketInfiniteScroll() {
 
 function render() {
   window._renderTick = (window._renderTick || 0) + 1;
+  try { syncDiagnosticsMirror(); } catch (e) {}
   if (window.__bootMark && window._renderTick <= 6) window.__bootMark("affichage n°" + window._renderTick + " (" + state.view + (state.profile ? ", connecté" : ", visiteur") + ")");
   // Téléphone (app) : réinscription automatique à chaque connexion ou
   // changement de compte — avant, seulement au démarrage de l'app.
@@ -20808,13 +20854,15 @@ function render() {
     }).join("\n");
     window._lastRenderError = "Erreur : " + detail + "\nVue : " + state.view + " · Connecté : " + (state.profile ? state.profile.role : "non") + "\n" + stackLines;
     try { pushDebugLog("error", "Erreur d'affichage : " + detail, stackLines); } catch (e2) {}
+    var showDiag = false;
+    try { showDiag = diagnosticsEnabled(); } catch (eD) {}
     root.innerHTML = '<div style="padding:60px 24px;text-align:center;color:#1a1a2e">' +
       '<div style="font-size:34px;margin-bottom:12px">⚠️</div>' +
       '<div style="font-weight:800;font-size:16px;margin-bottom:6px">Un problème est survenu</div>' +
-      '<div style="font-size:11px;color:#666;margin-bottom:12px;font-family:monospace;word-break:break-word;white-space:pre-wrap;text-align:left;background:#f4f4f4;border-radius:8px;padding:10px;">' + esc(window._lastRenderError) + '</div>' +
-      '<button id="copy-render-error-btn" style="background:#1a1a2e;color:white;border:none;padding:10px 18px;border-radius:12px;font-weight:700;font-size:13px;margin:0 4px 8px;">Copier l\'erreur</button>' +
+      (showDiag ? '<div style="font-size:11px;color:#666;margin-bottom:12px;font-family:monospace;word-break:break-word;white-space:pre-wrap;text-align:left;background:#f4f4f4;border-radius:8px;padding:10px;">' + esc(window._lastRenderError) + '</div>' +
+      '<button id="copy-render-error-btn" style="background:#1a1a2e;color:white;border:none;padding:10px 18px;border-radius:12px;font-weight:700;font-size:13px;margin:0 4px 8px;">Copier l\'erreur</button>' : '<div style="font-size:13px;color:#666;margin-bottom:16px;">Revenez au marché pour continuer. Si le problème persiste, contactez l\'administration.</div>') +
       '<button id="back-market-btn" style="background:white;color:#1a1a2e;border:1.5px solid #1a1a2e;padding:10px 18px;border-radius:12px;font-weight:700;font-size:13px;margin:0 4px 8px;">Retour au marché</button><br/>' +
-      '<button id="reset-app-btn" style="background:#7bcb3a;color:white;border:none;padding:12px 22px;border-radius:12px;font-weight:700;font-size:13.5px;margin-bottom:8px;">Réinitialiser la démo</button>' +
+      (showDiag ? '<button id="reset-app-btn" style="background:#7bcb3a;color:white;border:none;padding:12px 22px;border-radius:12px;font-weight:700;font-size:13.5px;margin-bottom:8px;">Réinitialiser les données locales</button>' : '') +
       '</div>';
     var copyErrBtn = document.getElementById("copy-render-error-btn");
     if (copyErrBtn) copyErrBtn.addEventListener("click", function() {
@@ -20985,7 +21033,7 @@ function buildHTML() {
   // à la fin de l'adresse, pour voir EXACTEMENT ce que l'app voit sur CET
   // appareil précis (au lieu de deviner depuis un environnement de test
   // séparé qui ne peut pas reproduire les vraies données).
-  if (window.location.hash === "#debugboost") {
+  if (window.location.hash === "#debugboost" && diagnosticsEnabled()) {
     return renderBoostDebugPanel();
   }
   // Fiche publique d'un Point de Retrait — consultable via un lien sans compte
@@ -20999,7 +21047,7 @@ function buildHTML() {
   if (window.location.hash.indexOf("#cagnotte=") === 0 && !state.profile) {
     return renderPublicCagnottePage(window.location.hash.slice("#cagnotte=".length));
   }
-  if (window.location.hash === "#diag") {
+  if (window.location.hash === "#diag" && (diagnosticsEnabled() || (state.adminUnlocked))) {
     return renderPublicDiagnosticPage();
   }
   if (window.location.hash === "#partner-dashboard") {
@@ -21013,6 +21061,8 @@ function buildHTML() {
       var guestLangChosen = false;
       try { guestLangChosen = !!localStorage.getItem("sounsouni_language"); } catch (e) { guestLangChosen = true; }
       if (!guestLangChosen && !state.forceSkipLanguagePicker) return renderLanguagePickerGate();
+      // Puis la présentation (storyboard), au premier passage seulement.
+      if (!state.introSeen) return renderOnboardingIntro();
       return renderGuestShell();
     }
     // Visiteur du site qui a demandé à se connecter : directement le
@@ -22483,7 +22533,7 @@ function renderProfileModal() {
   });
   var pushIsOn = isCapacitorApp ? hasFcmToken : (typeof Notification !== "undefined" && Notification.permission === "granted");
   html += '<button class="vendor-hub-card" data-action="' + (pushIsOn ? 'disable-push-notifications' : 'request-push-permission') + '" style="background:var(--bg-body);"><i class="fa-solid fa-bell"></i><div><div class="vh-title">' + (pushIsOn ? t("profile_notifications_on") : t("profile_notifications_off")) + '</div><div class="vh-sub">' + (pushIsOn ? t("profile_notifications_on_sub") : t("profile_notifications_off_sub")) + '</div></div><div class="dark-mode-switch' + (pushIsOn ? ' on' : '') + '"><div class="dark-mode-knob"></div></div></button>';
-  if (isCapacitorApp && state.profile) {
+  if (isCapacitorApp && state.profile && diagnosticsEnabled()) {
     var fcmStatus;
     if (window._fcmLastError) fcmStatus = '<span style="color:var(--danger);">❌ ' + esc(window._fcmLastError) + '</span>';
     else if (!window._fcmCurrentToken) fcmStatus = '<span style="color:var(--text-dim);">⏳ Inscription de ce téléphone en cours…</span>';
@@ -29575,6 +29625,11 @@ function currentAdminHasFilatureAccess() {
 function renderAdminTest() {
   var html = '<div class="glass-card" style="padding:14px;margin-bottom:14px;">';
   html += '<div class="section-title" style="margin-bottom:10px;"><i class="fa-solid fa-bug"></i> Test & diagnostic</div>';
+  // Interrupteur global : outils de test visibles par les utilisateurs
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px;margin-bottom:12px;border-radius:10px;background:' + (diagnosticsEnabled() ? 'rgba(255,159,10,0.12)' : 'var(--bg-body)') + ';">';
+  html += '<div style="font-size:12.5px;min-width:0;"><strong>Outils de test visibles par les utilisateurs</strong><br><span style="font-size:10.5px;color:var(--text-dim);">' + (diagnosticsEnabled() ? '⚠️ ACTIVÉS — rapport de démarrage, détails des erreurs, #diag, boutons de test du Profil. Pensez à les désactiver après usage.' : 'Désactivés (normal). À activer seulement pour diagnostiquer un problème chez un utilisateur.') + '</span></div>';
+  html += '<div class="toggle-switch ' + (diagnosticsEnabled() ? 'active' : '') + '" data-action="toggle-diagnostics-visible" style="flex-shrink:0;"><div class="toggle-knob"></div></div>';
+  html += '</div>';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;margin-bottom:10px;border-bottom:1px solid var(--border-color);">';
   html += '<div style="font-size:12.5px;"><strong>Capture des erreurs</strong><br><span style="font-size:10.5px;color:var(--text-dim);">À désactiver une fois le problème réglé — sinon ça continue à occuper de la place pour rien.</span></div>';
   html += '<div class="toggle-switch ' + (state.debugLoggingEnabled ? 'active' : '') + '" data-action="toggle-debug-logging"><div class="toggle-knob"></div></div>';
@@ -36002,6 +36057,19 @@ root.addEventListener("click", function(e) {
       }
       save();
       showToast(t("toast_notifications_disabled"));
+      render();
+      break;
+    }
+    case "toggle-diagnostics-visible": {
+      var newDiag = !diagnosticsEnabled();
+      var diagDoc = { id: "diagnostics_config", config: { enabled: newDiag, updatedAt: Date.now() } };
+      if (!state.settings) state.settings = [];
+      var di = -1;
+      for (var dsi = 0; dsi < state.settings.length; dsi++) { if (state.settings[dsi].id === "diagnostics_config") { di = dsi; break; } }
+      if (di === -1) state.settings.push(diagDoc); else state.settings[di] = diagDoc;
+      save();
+      saveDoc("settings", diagDoc);
+      showToast(newDiag ? "⚠️ Outils de test ACTIVÉS pour tous les utilisateurs." : "✅ Outils de test désactivés.");
       render();
       break;
     }
