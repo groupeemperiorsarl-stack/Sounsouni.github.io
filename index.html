@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-01-a";
+    window.SOUNSOUNI_VERSION = "2026-10-01-b";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -5060,8 +5060,60 @@ const SHARED_KEYS = [
 // Enregistre UN SEUL document (ex: saveDoc("products", p)). C'est la
 // brique de base : chaque fonction qui modifie un produit/une commande/etc.
 // n'envoie que CE document, jamais tout le reste.
+// ---------- Écritures sensibles via le serveur (secure-write) ----------
+// Comptes, articles, réglages, listes d'accès et partenaires ne sont plus
+// écrits directement dans la base : ils passent par la fonction serveur
+// "secure-write", qui vérifie l'identité et applique les règles (chacun ne
+// modifie que ce qu'il a le droit de modifier). Tant que la fonction n'est
+// pas déployée, repli sur l'écriture directe.
+var SECURE_WRITE_COLLECTIONS = ["accounts", "products", "settings", "nationalAdmins", "sourcingAgentWhitelist", "group2GlobalWhitelist", "apiPartners", "webhookPartners", "dashboardPartners", "platformCommissions", "vipAds"];
+function secureWriteToken() {
+  if (state.adminUnlocked && state.adminSessionToken) return state.adminSessionToken;
+  return state.sessionToken || null;
+}
+// Met la copie locale à jour avec la version réellement enregistrée par le
+// serveur (si une modification non autorisée a été ignorée, l'écran revient
+// à la vérité du serveur).
+function applyServerDoc(collectionName, doc) {
+  if (!doc || !doc.id || !Array.isArray(state[collectionName])) return;
+  var list = state[collectionName];
+  for (var i = 0; i < list.length; i++) {
+    if (list[i] && list[i].id === doc.id) {
+      if (JSON.stringify(list[i]) !== JSON.stringify(doc)) { list[i] = doc; if (collectionName === "accounts") { try { refreshProfileFromAccounts(); } catch (e) {} } renderOrDefer(); }
+      return;
+    }
+  }
+}
+function secureWrite(collectionName, payload) {
+  var token = secureWriteToken();
+  var headers = { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey };
+  if (token) headers["X-Session-Token"] = token;
+  return fetch(supabaseConfig.url + "/functions/v1/secure-write", { method: "POST", headers: headers, body: JSON.stringify(Object.assign({ collection: collectionName }, payload)) })
+    .then(function(r) {
+      if (r.status === 404) return { notDeployed: true };
+      return r.json().then(function(res) { res.httpStatus = r.status; return res; });
+    });
+}
+
 function saveDoc(collectionName, docData) {
   if (!FIREBASE_ENABLED) return; // mode local : localStorage s'en charge déjà via save()
+  if (SECURE_WRITE_COLLECTIONS.indexOf(collectionName) !== -1) {
+    return secureWrite(collectionName, { operation: "save", doc: docData }).then(function(res) {
+      if (res.notDeployed) return saveDocDirect(collectionName, docData);
+      if (res.success) { if (res.doc) applyServerDoc(collectionName, res.doc); return; }
+      if (res.httpStatus === 403 || res.httpStatus === 401) {
+        // Refus définitif (droits) : on ne réessaie pas, et on revient à la vérité du serveur.
+        try { pushDebugLog("error", "Écriture refusée par le serveur (" + collectionName + ")", JSON.stringify(res).slice(0, 300)); } catch (e) {}
+        if (res.doc) applyServerDoc(collectionName, res.doc);
+        return;
+      }
+      queuePendingSync(collectionName, docData);
+    }).catch(function() { queuePendingSync(collectionName, docData); });
+  }
+  return saveDocDirect(collectionName, docData);
+}
+function saveDocDirect(collectionName, docData) {
+  if (!FIREBASE_ENABLED) return;
   // Hors connexion (ou en cas d'échec), la modification n'est jamais
   // perdue : elle rejoint une file d'attente et sera réenvoyée dès que la
   // connexion revient — indispensable pour un paiement fait dans une zone
@@ -5157,6 +5209,19 @@ function flushPendingSyncQueue() {
       state.pendingSyncQueue = (state.pendingSyncQueue || []).filter(function(e) { return !(e.collection === entry.collection && e.id === entry.id); });
       save();
       return;
+    } else if (SECURE_WRITE_COLLECTIONS.indexOf(entry.collection) !== -1) {
+      request = secureWrite(entry.collection, entry.type === "delete" ? { operation: "delete", id: entry.id } : { operation: "save", doc: entry.data })
+        .then(function(res) {
+          if (res.notDeployed) {
+            return entry.type === "delete"
+              ? sb.from("app_data").delete().eq("collection", entry.collection).eq("id", entry.id)
+              : sb.from("app_data").upsert({ collection: entry.collection, id: entry.id, data: entry.data, updated_at: new Date().toISOString() }, { onConflict: "collection,id" });
+          }
+          if (res.success && res.doc) applyServerDoc(entry.collection, res.doc);
+          // Un refus définitif (droits) retire aussi l'entrée de la file.
+          return { error: (res.success || res.httpStatus === 403 || res.httpStatus === 401) ? null : (res.error || "secure_write_failed") };
+        })
+        .catch(function(err) { return { error: err }; });
     } else {
       request = entry.type === "delete"
         ? sb.from("app_data").delete().eq("collection", entry.collection).eq("id", entry.id)
@@ -5185,6 +5250,17 @@ setInterval(function() {
 
 function deleteRemoteDoc(collectionName, docId) {
   if (!FIREBASE_ENABLED) return; // mode local : localStorage s'en charge déjà via save()
+  if (SECURE_WRITE_COLLECTIONS.indexOf(collectionName) !== -1) {
+    secureWrite(collectionName, { operation: "delete", id: docId }).then(function(res) {
+      if (res.notDeployed) return deleteRemoteDocDirect(collectionName, docId);
+      if (!res.success && res.httpStatus !== 403 && res.httpStatus !== 401) queuePendingSync(collectionName, { id: docId }, "delete");
+    }).catch(function() { queuePendingSync(collectionName, { id: docId }, "delete"); });
+    return;
+  }
+  deleteRemoteDocDirect(collectionName, docId);
+}
+function deleteRemoteDocDirect(collectionName, docId) {
+  if (!FIREBASE_ENABLED) return;
   // Même filet de sécurité que saveDoc : hors connexion, ou en cas
   // d'échec, la suppression rejoint la file d'attente et sera refaite
   // dès que la connexion revient — sans ça, une fiche produit pouvait
