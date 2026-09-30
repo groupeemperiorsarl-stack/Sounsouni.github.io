@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-09-30-b";
+    window.SOUNSOUNI_VERSION = "2026-10-01-a";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -87,6 +87,23 @@
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Sounsouni - Le Marché Digital du Mali</title>
+    <!-- Description lue par Google (sinon il prend un texte au hasard dans la page) -->
+    <meta name="description" content="Sounsouni, le marché digital de l&#39;Afrique de l&#39;Ouest, lancé au Mali. Des vendeurs vérifiés, la livraison partout au Mali et le paiement à la livraison.">
+    <!-- Logo du site (favicon) : affiché par Google et dans l'onglet du navigateur -->
+    <link rel="icon" href="/favicon.ico" sizes="48x48">
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/favicon-512.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <!-- Aperçu lors d'un partage de lien (WhatsApp, Facebook...) -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Sounsouni">
+    <meta property="og:title" content="Sounsouni - Le Marché Digital du Mali">
+    <meta property="og:description" content="Sounsouni, le marché digital de l&#39;Afrique de l&#39;Ouest, lancé au Mali. Des vendeurs vérifiés, la livraison partout au Mali et le paiement à la livraison.">
+    <meta property="og:url" content="https://sounsouni.pro/">
+    <meta property="og:image" content="https://sounsouni.pro/og-image.jpg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta name="twitter:card" content="summary_large_image">
     
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -14633,6 +14650,7 @@ function registerAccount() {
   console.log("=== DEBUT registerAccount ===");
   
   var d = state.onboardDraft;
+  if (isLikelyBot("inscription", d)) { showToast("❌ Une erreur est survenue, veuillez réessayer."); return; }
   // Engagement obligatoire de tout vendeur à ne vendre aucun produit
   // interdit — exigé par notre partenaire de paiement, et protège
   // juridiquement Sounsouni en engageant clairement la responsabilité du
@@ -15248,8 +15266,38 @@ function mergeAccountsByPhone(primaryId) {
 // ⚠️ Pas de vérification réelle (pas de code SMS) — n'importe qui connaissant
 // ces deux informations peut accéder au compte. À remplacer par un vrai code
 // de vérification par SMS avant une mise en production réelle.
+// ---------- Pièges à robots dans les formulaires ----------
+// Un champ invisible (hors de l'écran, jamais atteint au clavier) : un humain
+// ne le voit pas et ne le remplit jamais ; un robot remplit tout ce qu'il
+// trouve. Et un chronomètre : un humain met plusieurs secondes à remplir un
+// formulaire, un robot une fraction de seconde. Détecté → on n'envoie rien,
+// on affiche un message banal (sans révéler le piège) et on enregistre un
+// signal pour l'Admin.
+function honeypotFieldHtml(draftName) {
+  return '<div aria-hidden="true" style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden;">' +
+    '<label>Ne pas remplir ce champ<input type="text" name="hp_fax_contact_2" tabindex="-1" autocomplete="off" value="' + esc((state[draftName] || {}).hpFax || '') + '" data-bind="' + draftName + '.hpFax" /></label></div>';
+}
+function markFormShown(key) {
+  window._snsFormShownAt = window._snsFormShownAt || {};
+  if (!window._snsFormShownAt[key]) window._snsFormShownAt[key] = Date.now();
+}
+function isLikelyBot(key, draft) {
+  var filled = !!(draft && draft.hpFax && String(draft.hpFax).trim());
+  var shownAt = (window._snsFormShownAt || {})[key] || 0;
+  var tooFast = shownAt && (Date.now() - shownAt < 1500);
+  if (!filled && !tooFast) return false;
+  try {
+    var sig = { id: "bot-" + uid(), at: Date.now(), type: "formulaire", detail: (filled ? "Champ invisible rempli" : "Formulaire envoyé en moins de 1,5 s") + " — " + key, userAgent: (navigator.userAgent || "").slice(0, 200) };
+    saveDoc("botSignals", sig);
+  } catch (e) {}
+  // On relance le chronomètre : un humain très rapide peut simplement réessayer.
+  if (window._snsFormShownAt) window._snsFormShownAt[key] = Date.now();
+  return true;
+}
+
 function attemptFindAccount() {
   var d = state.findAccountDraft;
+  if (isLikelyBot("connexion", d)) { showToast("❌ Une erreur est survenue, veuillez réessayer."); return; }
   if (!d.name || !d.name.trim()) { showToast(t("toast_enter_fullname")); return; }
   if (!d.phone || !d.phone.trim()) { showToast(t("toast_enter_phone1")); return; }
   var digits = d.phone.replace(/\D/g, "");
@@ -21703,12 +21751,13 @@ function renderOnboarding() {
 
 // ---------- \u00c9TAPE 1 : IDENTIT\u00c9 + CHOIX DU R\u00d4LE (commun \u00e0 tous) ----------
 function renderOnboardStepIdentity(d) {
+  markFormShown("inscription");
   var countryOptions = '';
   for (var k = 0; k < COUNTRY_CODES.length; k++) {
     var c = COUNTRY_CODES[k];
     countryOptions += '<option value="' + c.code + '" ' + (d.countryCode === c.code ? 'selected' : '') + '>' + c.label + '</option>';
   }
-  var html = '<label class="field-label">' + t("full_name") + '</label>' +
+  var html = honeypotFieldHtml("onboardDraft") + '<label class="field-label">' + t("full_name") + '</label>' +
     '<div class="field-icon-group"><i class="fa-regular fa-user field-icon"></i><input id="ob-name" class="input" placeholder="' + t("full_name_placeholder") + '" value="' + esc(d.name) + '" data-bind="onboardDraft.name" /></div>' +
     '<label class="field-label">' + t("phone") + '</label>' +
     '<div class="phone-group">' +
@@ -21732,6 +21781,7 @@ function renderOnboardStepIdentity(d) {
 }
 
 function renderFindAccountModal() {
+  markFormShown("connexion");
   var d = state.findAccountDraft;
   var countryOptions = '';
   for (var k = 0; k < COUNTRY_CODES.length; k++) {
@@ -21755,6 +21805,7 @@ function renderFindAccountModal() {
   html += '<button class="btn-primary" style="margin-top:18px;" data-action="attempt-find-account">' + t("find_my_account") + '</button>';
   html += '<button class="link-btn" style="width:100%;text-align:center;margin-top:12px;" data-action="open-forgot-password"><i class="fa-solid fa-circle-question"></i> ' + t("forgot_password") + '</button>';
   html += '</div></div>';
+  html = honeypotFieldHtml("findAccountDraft") + html;
   return html;
 }
 
@@ -31336,6 +31387,25 @@ function renderAdminSecurity() {
   var ownerCreds = getAdminCredentials("owner");
   var html = '';
 
+  // ---- Pièges à robots : alertes (Admin principal uniquement) ----
+  if (state.adminIsOwner) {
+    var alerts = state.securityAlerts || [];
+    var dayAgo = Date.now() - 24 * 3600 * 1000;
+    var last24 = alerts.filter(function(a) { return (a.at || 0) > dayAgo; }).length;
+    html += '<div class="glass-card" style="padding:14px;margin-bottom:14px;">';
+    html += '<div style="font-weight:800;font-size:13.5px;margin-bottom:4px;"><i class="fa-solid fa-spider"></i> Pièges à robots</div>';
+    html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;">Champs et collections pièges dans la base, champs invisibles et chronomètre dans les formulaires. Chaque tentative est bloquée puis listée ici.</div>';
+    html += '<div style="font-size:12.5px;margin-bottom:8px;">' + (alerts.length ? '<strong>' + last24 + '</strong> alerte(s) ces dernières 24 h · ' + alerts.length + ' au total (200 dernières)' : '✅ Aucune tentative détectée.') + '</div>';
+    alerts.slice(0, 30).forEach(function(a) {
+      var icon = a.type === "formulaire" ? "fa-keyboard" : (a.type === "collection_piege" ? "fa-box-open" : "fa-user-secret");
+      html += '<div style="border-left:3px solid var(--danger);padding:6px 10px;margin-bottom:6px;background:var(--bg-body);border-radius:6px;">';
+      html += '<div style="font-size:11px;color:var(--text-dim);"><i class="fa-solid ' + icon + '"></i> ' + fmtDateTime(a.at) + (a.ip && a.ip !== '?' ? ' · IP ' + esc(a.ip) : '') + '</div>';
+      html += '<div style="font-size:12px;">' + esc(a.detail || a.type || '') + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
   if (state.adminIsOwner && !state.adminCountryScope) {
     var xrCfg = getExchangeRateConfig();
     html += '<div class="glass-card" style="padding:14px;margin-bottom:16px;">';
@@ -40208,6 +40278,7 @@ function syncPersonalCollections() {
           return;
         }
         if (res && res.success) {
+          if (Array.isArray(res.securityAlerts)) state.securityAlerts = res.securityAlerts;
           var rows = [];
           ["orders", "notifications", "conversations"].forEach(function(k) {
             (res[k] || []).forEach(function(d) { rows.push({ collection: k, data: d }); });
