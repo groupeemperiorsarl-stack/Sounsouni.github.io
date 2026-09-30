@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-02-a";
+    window.SOUNSOUNI_VERSION = "2026-10-02-b";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -1541,6 +1541,10 @@ button:active {
 
 .fav-btn.active {
   color: var(--danger);
+}
+/* Bouton de partage, juste sous le cœur (même taille, même style) */
+.fav-btn.share-card-btn {
+  top: 42px;
 }
 
 .fav-btn i {
@@ -15777,6 +15781,22 @@ function toggleProductVote(productId, voteType) {
   render();
 }
 
+// Adresse publique du site : TOUS les liens partagés l'utilisent. Avant,
+// ils utilisaient l'adresse actuelle de la page — qui, dans l'application
+// installée, est une adresse interne au téléphone (liens morts pour les
+// autres, et parrainages jamais transmis).
+var PUBLIC_SITE_URL = "https://sounsouni.pro";
+
+// Lien d'un article : ouvre directement la fiche, et porte le code de
+// parrainage de la personne qui partage (chaque partage est aussi un lien
+// d'affiliation).
+function productShareUrl(p) {
+  var url = PUBLIC_SITE_URL + "/?product=" + encodeURIComponent(p.id);
+  var code = null;
+  try { code = state.profile ? getReferralCode() : null; } catch (e) {}
+  if (code) url += "&ref=" + encodeURIComponent(code);
+  return url;
+}
 function shareProduct(productId) {
   var p = null;
   for (var i = 0; i < state.products.length; i++) {
@@ -15786,14 +15806,29 @@ function shareProduct(productId) {
     }
   }
   if (!p) return;
-  var text = p.name + " — " + money(p.price) + " sur Sounsouni (" + p.shopName + ")";
-  if (navigator.share) {
-    navigator.share({ title: p.name, text: text }).catch(function() {});
-  } else if (navigator.clipboard) {
-    navigator.clipboard.writeText(text).then(function() { showToast(t("toast_product_details_copied")); });
-  } else {
-    showToast(text);
+  var url = productShareUrl(p);
+  var text = productDisplayName(p) + " — " + money(p.price) + " — Sounsouni (" + (p.shopName || "") + ")";
+  var copyFallback = function() {
+    var full = text + "\n" + url;
+    var done = function() { showToast(t("toast_product_details_copied")); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(full).then(done, function() { showToast(full); });
+    else showToast(full);
+  };
+  // Application installée : fenêtre de partage native d'Android
+  var capShare = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share;
+  if (capShare && capShare.share) {
+    capShare.share({ title: productDisplayName(p), text: text, url: url, dialogTitle: productDisplayName(p) }).catch(function(err) {
+      if (!(err && /cancel/i.test(String(err.message || err)))) copyFallback();
+    });
+    return;
   }
+  if (navigator.share) {
+    navigator.share({ title: productDisplayName(p), text: text, url: url }).catch(function(err) {
+      if (!(err && err.name === "AbortError")) copyFallback();
+    });
+    return;
+  }
+  copyFallback();
 }
 
 function getTieredTotal(product, qty) {
@@ -18161,6 +18196,39 @@ function getReferralCode() {
     saveDoc("accounts", state.profile);
   }
   return state.profile.affiliateCode;
+}
+
+// Lien d'article partagé (?product=...) : l'article s'ouvre directement
+// dès que les articles sont chargés (voir render()).
+try {
+  var _linkParams = new URLSearchParams(window.location.search);
+  if (_linkParams.get("product")) window._pendingProductLink = _linkParams.get("product");
+  // Code de parrainage : enregistré DÈS l'arrivée (avant, il n'était lu dans
+  // l'adresse qu'au moment de l'inscription — et pouvait être perdu entre-temps).
+  if (_linkParams.get("ref")) localStorage.setItem("gems_referral", _linkParams.get("ref"));
+} catch (e) {}
+function openPendingProductLink() {
+  var pid = window._pendingProductLink;
+  if (!pid || !state.products || !state.products.length) return;
+  var prod = null;
+  for (var i = 0; i < state.products.length; i++) { if (state.products[i].id === pid) { prod = state.products[i]; break; } }
+  if (!prod) return;
+  // Visiteur du site : on attend seulement le choix de la langue (la
+  // présentation est passée : il vient voir un article précis).
+  if (!state.profile && !isNativeAppForGuest()) {
+    var langChosen = false;
+    try { langChosen = !!localStorage.getItem("sounsouni_language"); } catch (e) { langChosen = true; }
+    if (!langChosen) return;
+    state.introSeen = true;
+  }
+  window._pendingProductLink = null;
+  state.view = "market";
+  state.detailProductId = pid;
+  try {
+    var u = new URL(window.location.href);
+    u.searchParams.delete("product");
+    history.replaceState(history.state, "", u.pathname + (u.search || "") + u.hash);
+  } catch (e) {}
 }
 
 function detectReferral() {
@@ -21076,6 +21144,7 @@ function setupMarketInfiniteScroll() {
 
 function render() {
   window._renderTick = (window._renderTick || 0) + 1;
+  if (window._pendingProductLink && typeof _splashFinished !== "undefined" && _splashFinished) { try { openPendingProductLink(); } catch (e) {} }
   try { syncDiagnosticsMirror(); } catch (e) {}
   if (window.__bootMark && window._renderTick <= 6) window.__bootMark("affichage n°" + window._renderTick + " (" + state.view + (state.profile ? ", connecté" : ", visiteur") + ")");
   // Téléphone (app) : réinscription automatique à chaque connexion ou
@@ -24679,7 +24748,7 @@ function runGatedPurchaseAction(kind, data) {
 
 function renderAffiliateProgramModal() {
   var stats = getAffiliateStats();
-  var link = window.location.origin + '?ref=' + stats.code;
+  var link = PUBLIC_SITE_URL + '/?ref=' + stats.code;
   var html = '<div class="modal-overlay" id="affiliate-overlay" data-action="close-affiliate-program">';
   html += '<div class="modal-sheet">';
   html += '<button class="modal-close" data-action="close-affiliate-program"><i class="fa-solid fa-xmark"></i></button>';
@@ -26175,6 +26244,7 @@ function productCard(p, disableImageSwipe, compactBadgeLine, marketBadges) {
   html += '<button class="fav-btn ' + (fav ? 'active' : '') + '" data-action="toggle-favorite" data-value="' + p.id + '">';
   html += '<i class="fa-' + (fav ? 'solid' : 'regular') + ' fa-heart"></i>';
   html += '</button>';
+  html += '<button class="fav-btn share-card-btn" data-action="share-product" data-value="' + p.id + '" aria-label="Partager"><i class="fa-solid fa-share-nodes"></i></button>';
   html += '<div class="product-body" data-action="open-product" data-value="' + p.id + '">';
   if (compactBadgeLine) html += '<div class="na-line1">';
   html += '<div class="price-row">';
@@ -39001,7 +39071,7 @@ root.addEventListener("click", function(e) {
     case "copy-referral-link": {
       var code3 = getReferralCode();
       if (code3 && navigator.clipboard) {
-        var fullLink = window.location.origin + '?ref=' + code3;
+        var fullLink = PUBLIC_SITE_URL + '/?ref=' + code3;
         navigator.clipboard.writeText(fullLink).then(function() { showToast(t("toast_link_copied")); });
       }
       break;
