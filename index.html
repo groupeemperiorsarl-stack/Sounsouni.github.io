@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-02-b";
+    window.SOUNSOUNI_VERSION = "2026-10-02-c";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -18207,6 +18207,31 @@ try {
   // l'adresse qu'au moment de l'inscription — et pouvait être perdu entre-temps).
   if (_linkParams.get("ref")) localStorage.setItem("gems_referral", _linkParams.get("ref"));
 } catch (e) {}
+// Application installée ouverte par un lien sounsouni.pro (liens Android
+// "App Links") : le lien n'arrive pas dans l'adresse de la page, mais par
+// le module App de Capacitor — au démarrage (getLaunchUrl) ou quand l'app
+// est déjà ouverte (appUrlOpen). On en tire l'article et le parrain.
+function handleIncomingAppLink(url) {
+  if (!url) return;
+  try {
+    var u = new URL(url);
+    var ref = u.searchParams.get("ref");
+    if (ref) localStorage.setItem("gems_referral", ref);
+    var pid = u.searchParams.get("product");
+    if (pid) {
+      window._pendingProductLink = pid;
+      if (!state.profile) { window._nativeGuestMode = true; state.guestAuthRequested = false; }
+      if (typeof _splashFinished !== "undefined" && _splashFinished) render();
+    }
+  } catch (e) {}
+}
+(function listenToAppLinks() {
+  var AppPlugin = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+  if (!AppPlugin) return;
+  try { if (AppPlugin.getLaunchUrl) AppPlugin.getLaunchUrl().then(function(r) { if (r && r.url) handleIncomingAppLink(r.url); }).catch(function() {}); } catch (e) {}
+  try { if (AppPlugin.addListener) AppPlugin.addListener("appUrlOpen", function(ev) { if (ev && ev.url) handleIncomingAppLink(ev.url); }); } catch (e) {}
+})();
+
 function openPendingProductLink() {
   var pid = window._pendingProductLink;
   if (!pid || !state.products || !state.products.length) return;
@@ -18215,7 +18240,7 @@ function openPendingProductLink() {
   if (!prod) return;
   // Visiteur du site : on attend seulement le choix de la langue (la
   // présentation est passée : il vient voir un article précis).
-  if (!state.profile && !isNativeAppForGuest()) {
+  if (!state.profile && guestModeAllowed()) {
     var langChosen = false;
     try { langChosen = !!localStorage.getItem("sounsouni_language"); } catch (e) { langChosen = true; }
     if (!langChosen) return;
@@ -19867,8 +19892,14 @@ function syncDiagnosticsMirror() {
 function isNativeAppForGuest() {
   return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 }
+// Mode visiteur autorisé : toujours sur le site ; dans l'application
+// installée, seulement quand elle a été ouverte par un lien d'article
+// partagé (sinon l'inscription reste obligatoire au démarrage).
+function guestModeAllowed() {
+  return !isNativeAppForGuest() || !!window._nativeGuestMode;
+}
 function isGuestBrowsingMode() {
-  return !state.profile && !isNativeAppForGuest() && !state.guestAuthRequested;
+  return !state.profile && guestModeAllowed() && !state.guestAuthRequested;
 }
 // Propriétaire du panier : le compte connecté, ou "guest" pour un visiteur.
 // Les articles "guest" sont rattachés au compte dès la connexion.
@@ -21457,7 +21488,7 @@ function buildHTML() {
   if (!state.profile) {
     // Site web : le visiteur voit directement les articles (mode visiteur),
     // après avoir choisi sa langue lors de son tout premier passage.
-    if (!isNativeAppForGuest() && !state.guestAuthRequested) {
+    if (guestModeAllowed() && !state.guestAuthRequested) {
       var guestLangChosen = false;
       try { guestLangChosen = !!localStorage.getItem("sounsouni_language"); } catch (e) { guestLangChosen = true; }
       if (!guestLangChosen && !state.forceSkipLanguagePicker) return renderLanguagePickerGate();
@@ -21468,7 +21499,7 @@ function buildHTML() {
     // Visiteur du site qui a demandé à se connecter : directement le
     // formulaire (sans choix de langue ni présentation), avec un bouton
     // pour revenir aux articles.
-    if (!isNativeAppForGuest() && state.guestAuthRequested) {
+    if (guestModeAllowed() && state.guestAuthRequested) {
       return renderOnboarding() + '<button type="button" data-action="guest-back-to-browsing" style="position:fixed;top:calc(10px + env(safe-area-inset-top, 0px));left:10px;z-index:9999;background:rgba(255,255,255,0.95);border:1px solid var(--border-color);border-radius:999px;padding:7px 12px;font-size:12px;font-weight:700;color:var(--text-primary, #222);box-shadow:0 2px 8px rgba(0,0,0,0.12);"><i class="fa-solid fa-arrow-left"></i> ' + t("guest_back") + '</button>';
     }
     // Choix explicite de la langue, une seule fois par appareil — avant
