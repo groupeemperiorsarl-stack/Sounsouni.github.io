@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-09-29-d";
+    window.SOUNSOUNI_VERSION = "2026-09-29-e";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -5786,16 +5786,51 @@ function refreshAutoExchangeRateIfNeeded() {
 // (même principe que le taux de change ci-dessus : un simple fetch, sans
 // clé ni compte) — puis on garde le résultat sur la fiche produit, jamais
 // retraduit à chaque fois qu'un acheteur la consulte.
-function translateText(text, targetLang) {
+// Réponse de MyMemory qui n'est PAS une traduction : quand la limite du
+// jour est atteinte (ou texte trop long), le service renvoie un message
+// d'avertissement À LA PLACE de la traduction — il ne faut jamais
+// l'enregistrer comme traduction.
+function isTranslationGarbage(txt) {
+  if (!txt || typeof txt !== "string") return true;
+  var u = txt.toUpperCase();
+  return u.indexOf("MYMEMORY WARNING") !== -1 || u.indexOf("QUERY LENGTH LIMIT") !== -1 || u.indexOf("INVALID LANGUAGE PAIR") !== -1 || u.indexOf("YOU USED ALL AVAILABLE FREE TRANSLATIONS") !== -1;
+}
+// Découpe un texte en morceaux de moins de 450 octets (limite MyMemory :
+// 500 octets par envoi), de préférence entre deux phrases.
+function splitForTranslation(text) {
+  var bytes = function(x) { try { return new TextEncoder().encode(x).length; } catch (e) { return x.length * 2; } };
+  if (bytes(text) <= 450) return [text];
+  var parts = text.split(/(?<=[.!?\n])\s+/), chunks = [], cur = "";
+  parts.forEach(function(part) {
+    if (bytes(cur + " " + part) > 450 && cur) { chunks.push(cur); cur = part; }
+    else cur = cur ? cur + " " + part : part;
+    while (bytes(cur) > 450) { var cut = Math.floor(cur.length / 2); chunks.push(cur.slice(0, cut)); cur = cur.slice(cut); }
+  });
+  if (cur) chunks.push(cur);
+  return chunks;
+}
+// opts.useEmail : adresse de contact transmise à MyMemory (50 000
+// caractères/jour au lieu de 5 000) — réservé à la traduction en masse.
+function translateText(text, targetLang, opts) {
   if (!text || !text.trim()) return Promise.resolve("");
-  var url = "https://api.mymemory.translated.net/get?q=" + encodeURIComponent(text) + "&langpair=fr|" + targetLang;
-  return fetch(url)
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      var translated = data && data.responseData && data.responseData.translatedText;
-      return (translated && typeof translated === "string") ? translated : "";
-    })
-    .catch(function() { return ""; }); // échec silencieux — l'article reste affiché en français en attendant
+  var chunks = splitForTranslation(text.trim());
+  var emailParam = (opts && opts.useEmail) ? "&de=" + encodeURIComponent("direction@sounsouni.pro") : "";
+  return Promise.all(chunks.map(function(chunk) {
+    var url = "https://api.mymemory.translated.net/get?q=" + encodeURIComponent(chunk) + "&langpair=fr|" + targetLang + emailParam;
+    return fetch(url)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var translated = data && data.responseData && data.responseData.translatedText;
+        var status = data && Number(data.responseStatus);
+        if (status && status !== 200) { if (status === 429 || status === 403) window._translateQuotaReached = true; return null; }
+        if (isTranslationGarbage(translated)) { window._translateQuotaReached = true; return null; }
+        return translated;
+      })
+      .catch(function() { return null; });
+  })).then(function(parts) {
+    if (parts.some(function(x) { return x === null; })) return ""; // échec : l'article reste en français
+    return parts.join(" ");
+  });
 }
 
 // Traduit le nom et la description d'UN produit fraîchement publié/modifié,
@@ -5818,8 +5853,14 @@ function translateProductAsync(productId) {
     for (var j = 0; j < state.products.length; j++) { if (state.products[j].id === productId) { idx = j; break; } }
     if (idx === -1) return; // supprimé entre-temps
     var p = state.products[idx];
-    p.nameByLang = { en: results[0] || p.name, hi: results[1] || p.name };
-    p.descriptionByLang = { en: results[2] || p.description, hi: results[3] || p.description };
+    // Seules les vraies traductions sont enregistrées : une langue en échec
+    // reste vide, et sera rattrapée par la traduction en masse de l'Admin.
+    p.nameByLang = p.nameByLang || {};
+    p.descriptionByLang = p.descriptionByLang || {};
+    if (results[0]) p.nameByLang.en = results[0];
+    if (results[1]) p.nameByLang.hi = results[1];
+    if (results[2]) p.descriptionByLang.en = results[2];
+    if (results[3]) p.descriptionByLang.hi = results[3];
     save();
     saveDoc("products", p);
     if (state.detailProductId === productId) render(); // pour voir le résultat tout de suite si on est encore sur la fiche
@@ -5830,12 +5871,71 @@ function translateProductAsync(productId) {
 // retombe sur la version d'origine (française) si pas encore traduit, ou
 // si le service a échoué, ou si l'app est en français.
 function productDisplayName(p) {
-  if (state.language !== "fr" && p.nameByLang && p.nameByLang[state.language]) return p.nameByLang[state.language];
+  var v = state.language !== "fr" && p.nameByLang ? p.nameByLang[state.language] : null;
+  if (v && !isTranslationGarbage(v)) return v;
   return p.name;
 }
 function productDisplayDescription(p) {
-  if (state.language !== "fr" && p.descriptionByLang && p.descriptionByLang[state.language]) return p.descriptionByLang[state.language];
+  var v = state.language !== "fr" && p.descriptionByLang ? p.descriptionByLang[state.language] : null;
+  if (v && !isTranslationGarbage(v)) return v;
   return p.description || "";
+}
+
+// ---------- Traduction en masse des articles (Admin) ----------
+// Traduit en anglais et en hindi tous les articles qui n'ont pas encore de
+// traduction (ou une traduction invalide). S'arrête proprement si la
+// limite du jour de MyMemory est atteinte, et reprend là où elle s'était
+// arrêtée au prochain lancement.
+function productTranslationNeeds(p) {
+  var needs = [];
+  ["en", "hi"].forEach(function(lang) {
+    var n = p.nameByLang && p.nameByLang[lang];
+    if (p.name && (!n || isTranslationGarbage(n))) needs.push({ field: "name", lang: lang });
+    var d = p.descriptionByLang && p.descriptionByLang[lang];
+    if (p.description && p.description.trim() && (!d || isTranslationGarbage(d))) needs.push({ field: "description", lang: lang });
+  });
+  return needs;
+}
+function runProductTranslationBatch() {
+  if (state.trBatch && state.trBatch.running) return;
+  var todo = state.products.filter(function(p) { return productTranslationNeeds(p).length > 0; });
+  state.trBatch = { running: true, done: 0, total: todo.length, msg: "" };
+  window._translateQuotaReached = false;
+  render();
+  var i = 0;
+  function next() {
+    if (i >= todo.length) {
+      state.trBatch.running = false;
+      state.trBatch.msg = "✅ Terminé : " + state.trBatch.done + " article(s) traduit(s).";
+      render(); return;
+    }
+    var p = todo[i++];
+    var needs = productTranslationNeeds(p);
+    var chain = Promise.resolve();
+    needs.forEach(function(nd) {
+      chain = chain.then(function() {
+        if (window._translateQuotaReached) return;
+        return translateText(nd.field === "name" ? p.name : p.description, nd.lang, { useEmail: true }).then(function(res) {
+          if (!res) return;
+          if (nd.field === "name") { p.nameByLang = p.nameByLang || {}; p.nameByLang[nd.lang] = res; }
+          else { p.descriptionByLang = p.descriptionByLang || {}; p.descriptionByLang[nd.lang] = res; }
+        });
+      });
+    });
+    chain.then(function() {
+      if (productTranslationNeeds(p).length < needs.length) { saveDoc("products", p); }
+      if (productTranslationNeeds(p).length === 0) state.trBatch.done++;
+      save();
+      if (window._translateQuotaReached) {
+        state.trBatch.running = false;
+        state.trBatch.msg = "⏸️ Limite de traduction du jour atteinte : " + state.trBatch.done + " article(s) traduit(s) aujourd'hui. Relancez demain pour continuer là où ça s'est arrêté.";
+        render(); return;
+      }
+      render();
+      setTimeout(next, 250); // on ménage le service gratuit
+    });
+  }
+  next();
 }
 
 function getRelaisCommissionRate() {
@@ -6586,7 +6686,7 @@ var ADMIN_RESTRICTED_ACTIONS = [
   "toggle-section-style-bold", "set-brand-image-field", "set-section-style-field", "save-market-display-config",
   "admin-cancel-boost", "approve-relais-edit", "reject-relais-edit",
   "admin-add-quartier", "admin-remove-quartier", "undo-quartier-change",
-  "admin-add-quartier-proche", "admin-remove-quartier-proche", "undo-quartier-proche-change", "toggle-user-test-mode", "moderation-approve", "moderation-reject", "run-full-push-diagnostic", "toggle-diagnostics-visible",
+  "admin-add-quartier-proche", "admin-remove-quartier-proche", "undo-quartier-proche-change", "toggle-user-test-mode", "moderation-approve", "moderation-reject", "run-full-push-diagnostic", "toggle-diagnostics-visible", "admin-translate-products",
   "send-admin-broadcast", "toggle-employee-permission", "add-boost-tier", "remove-boost-tier", "save-boost-tiers",
   "save-vip-rotation-seconds", "save-delivery-base-config", "admin-add-commune", "admin-remove-commune",
   "save-admin-product-edit", "admin-delete-account", "save-relais-commission", "save-delivery-fees", "save-intercity-delivery-fees", "save-international-shipping-rates",
@@ -10517,6 +10617,9 @@ const TRANSLATIONS = {
     market_section_recommended_default: "Recommandé pour vous",
     market_section_sector_default: "Autres vendeurs",
     market_section_trends_default: "Tendances",
+    inline_reco_title_1: "★ Recommandé pour vous",
+    inline_reco_title_2: "🔥 Les tendances du moment",
+    inline_reco_title_3: "🏷️ Meilleures affaires",
     cat_tout: "Tout",
     cat_mode_femme: "Mode Femme",
     cat_mode_homme: "Mode Homme",
@@ -12229,6 +12332,9 @@ const TRANSLATIONS = {
     market_section_recommended_default: "Recommended for you",
     market_section_sector_default: "Other sellers",
     market_section_trends_default: "Trending",
+    inline_reco_title_1: "★ Recommended for you",
+    inline_reco_title_2: "🔥 Trending now",
+    inline_reco_title_3: "🏷️ Best deals",
     cat_tout: "All",
     cat_mode_femme: "Women's Fashion",
     cat_mode_homme: "Men's Fashion",
@@ -13941,6 +14047,9 @@ const TRANSLATIONS = {
     market_section_recommended_default: "आपके लिए अनुशंसित",
     market_section_sector_default: "अन्य विक्रेता",
     market_section_trends_default: "ट्रेंडिंग",
+    inline_reco_title_1: "★ आपके लिए अनुशंसित",
+    inline_reco_title_2: "🔥 अभी ट्रेंडिंग",
+    inline_reco_title_3: "🏷️ सबसे अच्छे सौदे",
     cat_tout: "सभी",
     cat_mode_femme: "महिला फैशन",
     cat_mode_homme: "पुरुष फैशन",
@@ -19508,8 +19617,9 @@ function renderGuestHeader() {
   // jamais faire déborder la page, même sur les petits téléphones.
   var html = '<header style="position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:6px;padding:8px 10px;padding-top:calc(8px + env(safe-area-inset-top, 0px));background:var(--bg-card, #fff);border-bottom:1px solid var(--border-color);max-width:100%;box-sizing:border-box;overflow:hidden;">';
   html += '<button type="button" data-action="go" data-value="market" style="all:unset;cursor:pointer;display:flex;align-items:center;gap:6px;flex:1;min-width:0;">';
-  html += '<img src="' + SOUNSOUNI_HEADER_ICON + '" style="width:26px;height:26px;border-radius:7px;object-fit:cover;flex-shrink:0;" alt="Sounsouni" />';
-  html += '<span style="font-weight:900;font-size:13.5px;letter-spacing:.3px;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">SOUNSOUNI</span></button>';
+  // Logo seul, un peu plus grand : le nom écrit était coupé ("SO…") sur les
+  // écrans étroits, et on ne veut jamais élargir la page.
+  html += '<img src="' + SOUNSOUNI_HEADER_ICON + '" style="width:36px;height:36px;border-radius:9px;object-fit:cover;flex-shrink:0;" alt="Sounsouni" /></button>';
   // Langue : petit bouton compact (globe + code), qui ouvre le choix des 3 langues
   var guestLangCode = { fr: "FR", en: "EN", hi: "हि" }[state.language] || "FR";
   html += '<button type="button" data-action="guest-open-language" style="background:none;border:1px solid var(--border-color);border-radius:999px;padding:3px 7px;font-size:10.5px;font-weight:700;color:var(--text-primary, #222);cursor:pointer;flex-shrink:0;display:flex;align-items:center;gap:3px;white-space:nowrap;" aria-label="Langue"><i class="fa-solid fa-globe"></i>' + guestLangCode + '</button>';
@@ -19889,6 +19999,15 @@ function interleaveDiscovery(sortedIds, allIds, discoveryRatio) {
     }
   }
   return result;
+}
+
+// Titre de section personnalisable dans l'Admin : un titre personnalisé est
+// saisi en français. Dans une autre langue, on affiche le titre traduit par
+// défaut (sinon "Recommandé pour vous", "Catégories"... restaient en
+// français en anglais ou en hindi).
+function sectionTitleFor(cfg, defaultKey) {
+  if (state.language && state.language !== "fr") return t(defaultKey);
+  return (cfg && cfg.title) || t(defaultKey);
 }
 
 function getRecommendations(limit) {
@@ -24764,7 +24883,7 @@ function renderRecommendationsCircles(items) {
   var recoCfg = getSectionStyleConfig("reco_section_config", { title: t("market_section_recommended_default"), textColor: "var(--accent)", shapeColor: "#7bcb3a" });
   var recoTitleStyle = 'font-family:' + SECTION_FONT_FAMILIES[recoCfg.fontFamily] + ';font-weight:' + (recoCfg.bold ? '700' : '400') + ';color:' + recoCfg.textColor + ';font-size:' + recoCfg.fontSize + 'px;';
   var html = '<div class="brand-fx-' + recoCfg.effect + '" style="margin-bottom:16px;">';
-  html += '<div style="margin-bottom:10px;' + recoTitleStyle + '"><i class="fa-solid fa-star"></i> ' + esc(recoCfg.title) + '</div>';
+  html += '<div style="margin-bottom:10px;' + recoTitleStyle + '"><i class="fa-solid fa-star"></i> ' + esc(sectionTitleFor(recoCfg, "market_section_recommended_default")) + '</div>';
   html += '<div class="reco-circles-grid">';
   for (var i = 0; i < items.length && i < 9; i++) {
     var p = items[i];
@@ -24904,7 +25023,7 @@ function renderCategoryStars() {
   if (!starCfg.visible) return '';
   var starTitleStyle = 'font-family:' + SECTION_FONT_FAMILIES[starCfg.fontFamily] + ';font-weight:' + (starCfg.bold ? '800' : '400') + ';color:' + starCfg.textColor + ';font-size:' + starCfg.fontSize + 'px;';
   var html = '<div class="star-cats-section brand-fx-' + starCfg.effect + '" style="color:' + starCfg.shapeColor + ';">';
-  html += '<div style="margin-bottom:8px;' + starTitleStyle + '">' + esc(starCfg.title) + '</div>';
+  html += '<div style="margin-bottom:8px;' + starTitleStyle + '">' + esc(sectionTitleFor(starCfg, "market_section_categories_default")) + '</div>';
   html += buildRow(row1, 'star-row-1', false);
   html += buildRow(row2, 'star-row-2', true);
   html += '</div>';
@@ -24930,7 +25049,7 @@ function renderSectorIcons() {
   var secCfg = getSectionStyleConfig("sector_icons_config", { title: t("market_section_sector_default"), textColor: "var(--text-primary)", shapeColor: "#7bcb3a" });
   var secTitleStyle = 'font-family:' + SECTION_FONT_FAMILIES[secCfg.fontFamily] + ';font-weight:' + (secCfg.bold ? '800' : '400') + ';color:' + secCfg.textColor + ';font-size:' + secCfg.fontSize + 'px;';
   var html = '<div class="sector-icons-section brand-fx-' + secCfg.effect + '">';
-  html += '<div style="margin-bottom:8px;' + secTitleStyle + '">' + esc(secCfg.title) + '</div>';
+  html += '<div style="margin-bottom:8px;' + secTitleStyle + '">' + esc(sectionTitleFor(secCfg, "market_section_sector_default")) + '</div>';
   html += '<div class="sector-icons-grid">';
   for (var i = 0; i < shortcuts.length; i++) {
     var s = shortcuts[i];
@@ -25071,7 +25190,7 @@ function renderNewArrivals() {
   var naTitleStyle = 'font-family:' + SECTION_FONT_FAMILIES[naCfg.fontFamily] + ';font-weight:' + (naCfg.bold ? '800' : '400') + ';color:' + naCfg.textColor + ';text-shadow:0 0 4px rgba(' + naCfg.glowColor + ',0.9),0 0 10px rgba(' + naCfg.glowColor + ',0.55);';
   var html = '<div class="new-arrivals-section brand-fx-' + naCfg.effect + '">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
-  html += '<div style="font-size:14px;' + naTitleStyle + '"><i class="fa-solid fa-fire"></i> ' + esc(naCfg.title) + '</div>';
+  html += '<div style="font-size:14px;' + naTitleStyle + '"><i class="fa-solid fa-fire"></i> ' + esc(sectionTitleFor(naCfg, "market_section_trends_default")) + '</div>';
   if (items.length > 6) {
     html += '<button class="link-btn" data-action="open-new-arrivals-all">Tout voir (' + items.length + ')</button>';
   }
@@ -25658,7 +25777,7 @@ function renderMarket() {
       visibleProducts = products.slice(0, state.marketVisibleCount);
     }
     var REPEAT_EVERY = 24; // la recommandation réapparaît tous les 20-30 articles parcourus (multiple pair)
-    var INLINE_RECO_TITLES = ["★ Recommandé pour vous", "🔥 Les tendances du moment", "🏷️ Meilleures affaires"];
+    var INLINE_RECO_TITLES = [t("inline_reco_title_1"), t("inline_reco_title_2"), t("inline_reco_title_3")];
     var inlineRecoBlockCount = 0;
     var sinceLastInlineReco = 0;
     html += '<div class="product-grid">';
@@ -30022,6 +30141,22 @@ function renderAdminModeration() {
   var pending = (state.products || []).filter(function(p) { return p.moderationStatus === "pending" && inAdminScope(p); });
   var rejected = (state.products || []).filter(function(p) { return p.moderationStatus === "rejected" && inAdminScope(p); });
   var html = '';
+  // ---- Traduction des articles (anglais + hindi) ----
+  var trTodo = (state.products || []).filter(function(p) { return productTranslationNeeds(p).length > 0; }).length;
+  var trTotal = (state.products || []).length;
+  html += '<div class="glass-card" style="padding:14px;margin-bottom:14px;">';
+  html += '<div style="font-weight:800;font-size:13.5px;margin-bottom:6px;"><i class="fa-solid fa-language"></i> Traduction des articles</div>';
+  html += '<div style="font-size:12px;margin-bottom:10px;">' + (trTotal - trTodo) + ' / ' + trTotal + ' article(s) traduits en anglais et en hindi' + (trTodo ? ' — <strong>' + trTodo + ' à traduire</strong>' : ' ✅') + '</div>';
+  var tb = state.trBatch;
+  if (tb && tb.running) {
+    var pct = tb.total ? Math.round(100 * tb.done / tb.total) : 0;
+    html += '<div style="height:8px;border-radius:99px;background:var(--bg-body);overflow:hidden;margin-bottom:6px;"><div style="height:100%;width:' + pct + '%;background:var(--accent);"></div></div>';
+    html += '<div style="font-size:11px;color:var(--text-dim);">Traduction en cours… ' + tb.done + ' / ' + tb.total + ' — gardez cette page ouverte.</div>';
+  } else {
+    if (tb && tb.msg) html += '<div style="font-size:11.5px;margin-bottom:8px;">' + esc(tb.msg) + '</div>';
+    if (trTodo) html += '<button class="btn-primary" style="width:100%;" data-action="admin-translate-products"><i class="fa-solid fa-language"></i> Traduire les ' + trTodo + ' article(s) manquant(s)</button>';
+  }
+  html += '</div>';
   html += renderAdminCollapsibleList("moderationPending", '<i class="fa-solid fa-hourglass-half"></i> En attente de validation', pending, function(p) {
     var card = '<div class="glass-card" style="padding:12px;margin-bottom:10px;">';
     card += '<div style="display:flex;gap:10px;">';
@@ -35886,6 +36021,7 @@ root.addEventListener("click", function(e) {
       render();
       break;
     }
+    case "admin-translate-products": runProductTranslationBatch(); break;
     case "moderation-approve":
     case "moderation-reject": {
       var modProd = null;
