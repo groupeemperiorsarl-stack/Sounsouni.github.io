@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-02-c";
+    window.SOUNSOUNI_VERSION = "2026-10-02-e";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -9793,6 +9793,8 @@ const TRANSLATIONS = {
     aff_of_order: "de sa commande.",
     aff_link_share: "🔗 Lien d'invitation Sounsouni — Copier ou Partager",
     aff_copy_code: "Copier le code",
+    aff_copy_link: "Copier le lien",
+    aff_share_text: "Rejoins-moi sur Sounsouni, le marché digital de l'Afrique de l'Ouest :",
     aff_share: "Partager",
     aff_referrals: "Parrainages",
     aff_total_earnings: "Gains totaux",
@@ -11521,6 +11523,8 @@ const TRANSLATIONS = {
     aff_of_order: "of their order.",
     aff_link_share: "🔗 Sounsouni invitation link — Copy or Share",
     aff_copy_code: "Copy the code",
+    aff_copy_link: "Copy the link",
+    aff_share_text: "Join me on Sounsouni, the digital marketplace of West Africa:",
     aff_share: "Share",
     aff_referrals: "Referrals",
     aff_total_earnings: "Total earnings",
@@ -13249,6 +13253,8 @@ const TRANSLATIONS = {
     aff_of_order: "उनके ऑर्डर का।",
     aff_link_share: "🔗 Sounsouni आमंत्रण लिंक — कॉपी करें या साझा करें",
     aff_copy_code: "कोड कॉपी करें",
+    aff_copy_link: "लिंक कॉपी करें",
+    aff_share_text: "Sounsouni पर मेरे साथ जुड़ें, पश्चिम अफ्रीका का डिजिटल बाज़ार:",
     aff_share: "साझा करें",
     aff_referrals: "रेफरल",
     aff_total_earnings: "कुल कमाई",
@@ -16928,7 +16934,7 @@ function confirmRelaisRetrait(orderId, inputCode) {
 // utilisable dans un SMS pour que le destinataire sache où aller, même
 // sans avoir de compte Sounsouni.
 function buildRelaisPublicLink(relaisShopId) {
-  return window.location.origin + window.location.pathname + "#relais=" + relaisShopId;
+  return PUBLIC_SITE_URL + "/#relais=" + relaisShopId;
 }
 
 function registerExternalParcel(draft) {
@@ -17462,8 +17468,13 @@ function cancelOrder(orderId) {
 // ============================================================
 
 // ---------- AFFILIATION ----------
+// Code de parrainage STABLE : toujours le même pour un même compte (tiré de
+// son identifiant, plus de l'heure). Avant, un nouveau code était fabriqué à
+// chaque affichage tant que le serveur ne l'avait pas enregistré — d'où un
+// code qui "tournait" et une page qui remontait sans cesse.
 function generateReferralCode(userId) {
-  return "REF" + userId.slice(0, 4) + Date.now().toString(36).toUpperCase();
+  var clean = String(userId || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  return "REF" + (clean.slice(-12) || Math.random().toString(36).slice(2, 10).toUpperCase());
 }
 
 // Réglages de commission — partagés entre TOUS les appareils (comme les
@@ -18000,7 +18011,7 @@ function transferWallet(fromPhone, toPhoneRaw, amount, message) {
 // portefeuille vers un même objectif ; la personne qui a créé la cagnotte
 // peut ensuite récupérer le total dans SON portefeuille.
 function buildCagnottePublicLink(cagnotteId) {
-  return window.location.origin + window.location.pathname + "#cagnotte=" + cagnotteId;
+  return PUBLIC_SITE_URL + "/#cagnotte=" + cagnotteId;
 }
 
 function getCagnotte(id) {
@@ -18188,12 +18199,20 @@ function getReferralCode() {
   // l'appareil, sinon la recherche du parrain au moment de la commission
   // ne peut tout simplement jamais le retrouver (c'était le bug de fond).
   if (!state.profile.affiliateCode) {
-    state.profile.affiliateCode = generateReferralCode(state.profile.id);
+    var stableCode = generateReferralCode(state.profile.id);
+    state.profile.affiliateCode = stableCode;
     for (var i = 0; i < state.accounts.length; i++) {
-      if (state.accounts[i].id === state.profile.id) { state.accounts[i] = { ...state.profile }; break; }
+      if (state.accounts[i].id === state.profile.id) { state.accounts[i].affiliateCode = stableCode; break; }
     }
-    save();
-    saveDoc("accounts", state.profile);
+    // Envoi au serveur UNE SEULE FOIS par compte et par session — jamais en
+    // boucle à chaque affichage, même si le serveur tarde ou refuse.
+    window._affiliateCodeSent = window._affiliateCodeSent || {};
+    if (!window._affiliateCodeSent[state.profile.id]) {
+      window._affiliateCodeSent[state.profile.id] = true;
+      save();
+      saveDoc("accounts", state.profile);
+    }
+    return stableCode;
   }
   return state.profile.affiliateCode;
 }
@@ -24786,13 +24805,12 @@ function renderAffiliateProgramModal() {
   html += '<div class="section-title" style="margin-bottom:6px;"><i class="fa-solid fa-hand-holding-dollar"></i> ' + t("aff_title") + '</div>';
   html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:16px;">' + t("aff_explainer") + ' ' + (stats.commissionRate * 100).toFixed(1) + '% ' + t("aff_of_order") + '</div>';
 
-  html += '<div class="referral-code-box"><code>' + esc(stats.code) + '</code></div>';
-  html += '<div class="referral-link-box" data-action="copy-referral-link" style="cursor:pointer;"><input class="input" readonly value="' + t("aff_link_share") + '" data-real-link="' + esc(link) + '" style="pointer-events:none;" /></div>';
+  html += '<div class="referral-link-box" data-action="copy-referral-link" style="cursor:pointer;"><input class="input" readonly value="' + esc(link) + '" data-real-link="' + esc(link) + '" style="pointer-events:none;" /></div>';
   html += '<div style="display:flex;justify-content:center;margin:14px 0;">';
   html += '<div class="qr-code-slot" data-qr-value="' + esc(link) + '" style="width:170px;height:170px;background:var(--bg-body);border-radius:14px;padding:10px;"></div>';
   html += '</div>';
   html += '<div style="display:flex;gap:8px;margin-top:10px;">';
-  html += '<button class="btn-secondary" style="flex:1;" data-action="copy-referral"><i class="fa-solid fa-copy"></i> ' + t("aff_copy_code") + '</button>';
+  html += '<button class="btn-secondary" style="flex:1;" data-action="copy-referral"><i class="fa-solid fa-copy"></i> ' + t("aff_copy_link") + '</button>';
   html += '<button class="btn-primary" style="flex:1;" data-action="share-referral"><i class="fa-solid fa-share-nodes"></i> ' + t("aff_share") + '</button>';
   html += '</div>';
 
@@ -26538,7 +26556,6 @@ function renderCheckout() {
     zoneOptions += '<option value="' + esc(z) + '" ' + (f.zone === z ? 'selected' : '') + '>' + esc(z) + ' — ' + money(getDeliveryFee(f.city, z, isRelais ? "relais" : "express")) + '</option>';
   }
   var items = checkoutItems();
-  var refCode = getReferralCode();
   
   var html = '<div class="checkout-view"><div class="section-title">' + t("checkout_title") + '</div>';
   if (state.showAddressRequiredPopup) {
@@ -26557,9 +26574,9 @@ function renderCheckout() {
     }
     html += '<div style="font-size:11.5px;font-weight:700;color:var(--accent);background:rgba(255,122,26,0.08);padding:8px 12px;border-radius:10px;margin-bottom:14px;"><i class="fa-solid fa-bolt"></i> ' + t("co_direct_purchase") + itemNames + '</div>';
   }
-  if (refCode) {
-    html += '<div style="font-size:11px;color:var(--text-dim);background:var(--bg-body);padding:6px 12px;border-radius:8px;margin-bottom:12px;">' + t("co_referral_code") + '<strong>' + refCode + '</strong></div>';
-  }
+  // (Le code de parrainage seul n'est plus affiché ici : il ne servait à
+  // rien sans lien, et le parrainage passe uniquement par le lien.)
+
 
   // ---- Choix du mode de livraison ----
   var previewExpressFee = realFeesPreview.expressFee;
@@ -32136,7 +32153,7 @@ function renderDashboardPartnersSection() {
     html += '<input class="input" id="dash-user-' + d.id + '" placeholder="Nom d\'utilisateur" value="' + esc(d.username) + '" data-action-input="dashboard-partner-username" data-config="' + d.id + '" style="margin-bottom:6px;" />';
     html += '<div style="position:relative;"><input class="input" id="dash-pass-' + d.id + '" type="password" style="padding-right:44px;" placeholder="🔒 Protégé — tapez pour remplacer" value="" data-action-input="dashboard-partner-password" data-config="' + d.id + '" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>';
     if (d.enabled && d.username) {
-      html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:8px;background:var(--bg-card);padding:6px;border-radius:6px;word-break:break-all;">Lien : ' + window.location.origin + window.location.pathname + '#partner-dashboard</div>';
+      html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:8px;background:var(--bg-card);padding:6px;border-radius:6px;word-break:break-all;">Lien : ' + PUBLIC_SITE_URL + '/#partner-dashboard</div>';
     }
     html += '</div>';
   }
@@ -33177,7 +33194,7 @@ function renderNotifPanel() {
     }
   }
   html += '<div class="divider-dashed"></div>';
-  html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">🔗 ' + t("notif_affiliate_code") + ': <strong>' + (getReferralCode() || t("notif_not_set")) + '</strong></div>';
+
   html += '<button class="link-btn" style="color:var(--danger);" data-action="reset-referral-code"><i class="fa-solid fa-rotate-left"></i> ' + t("notif_reset_code") + '</button>';
   html += '</div>';
   return html;
@@ -39109,19 +39126,26 @@ root.addEventListener("click", function(e) {
     }
     case "copy-referral": {
       var code = getReferralCode();
-      if (code && navigator.clipboard) {
-        navigator.clipboard.writeText(code).then(function() { showToast(t("toast_code_copied")); });
+      if (code) {
+        var refLink = PUBLIC_SITE_URL + '/?ref=' + code;
+        if (navigator.clipboard) navigator.clipboard.writeText(refLink).then(function() { showToast(t("toast_link_copied")); }, function() { showToast(refLink); });
+        else showToast(refLink);
       }
       break;
     }
     case "share-referral": {
       var code2 = getReferralCode();
       if (code2) {
-        var link = window.location.origin + '?ref=' + code2;
-        if (navigator.share) {
-          navigator.share({ title: 'Rejoins Sounsouni', text: 'Utilise mon code de parrainage : ' + code2, url: link });
-        } else if (navigator.clipboard) {
-          navigator.clipboard.writeText(link).then(function() { showToast(t("toast_link_copied")); });
+        var link = PUBLIC_SITE_URL + '/?ref=' + code2;
+        var refText = t("aff_share_text");
+        var copyLink = function() { if (navigator.clipboard) navigator.clipboard.writeText(link).then(function() { showToast(t("toast_link_copied")); }); else showToast(link); };
+        var capShare2 = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share;
+        if (capShare2 && capShare2.share) {
+          capShare2.share({ title: 'Sounsouni', text: refText, url: link, dialogTitle: 'Sounsouni' }).catch(function(err) { if (!(err && /cancel/i.test(String(err.message || err)))) copyLink(); });
+        } else if (navigator.share) {
+          navigator.share({ title: 'Sounsouni', text: refText, url: link }).catch(function(err) { if (!(err && err.name === "AbortError")) copyLink(); });
+        } else {
+          copyLink();
         }
       }
       break;
