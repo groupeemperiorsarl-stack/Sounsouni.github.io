@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-01-b";
+    window.SOUNSOUNI_VERSION = "2026-10-02-a";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -5439,14 +5439,19 @@ function runBackgroundResync() {
       if (needsFullSync) {
         var byCollection = {};
         SHARED_KEYS.forEach(function(name) { byCollection[name] = []; });
+        var publicProfileRows = [];
         res.data.forEach(function(row) {
+          if (row.collection === "publicProfiles") { publicProfileRows.push(row.data); return; }
           if (byCollection[row.collection]) byCollection[row.collection].push(row.data);
         });
+        var accountsFromPublic = byCollection.accounts.length === 0 && publicProfileRows.length > 0;
         // Même règle qu'au démarrage : les articles ne sont pas dans cette
         // requête, on ne remplace donc jamais leur liste par du vide.
-        SHARED_KEYS.forEach(function(name) { if (name === "products" || PERSONAL_KEYS.indexOf(name) !== -1) return; state[name] = byCollection[name]; });
+        SHARED_KEYS.forEach(function(name) { if (name === "products" || PERSONAL_KEYS.indexOf(name) !== -1 || (name === "accounts" && accountsFromPublic)) return; state[name] = byCollection[name]; });
+          if (accountsFromPublic) applyPublicProfiles(publicProfileRows, true);
       } else {
         res.data.forEach(function(row) {
+          if (row.collection === "publicProfiles") { applyPublicProfiles([row.data], false); return; }
           if (SHARED_KEYS.indexOf(row.collection) === -1) return;
           var list = state[row.collection];
           var idx = list.findIndex(function(item) { return item.id === row.data.id; });
@@ -15392,9 +15397,22 @@ function attemptFindAccount() {
     return phoneMatches && (a.name || "").trim().toLowerCase() === nameNorm;
   });
   if (!candidate) {
-    showToast(t("toast_no_account_name_number"));
+    // Les numéros ne sont plus dans la liste publique des comptes : on
+    // demande au serveur de retrouver le compte (il ne renvoie que son
+    // identifiant et s'il a un mot de passe).
+    secureWrite("accounts", { operation: "find_account", name: d.name.trim(), phone: digits, fullPhone: fullPhone }).then(function(res) {
+      if (!res || res.notDeployed || !res.found) { showToast(t("toast_no_account_name_number")); return; }
+      var found = null;
+      for (var fi = 0; fi < state.accounts.length; fi++) { if (state.accounts[fi].id === res.accountId) { found = state.accounts[fi]; break; } }
+      if (!found) { found = { id: res.accountId, name: d.name.trim() }; state.accounts.push(found); }
+      found.hasPassword = !!res.hasPassword;
+      finishFindAccount(found, d);
+    }).catch(function() { showToast(t("toast_no_account_name_number")); });
     return;
   }
+  finishFindAccount(candidate, d);
+}
+function finishFindAccount(candidate, d) {
   if (candidate.hasPassword) {
     if (!d.password) { showToast(t("toast_account_has_password_enter")); return; }
     verifyAccountPassword(candidate.id, d.password).then(function(match) {
@@ -40191,6 +40209,45 @@ function normalizeOrderDoc(d) {
   return d;
 }
 
+// ---------- Confidentialité des comptes ----------
+// La base ne donne plus la liste complète des comptes : chaque téléphone
+// reçoit leur VERSION PUBLIQUE (collection "publicProfiles" : nom,
+// boutique, photos...), plus ses propres comptes EN ENTIER via
+// personal-data (l'Admin reçoit tout). Fusion : pour ses propres comptes
+// (et pour l'Admin), on garde les champs privés déjà reçus.
+window._ownFullAccountIds = window._ownFullAccountIds || {};
+function keepsPrivateFields(id) {
+  if (window._ownFullAccountIds[id]) return true;
+  if (typeof isFullDataViewer === "function" && isFullDataViewer()) return true;
+  if (state.profile && state.profile.id === id) return true;
+  return (state.deviceAccountIds || []).indexOf(id) !== -1;
+}
+function applyPublicProfiles(profiles, full) {
+  if (!Array.isArray(profiles)) return;
+  var byId = {}, order = [];
+  (state.accounts || []).forEach(function(a) { if (a && a.id) { byId[a.id] = a; order.push(a.id); } });
+  var seen = {};
+  profiles.forEach(function(pp) {
+    if (!pp || !pp.id) return;
+    seen[pp.id] = true;
+    var ex = byId[pp.id];
+    if (ex && keepsPrivateFields(pp.id)) { Object.keys(pp).forEach(function(k) { ex[k] = pp[k]; }); }
+    else { if (!ex) order.push(pp.id); byId[pp.id] = pp; }
+  });
+  if (full) order = order.filter(function(id) { return seen[id] || keepsPrivateFields(id); });
+  state.accounts = order.filter(function(id) { return byId[id]; }).map(function(id) { return byId[id]; });
+}
+function applyFullAccounts(accounts, markOwn) {
+  if (!Array.isArray(accounts) || !accounts.length) return;
+  var byId = {};
+  (state.accounts || []).forEach(function(a) { if (a && a.id) byId[a.id] = a; });
+  accounts.forEach(function(a) {
+    if (!a || !a.id) return;
+    if (markOwn) window._ownFullAccountIds[a.id] = true;
+    if (byId[a.id]) Object.assign(byId[a.id], a); else state.accounts.push(a);
+  });
+}
+
 function isFullDataViewer() {
   if (state.adminUnlocked) return true;
   var p = state.profile;
@@ -40355,6 +40412,7 @@ function syncPersonalCollections() {
         }
         if (res && res.success) {
           if (Array.isArray(res.securityAlerts)) state.securityAlerts = res.securityAlerts;
+          if (Array.isArray(res.accounts)) { applyFullAccounts(res.accounts, !res.full); refreshProfileFromAccounts(); }
           var rows = [];
           ["orders", "notifications", "conversations"].forEach(function(k) {
             (res[k] || []).forEach(function(d) { rows.push({ collection: k, data: d }); });
@@ -40888,19 +40946,26 @@ function bootAppWithLocalData() {
           // comme avant — remet aussi à niveau les suppressions manquées.
           var byCollection = {};
           SHARED_KEYS.forEach(function(name) { byCollection[name] = []; });
+          var publicProfileRows = [];
           res.data.forEach(function(row) {
+            if (row.collection === "publicProfiles") { publicProfileRows.push(row.data); return; }
             if (byCollection[row.collection]) byCollection[row.collection].push(row.data);
           });
+          // Comptes : liste complète si la base la donne encore (avant la mise
+          // en place), sinon versions publiques + ses propres comptes complets.
+          var accountsFromPublic = byCollection.accounts.length === 0 && publicProfileRows.length > 0;
           // Les articles ne font PAS partie de cette requête (chargés à part,
           // par lots — voir syncProductsInitialBatch). Remplacer
           // state.products par la liste vide reçue ici effaçait les articles
           // déjà arrivés : marché vide pour tout nouveau visiteur, et
           // "je ne vois que mes propres articles" après plus de 24 h.
-          SHARED_KEYS.forEach(function(name) { if (name === "products" || PERSONAL_KEYS.indexOf(name) !== -1) return; state[name] = byCollection[name]; });
+          SHARED_KEYS.forEach(function(name) { if (name === "products" || PERSONAL_KEYS.indexOf(name) !== -1 || (name === "accounts" && accountsFromPublic)) return; state[name] = byCollection[name]; });
+          if (accountsFromPublic) applyPublicProfiles(publicProfileRows, true);
         } else {
           // Incrémental : on met seulement à jour/ajoute les lignes reçues,
           // le reste du cache local reste tel quel.
           res.data.forEach(function(row) {
+            if (row.collection === "publicProfiles") { applyPublicProfiles([row.data], false); return; }
             if (SHARED_KEYS.indexOf(row.collection) === -1) return;
             var list = state[row.collection];
             var idx = list.findIndex(function(item) { return item.id === row.data.id; });
@@ -40941,6 +41006,11 @@ function bootAppWithLocalData() {
     sb.channel("app_data_changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "app_data" }, function(payload) {
         var row = payload.new && Object.keys(payload.new).length ? payload.new : payload.old;
+        if (row && row.collection === "publicProfiles") {
+          if (payload.eventType === "DELETE") { state.accounts = (state.accounts || []).filter(function(a) { return a.id !== row.id || keepsPrivateFields(a.id); }); }
+          else if (row.data) { applyPublicProfiles([row.data], false); refreshProfileFromAccounts(); }
+          save(); renderOrDefer(); return;
+        }
         if (!row || !byCollectionExists(row.collection)) return;
         // Commandes, notifications et conversations : seulement celles qui
         // concernent ce téléphone (sauf Admin / agent de sourcing).
