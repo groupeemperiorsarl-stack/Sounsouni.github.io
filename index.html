@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-03-d";
+    window.SOUNSOUNI_VERSION = "2026-10-04-c";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -1543,6 +1543,15 @@ button:active {
   color: var(--danger);
 }
 /* Bouton de partage, juste sous le cœur (même taille, même style) */
+.ct-body { font-size: 13px; line-height: 1.55; }
+.ct-h3 { font-size: 15px; font-weight: 800; margin: 6px 0 8px; }
+.ct-h4 { font-size: 13.5px; font-weight: 800; margin: 14px 0 6px; }
+.ct-p { margin: 0 0 8px; }
+.ct-list { margin: 0 0 8px; padding-left: 20px; }
+.ct-list li { margin-bottom: 4px; }
+.ct-table-wrap { overflow-x: auto; margin-bottom: 8px; }
+.ct-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.ct-table th, .ct-table td { border: 1px solid var(--border-color); padding: 5px 6px; text-align: left; vertical-align: top; }
 .fav-btn.share-card-btn {
   top: 42px;
 }
@@ -6813,7 +6822,7 @@ var ADMIN_RESTRICTED_ACTIONS = [
   "toggle-section-style-bold", "set-brand-image-field", "set-section-style-field", "save-market-display-config",
   "admin-cancel-boost", "approve-relais-edit", "reject-relais-edit",
   "admin-add-quartier", "admin-remove-quartier", "undo-quartier-change",
-  "admin-add-quartier-proche", "admin-remove-quartier-proche", "undo-quartier-proche-change", "toggle-user-test-mode", "moderation-approve", "moderation-reject", "run-full-push-diagnostic", "toggle-diagnostics-visible", "admin-translate-products", "admin-payout-catch-up",
+  "admin-add-quartier-proche", "admin-remove-quartier-proche", "undo-quartier-proche-change", "toggle-user-test-mode", "moderation-approve", "moderation-reject", "run-full-push-diagnostic", "toggle-diagnostics-visible", "admin-translate-products", "admin-payout-catch-up", "admin-save-payout-fees",
   "send-admin-broadcast", "toggle-employee-permission", "add-boost-tier", "remove-boost-tier", "save-boost-tiers",
   "save-vip-rotation-seconds", "save-delivery-base-config", "admin-add-commune", "admin-remove-commune",
   "save-admin-product-edit", "admin-delete-account", "save-relais-commission", "save-delivery-fees", "save-intercity-delivery-fees", "save-international-shipping-rates",
@@ -9841,6 +9850,33 @@ const TRANSLATIONS = {
     filter_reset: "Réinitialiser les filtres",
     filter_see_results: "Voir les résultats",
     dispute_title: "Signaler un problème",
+    payout_card_title: "Mon argent",
+    payout_next: "Prochain versement :",
+    payout_fee_word: "de frais de transfert",
+    payout_nothing: "Aucun versement en attente pour le moment.",
+    payout_rule_seller: "Livré du mardi au vendredi → payé le mardi suivant. Livré samedi, dimanche ou lundi → payé le vendredi suivant. Frais de transfert à votre charge.",
+    payout_rule_relais: "Colis remis du lundi au dimanche → payé le mardi suivant. Frais de transfert payés par Sounsouni.",
+    payout_receive_on: "Je reçois mon argent sur :",
+    payout_number_ph: "Numéro qui reçoit l'argent",
+    payout_choose_operator: "Choisissez votre opérateur pour recevoir vos paiements.",
+    payout_history: "Derniers versements reçus",
+    payout_saved: "Moyen de paiement enregistré.",
+    payout_save_btn: "Enregistrer",
+    payout_number_invalid: "Numéro invalide.",
+    relais_not_collected_btn: "Le client n'est pas venu",
+    relais_not_collected_confirm: "Confirmer que le client n'est pas venu chercher son colis ? Le colis retournera chez le vendeur.",
+    relais_not_collected_done: "✅ Retour déclenché : le vendeur et le livreur sont prévenus.",
+    relais_reprise_code_label: "Code de reprise donné par le livreur",
+    relais_reprise_wrong_code: "❌ Code de reprise incorrect. Ne donnez pas le colis.",
+    relais_reprise_done: "✅ Colis rendu au livreur. Le vendeur est prévenu.",
+    relais_to_return: "Colis à rendre au livreur",
+    livreur_returns_title: "Retours au vendeur",
+    livreur_return_pickup_at: "Reprendre le colis chez :",
+    livreur_return_code_label: "Code de reprise à donner au point de retrait",
+    livreur_return_bring_to: "Colis repris — déposez-le chez :",
+    livreur_return_wait_seller: "Le vendeur confirmera la réception.",
+    seller_returns_title: "Retours en route vers vous",
+    seller_return_received_btn: "J'ai reçu le retour",
     livreur_contact_after_pickup: "Le numéro et la position du client s'afficheront dès que vous prenez la commande en charge.",
     order_full_history: "Historique complet",
     rep_new: "Nouveau vendeur",
@@ -11572,6 +11608,33 @@ const TRANSLATIONS = {
     filter_reset: "Reset filters",
     filter_see_results: "See results",
     dispute_title: "Report a problem",
+    payout_card_title: "My money",
+    payout_next: "Next payout:",
+    payout_fee_word: "transfer fee",
+    payout_nothing: "No pending payout for now.",
+    payout_rule_seller: "Delivered Tuesday to Friday → paid the next Tuesday. Delivered Saturday, Sunday or Monday → paid the next Friday. Transfer fees are yours.",
+    payout_rule_relais: "Parcels handed over Monday to Sunday → paid the next Tuesday. Transfer fees paid by Sounsouni.",
+    payout_receive_on: "I receive my money on:",
+    payout_number_ph: "Number that receives the money",
+    payout_choose_operator: "Choose your operator to receive your payments.",
+    payout_history: "Last payouts received",
+    payout_saved: "Payment method saved.",
+    payout_save_btn: "Save",
+    payout_number_invalid: "Invalid number.",
+    relais_not_collected_btn: "The customer did not come",
+    relais_not_collected_confirm: "Confirm that the customer did not come for the parcel? It will go back to the seller.",
+    relais_not_collected_done: "✅ Return started: the seller and the courier are notified.",
+    relais_reprise_code_label: "Pickup code given by the courier",
+    relais_reprise_wrong_code: "❌ Wrong pickup code. Do not hand over the parcel.",
+    relais_reprise_done: "✅ Parcel handed to the courier. The seller is notified.",
+    relais_to_return: "Parcels to hand back to the courier",
+    livreur_returns_title: "Returns to the seller",
+    livreur_return_pickup_at: "Pick up the parcel at:",
+    livreur_return_code_label: "Pickup code to give to the pickup point",
+    livreur_return_bring_to: "Parcel collected — drop it at:",
+    livreur_return_wait_seller: "The seller will confirm receipt.",
+    seller_returns_title: "Returns on the way to you",
+    seller_return_received_btn: "I received the return",
     livreur_contact_after_pickup: "The customer's number and location will appear as soon as you take charge of the order.",
     order_full_history: "Full history",
     rep_new: "New seller",
@@ -13303,6 +13366,33 @@ const TRANSLATIONS = {
     filter_reset: "फ़िल्टर रीसेट करें",
     filter_see_results: "परिणाम देखें",
     dispute_title: "समस्या की रिपोर्ट करें",
+    payout_card_title: "मेरा पैसा",
+    payout_next: "अगला भुगतान:",
+    payout_fee_word: "ट्रांसफर शुल्क",
+    payout_nothing: "अभी कोई भुगतान बाकी नहीं है।",
+    payout_rule_seller: "मंगलवार से शुक्रवार डिलीवर → अगले मंगलवार भुगतान। शनिवार, रविवार या सोमवार डिलीवर → अगले शुक्रवार भुगतान। ट्रांसफर शुल्क आपका।",
+    payout_rule_relais: "सोमवार से रविवार तक दिए गए पार्सल → अगले मंगलवार भुगतान। ट्रांसफर शुल्क Sounsouni देता है।",
+    payout_receive_on: "मुझे पैसा यहाँ मिलता है:",
+    payout_number_ph: "पैसा पाने वाला नंबर",
+    payout_choose_operator: "भुगतान पाने के लिए अपना ऑपरेटर चुनें।",
+    payout_history: "पिछले भुगतान",
+    payout_saved: "भुगतान का तरीका सहेजा गया।",
+    payout_save_btn: "सहेजें",
+    payout_number_invalid: "अमान्य नंबर।",
+    relais_not_collected_btn: "ग्राहक नहीं आया",
+    relais_not_collected_confirm: "पुष्टि करें कि ग्राहक पार्सल लेने नहीं आया? पार्सल विक्रेता को वापस जाएगा।",
+    relais_not_collected_done: "✅ वापसी शुरू: विक्रेता और डिलीवरी करने वाले को सूचित किया गया।",
+    relais_reprise_code_label: "डिलीवरी करने वाले का वापसी कोड",
+    relais_reprise_wrong_code: "❌ गलत वापसी कोड। पार्सल न दें।",
+    relais_reprise_done: "✅ पार्सल डिलीवरी करने वाले को दिया गया। विक्रेता को सूचित किया गया।",
+    relais_to_return: "डिलीवरी करने वाले को लौटाने वाले पार्सल",
+    livreur_returns_title: "विक्रेता को वापसी",
+    livreur_return_pickup_at: "पार्सल यहाँ से लें:",
+    livreur_return_code_label: "पिकअप पॉइंट को देने वाला वापसी कोड",
+    livreur_return_bring_to: "पार्सल लिया गया — यहाँ पहुँचाएँ:",
+    livreur_return_wait_seller: "विक्रेता प्राप्ति की पुष्टि करेगा।",
+    seller_returns_title: "आपकी ओर आ रही वापसी",
+    seller_return_received_btn: "मुझे वापसी मिल गई",
     livreur_contact_after_pickup: "ऑर्डर लेते ही ग्राहक का नंबर और स्थान दिखाई देगा।",
     order_full_history: "पूरा इतिहास",
     rep_new: "नया विक्रेता",
@@ -17316,6 +17406,9 @@ function trackSellerRefusal(sellerId) {
 function markOrderReturnedUnclaimed(order, disputeReason, disputeNote, sellerMessage) {
   logOrderStatusChange(order, "Refusée au retrait");
   order.returnStatus = "en_attente_retour";
+  // Code de reprise : le livreur le donne au point de retrait pour prouver
+  // que le colis a bien quitté la boutique (retour vers le vendeur).
+  if (!order.returnPickupCode) order.returnPickupCode = generateOTP();
   order.refusedAt = Date.now();
   order.commissionAmount = 0; // aucune commission, ni boutique ni Sounsouni
   save();
@@ -17329,6 +17422,38 @@ function markOrderReturnedUnclaimed(order, disputeReason, disputeNote, sellerMes
       addNotification("whatsapp", sellerMessage, sid, "seller-orders");
     }
   }
+}
+
+// Le point de retrait déclare que le client n'est pas venu : retour
+// immédiat chez le vendeur (sans attendre les 5 jours).
+function relaisNotCollected(orderId) {
+  var order = (state.orders || []).find(function(o) { return o.id === orderId; });
+  if (!order) return;
+  if (order.status !== "En boutique") { showToast(t("toast_parcel_not_awaiting_pickup")); return; }
+  if (!confirm(t("relais_not_collected_confirm"))) return;
+  markOrderReturnedUnclaimed(order, "colis_non_retire", "Colis non récupéré : déclaré par le point de retrait.",
+    "⚠️ Commande #" + orderId.slice(-5).toUpperCase() + " : le client n'est pas venu chercher son colis — retour prévu chez vous.");
+  render();
+  showToast(t("relais_not_collected_done"));
+}
+// Le point de retrait confirme, avec le code de reprise du livreur, que le
+// colis retourné a quitté sa boutique.
+function confirmReturnPickup(orderId) {
+  var order = (state.orders || []).find(function(o) { return o.id === orderId; });
+  if (!order) return;
+  var input = document.getElementById("reprise-input-" + orderId);
+  var code = input ? String(input.value || "").trim() : "";
+  if (!code || code !== String(order.returnPickupCode || "")) { showToast(t("relais_reprise_wrong_code")); return; }
+  order.returnStatus = "repris_par_livreur";
+  order.returnPickedUpAt = Date.now();
+  save();
+  secureOrderSaveDoc(order);
+  var notified = {};
+  (order.items || []).forEach(function(it) {
+    if (it.sellerId && !notified[it.sellerId]) { notified[it.sellerId] = true; addNotification("whatsapp", "🔁 Commande #" + orderId.slice(-5).toUpperCase() + " : le colis retourné est en route vers vous avec le livreur. Confirmez sa réception dans vos commandes.", it.sellerId, "seller-orders"); }
+  });
+  render();
+  showToast(t("relais_reprise_done"));
 }
 
 function refuseRelaisProduct(orderId) {
@@ -17378,10 +17503,10 @@ function checkStalePickupOrders() {
     var orderCode = "#" + order.id.slice(-5).toUpperCase();
     var shopName = order.relaisShopName || "votre point de retrait";
 
-    if (elapsedDays >= 4) {
-      // Jour 5 : personne n'est venu dans les 4 jours accordés.
+    if (elapsedDays >= 5) {
+      // Au bout de 5 jours (contrat Point de retrait) : retour automatique.
       markOrderReturnedUnclaimed(order, "colis_non_retire",
-        "Colis non récupéré par le client dans les 4 jours suivant son arrivée au point de retrait — retour automatique.",
+        "Colis non récupéré par le client dans les 5 jours suivant son arrivée au point de retrait — retour automatique.",
         "⚠️ Commande " + orderCode + " n'a pas été récupérée par le client dans les délais — retour prévu chez vous.");
       var buyerAcc = null;
       for (var bi = 0; bi < state.accounts.length; bi++) { if (state.accounts[bi].id === order.buyerId) { buyerAcc = state.accounts[bi]; break; } }
@@ -17395,13 +17520,14 @@ function checkStalePickupOrders() {
       return;
     }
 
-    var targetStage = elapsedDays + 1; // Jour 1 -> palier 1, Jour 2 -> palier 2, etc.
-    if (targetStage <= (order.pickupReminderStage || 0)) return; // déjà envoyé pour ce jour-là
-    var deadlineLabel = new Date(order.depotConfirmedAt + 4 * PICKUP_DAY_MS).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+    // Rappels au 2e jour et au 4e jour seulement (contrat Point de retrait).
+    var targetStage = elapsedDays >= 4 ? 4 : (elapsedDays >= 2 ? 2 : 0);
+    if (!targetStage || targetStage <= (order.pickupReminderStage || 0)) return; // rien à envoyer, ou déjà envoyé
+    var deadlineLabel = new Date(order.depotConfirmedAt + 5 * PICKUP_DAY_MS).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
     var message;
-    if (targetStage <= 2) {
+    if (targetStage === 2) {
       message = "📦 Votre colis " + orderCode + " vous attend chez " + shopName + ". Venez le chercher avant le " + deadlineLabel + ".";
-    } else if (targetStage === 3) {
+    } else if (targetStage === 3) { // (palier conservé pour compatibilité, plus utilisé)
       message = "⚠️ Attention : votre colis " + orderCode + " vous attend toujours chez " + shopName + ". Il ne vous reste que jusqu'au " + deadlineLabel + " pour venir le chercher.";
     } else {
       message = "🚨 DERNIER JOUR ! Allez chercher votre colis " + orderCode + " AUJOURD'HUI chez " + shopName + ". Si vous ne venez pas, il repart chez le vendeur et vous ne pourrez plus l'avoir.";
@@ -17436,6 +17562,7 @@ var DISPUTE_REASONS = {
   produit_endommage: "Produit endommagé ou différent",
   non_recu: "Commande non reçue",
   produit_refuse: "Produit refusé au retrait",
+  colis_non_retire: "Colis non récupéré par le client",
   refus_livreur: "Produit refusé par le livreur à la récupération",
   autre: "Autre problème"
 };
@@ -18013,7 +18140,9 @@ function callWalletOperation(payload) {
   var isAdminOp = typeof payload.operation === "string" && payload.operation.indexOf("admin_") === 0;
   return fetch(supabaseConfig.url + "/functions/v1/wallet-write", {
     method: "POST",
-    headers: authHeaders(null, isAdminOp),
+    // Employé du Groupe 2 : pas de jeton Admin spécial → son jeton de compte,
+    // que le serveur vérifie (liste du Groupe 2).
+    headers: authHeaders(null, isAdminOp && !!state.adminSessionToken),
     body: JSON.stringify(payload)
   })
     .then(function(r) { return r.json(); })
@@ -21724,6 +21853,7 @@ function buildHTML() {
   if (state.showRoleMenu) html += renderRoleMenuModal();
   if (state.showVendorHub) html += renderVendorHubModal();
   if (state.showProfileScreen) html += renderProfileModal();
+  html += renderContractGate();
   if (state.showSellerTypeModal) html += renderSellerTypeModal();
   if (state.showSellerSectorModal) html += renderSellerSectorModal();
   if (state.showBoostModal) html += renderBoostModal();
@@ -22417,7 +22547,7 @@ function downloadPolicyAsPdf(title, bodyHtml, filename) {
   }
   var tempDiv = document.createElement("div");
   tempDiv.innerHTML = bodyHtml;
-  var plainText = tempDiv.innerText || tempDiv.textContent || "";
+  var plainText = (tempDiv.innerText || tempDiv.textContent || "").replace(/×/g, "x").replace(/−/g, "-").replace(/→/g, "->").replace(/[\u202F\u00A0]/g, " ");
 
   var jsPDF = window.jspdf.jsPDF;
   var doc = new jsPDF({ unit: "pt", format: "a4" });
@@ -22458,76 +22588,9 @@ function downloadPolicyAsPdf(title, bodyHtml, filename) {
 }
 
 function relaisPolicyBodyHtml() {
-  var html = '';
-  html += '<p style="margin-bottom:12px;">Ce document explique ce qu\'une boutique doit savoir avant de devenir <strong>Point de Retrait</strong> pour Sounsouni. En envoyant votre demande, vous montrez que vous avez lu et accepté tout ce qui est écrit ici.</p>';
-
-  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">1. Votre rôle, en clair</p>';
-  html += '<p style="margin-bottom:6px;">Un Point de Retrait, c\'est l\'endroit où les clients viennent récupérer leurs colis. Voici ce que vous devez faire :</p>';
-  html += '<ul style="margin:0 0 12px 18px;padding:0;">';
-  html += '<li style="margin-bottom:4px;"><strong>Recevoir les colis</strong> apportés par les livreurs, et confirmer chaque réception avec le code donné dans l\'application.</li>';
-  html += '<li style="margin-bottom:4px;"><strong>Garder les colis en bon état</strong>, en sécurité, jusqu\'à ce que le client vienne les chercher.</li>';
-  html += '<li style="margin-bottom:4px;"><strong>Vérifier le client avant de lui donner son colis</strong> : il doit vous montrer son code de retrait. Sans ce code, vous ne remettez jamais le colis.</li>';
-  html += '<li style="margin-bottom:4px;"><strong>Faire pareil pour les colis internationaux</strong> (ceux qui viennent de l\'étranger, via nos partenaires de sourcing) : même règle, un code à chaque étape.</li>';
-  html += '<li>Prévenir tout de suite si un colis arrive abîmé, s\'il y a un gros retard, ou si quelque chose vous semble louche.</li>';
-  html += '</ul>';
-
-  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">2. L\'argent — comment ça marche</p>';
-  html += '<p style="margin-bottom:6px;">Quand un client paie en espèces à la livraison, chez vous, dans votre boutique, <strong>vous encaissez la totalité</strong> (le prix de la marchandise + le prix de la livraison).</p>';
-  html += '<p style="margin-bottom:6px;"><strong>Chaque soir, en fin de journée</strong>, vous devez envoyer <strong>tout l\'argent encaissé ce jour-là</strong> vers le numéro Wave ou Orange Money de Sounsouni (un numéro officiel de l\'application, pas le vôtre). C\'est obligatoire et quotidien, car cet argent appartient à Sounsouni — c\'est avec lui que les vendeurs sont payés.</p>';
-  html += '<p style="margin-bottom:6px;"><strong>De son côté, Sounsouni vous reverse ensuite votre part : les 20% du prix de la livraison qui vous reviennent</strong>, selon le rythme que vous choisissez vous-même : chaque semaine, ou chaque mois.</p>';
-  html += '<p style="margin-bottom:6px;">Vous pouvez voir à tout moment, dans votre espace, combien Sounsouni vous doit et ce qui a déjà été versé.</p>';
-  html += '<p>Si Sounsouni doit un jour changer ce taux de 20%, ça ne se fera jamais du jour au lendemain : vous serez prévenu <strong>à l\'avance</strong>, et <strong>votre accord sera demandé</strong> avant que le changement s\'applique à vous.</p>';
-
-  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">3. Si le client ne vient jamais chercher son colis</p>';
-  html += '<p style="margin-bottom:6px;">Voici ce qui se passe, jour par jour, une fois qu\'un colis arrive chez vous :</p>';
-  html += '<ul style="margin:0 0 10px 18px;padding:0;">';
-  html += '<li style="margin-bottom:4px;"><strong>Jour 1 et Jour 2</strong> : l\'application envoie automatiquement un message au client pour lui dire de venir chercher son colis.</li>';
-  html += '<li style="margin-bottom:4px;"><strong>Jour 3</strong> : un deuxième message, plus insistant.</li>';
-  html += '<li style="margin-bottom:4px;"><strong>Jour 4</strong> : dernier message, très insistant — c\'est le dernier jour.</li>';
-  html += '<li><strong>Jour 5</strong> : si le client n\'est toujours pas venu, le colis repart automatiquement vers le vendeur.</li>';
-  html += '</ul>';
-  html += '<p style="margin-bottom:6px;">Vous n\'avez rien à faire pendant ces 4 jours — l\'application envoie les messages toute seule.</p>';
-  html += '<p><strong>Important : si le colis n\'est jamais récupéré, cette vente n\'a tout simplement pas eu lieu.</strong> Ni vous, ni Sounsouni ne touchez d\'argent sur cette livraison précise — pas de commission pour personne, puisqu\'il n\'y a rien eu à livrer réellement.</p>';
-
-  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">4. Ce que vous pouvez voir sur le client</p>';
-  html += '<ul style="margin:0 0 12px 18px;padding:0;">';
-  html += '<li style="margin-bottom:4px;">Son nom : toujours visible.</li>';
-  html += '<li style="margin-bottom:4px;">Son numéro de téléphone : visible jusqu\'à 24h après qu\'il ait récupéré son colis, puis il disparaît tout seul.</li>';
-  html += '<li><strong>Vous ne voyez jamais</strong> le numéro ni l\'adresse du vendeur. Ça doit rester ainsi.</li>';
-  html += '</ul>';
-
-  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">5. Pour devenir Point de Retrait, il faut fournir — tout se fait à travers l\'application</p>';
-  html += '<ul style="margin:0 0 12px 18px;padding:0;">';
-  html += '<li style="margin-bottom:4px;">Le nom de votre boutique et son emplacement exact (commune, quartier, un repère facile à trouver, et votre position GPS).</li>';
-  html += '<li style="margin-bottom:4px;">Une photo de vous (comme un selfie), pour qu\'on sache à qui on a affaire.</li>';
-  html += '<li><strong>Une pièce d\'identité valide : carte d\'identité, carte biométrique, ou passeport.</strong></li>';
-  html += '</ul>';
-  html += '<p style="margin-bottom:6px;">Tout ça se remplit et s\'envoie <strong>directement depuis l\'application</strong>, sans avoir besoin de vous déplacer ou d\'envoyer quoi que ce soit par un autre moyen.</p>';
-  html += '<p><strong>Pourquoi on vous demande ça :</strong> cette photo et cette pièce d\'identité servent uniquement à vérifier que vous êtes bien la personne responsable de la boutique, et à préparer le contrat papier dont on parle au point suivant. Elles ne sont utilisées à rien d\'autre.</p>';
-
-  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">6. Après l\'envoi de votre demande</p>';
-  html += '<ol style="margin:0 0 12px 18px;padding:0;">';
-  html += '<li style="margin-bottom:4px;">L\'administration Sounsouni examine votre demande.</li>';
-  html += '<li style="margin-bottom:4px;">Si elle est acceptée, <strong>un agent de Sounsouni se déplace directement dans votre boutique</strong>, avec un contrat papier.</li>';
-  html += '<li style="margin-bottom:4px;">Vous lisez ce contrat tranquillement. Si vous êtes d\'accord, vous le signez.</li>';
-  html += '<li>Ce contrat signé est ce qui rend l\'accord officiel entre vous et Sounsouni — c\'est une étape normale et importante, pas juste une formalité dans l\'application.</li>';
-  html += '</ol>';
-
-  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">7. Ce que vous devez respecter</p>';
-  html += '<ul style="margin:0 0 12px 18px;padding:0;">';
-  html += '<li style="margin-bottom:4px;">Un colis vous est confié : vous en êtes responsable jusqu\'à ce qu\'il soit remis à la bonne personne.</li>';
-  html += '<li style="margin-bottom:4px;">Si un colis est perdu, cassé, ou donné à la mauvaise personne par votre faute, vous pouvez avoir à en payer les conséquences.</li>';
-  html += '<li>Ne jamais faire une fausse confirmation (dire qu\'un colis est reçu ou remis alors que ce n\'est pas vrai).</li>';
-  html += '</ul>';
-
-  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">8. Dans quels cas Sounsouni peut arrêter le partenariat</p>';
-  html += '<ul style="margin:0 0 4px 18px;padding:0;">';
-  html += '<li style="margin-bottom:4px;">Fausse déclaration ou tricherie,</li>';
-  html += '<li style="margin-bottom:4px;">Non-respect répété des règles ci-dessus,</li>';
-  html += '<li style="margin-bottom:4px;">Retard important et répété dans le versement journalier sur le compte Orange Money / Wave de Sounsouni,</li>';
-  html += '<li>Une plainte sérieuse et confirmée d\'un client ou d\'un vendeur.</li>';
-  html += '</ul>';
-  return html;
+  // Texte officiel unique : le contrat en vigueur (voir CONTRACT_VERSION), le même
+  // avant la candidature, sur l'écran « Relire » et dans le PDF.
+  return '<div class="ct-body">' + CONTRACT_HTML["relais"] + '</div>';
 }
 
 function renderRelaisPolicy() {
@@ -22612,60 +22675,9 @@ function renderRelaisApplyDocsFields(docs) {
 // ---------- ÉTAPE FINALE (Vendeur) : ACCORD SUR LA COMMISSION ----------
 // Contenu extrait, réutilisé pour l'écran "relire" et le téléchargement.
 function sellerPolicyBodyHtml() {
-  var cfg = getCommissionConfig();
-  var totalPct = (cfg.totalCommissionRate * 100).toFixed(0);
-  var keepPct = (100 - cfg.totalCommissionRate * 100).toFixed(0);
-  var html = '';
-  html += '<p style="margin-bottom:12px;">Ce document explique ce qu\'un vendeur doit savoir avant de publier des articles sur Sounsouni. En créant votre compte vendeur, vous montrez que vous avez lu et accepté tout ce qui est écrit ici.</p>';
-
-  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">1. C\'est gratuit</p>';
-  html += '<p style="margin-bottom:12px;">S\'inscrire comme vendeur et publier vos articles ne coûte rien, quel que soit le nombre d\'articles. Sounsouni ne gagne de l\'argent que lorsque vous vendez réellement quelque chose.</p>';
-
-  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">2. La commission — comment ça marche</p>';
-  html += '<p style="margin-bottom:6px;">Sounsouni prend <strong>' + totalPct + '% sur chaque vente</strong>. Exemple simple : vous vendez un article à 10 000 FCFA, Sounsouni garde ' + Math.round(cfg.totalCommissionRate * 10000) + ' FCFA, et <strong>vous recevez ' + Math.round((1 - cfg.totalCommissionRate) * 10000) + ' FCFA</strong> (' + keepPct + '%).</p>';
-  html += '<p>Si Sounsouni doit un jour changer ce taux, vous serez prévenu <strong>à l\'avance</strong>, et <strong>votre accord sera demandé</strong> avant que le changement s\'applique à vous.</p>';
-
-  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">3. Votre rôle quand une commande arrive</p>';
-  html += '<ul style="margin:0 0 12px 18px;padding:0;">';
-  html += '<li style="margin-bottom:4px;">Dès qu\'un client commande et que le paiement est confirmé, vous devez <strong>préparer l\'article</strong> et confirmer dans l\'application que c\'est prêt à partir.</li>';
-  html += '<li style="margin-bottom:4px;">Si vous ne pouvez vraiment pas honorer une commande, signalez-le tout de suite dans l\'application, avec la raison.</li>';
-  html += '<li style="margin-bottom:4px;">Un code (OTP) sert à vérifier que l\'article est bien remis à la bonne personne.</li>';
-  html += '<li><strong>Le client a le droit de refuser l\'article</strong> à la livraison, s\'il constate que ça ne lui convient pas en le voyant. Dans ce cas, l\'article vous est retourné.</li>';
-  html += '</ul>';
-
-  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">4. Comment et quand vous recevez votre argent</p>';
-  html += '<p style="margin-bottom:6px;">Il y a deux étapes séparées. La deuxième ne commence que si la première s\'est bien terminée — et ça se passe différemment selon le mode de livraison choisi par le client.</p>';
-  html += '<p style="margin-bottom:4px;"><strong>Étape 1 : le client doit recevoir son colis et payer</strong></p>';
-  html += '<ul style="margin:0 0 10px 18px;padding:0;">';
-  html += '<li style="margin-bottom:4px;"><strong>Livraison Express</strong> (directement chez le client) : dès que le livreur remet le colis et que le client paie, c\'est terminé — pas d\'attente.</li>';
-  html += '<li><strong>Point de Retrait</strong> : le client a <strong>4 jours</strong> pour venir chercher son colis et payer. Jour 1 et 2 : rappel automatique envoyé au client. Jour 3 : rappel plus insistant. Jour 4 : dernier rappel, très insistant. Jour 5 : si personne n\'est venu, le colis <strong>repart automatiquement vers vous</strong> — et il n\'y a alors <strong>aucun paiement</strong>, puisque la vente n\'a jamais eu lieu. Vous n\'avez rien à faire pendant ces 4 jours, l\'application gère ça toute seule.</li>';
-  html += '</ul>';
-  html += '<p style="margin-bottom:6px;"><strong>Étape 2 : dès que le client a payé, votre argent est en route</strong></p>';
-  html += '<p style="margin-bottom:6px;">C\'est seulement à partir de ce moment précis — tout de suite (Express) ou après quelques jours (Point de Retrait) — que le compte à rebours de VOTRE paiement démarre. <strong>Vous choisissez vous-même</strong> le rythme : tous les 2 jours (le plus rapide possible), chaque semaine, ou chaque mois.</p>';
-  html += '<p>Pourquoi 2 jours et pas instantané ? Simplement parce que Sounsouni peut recevoir beaucoup de commandes en même temps, et a besoin d\'un peu de temps pour traiter et envoyer correctement tous les paiements. Vous pouvez suivre à tout moment, dans votre espace "Gains", ce qui vous a déjà été versé et ce qui est encore en attente.</p>';
-
-  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">5. Ce que vous devez respecter pour vos articles</p>';
-  html += '<ul style="margin:0 0 12px 18px;padding:0;">';
-  html += '<li style="margin-bottom:4px;"><strong>Les photos doivent être réelles</strong> — jamais une photo trouvée ailleurs ou empruntée à un autre vendeur.</li>';
-  html += '<li style="margin-bottom:4px;"><strong>La description et le prix doivent être exacts.</strong></li>';
-  html += '<li><strong>Le stock affiché doit être à jour.</strong></li>';
-  html += '</ul>';
-
-  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">6. Articles interdits</p>';
-  html += '<ul style="margin:0 0 12px 18px;padding:0;">';
-  html += '<li style="margin-bottom:4px;">Des contrefaçons ou copies non autorisées d\'une marque,</li>';
-  html += '<li style="margin-bottom:4px;">Des produits illégaux, dangereux, ou réglementés,</li>';
-  html += '<li>Tout article que vous ne pouvez pas réellement fournir.</li>';
-  html += '</ul>';
-
-  html += '<p style="font-weight:800;margin-top:16px;margin-bottom:6px;">7. Dans quels cas Sounsouni peut suspendre votre compte vendeur</p>';
-  html += '<ul style="margin:0 0 4px 18px;padding:0;">';
-  html += '<li style="margin-bottom:4px;">Publication répétée d\'articles avec photos ou descriptions trompeuses,</li>';
-  html += '<li style="margin-bottom:4px;">Annulations répétées de commandes déjà confirmées,</li>';
-  html += '<li style="margin-bottom:4px;">Vente d\'un article interdit,</li>';
-  html += '<li>Une plainte sérieuse et confirmée d\'un acheteur.</li>';
-  html += '</ul>';
-  return html;
+  // Texte officiel unique : le contrat en vigueur (voir CONTRACT_VERSION), le même
+  // avant la candidature, sur l'écran « Relire » et dans le PDF.
+  return '<div class="ct-body">' + CONTRACT_HTML["vendeur"] + '</div>';
 }
 
 function renderOnboardStepCommissionConsent(d) {
@@ -27884,6 +27896,126 @@ function renderSellerProductsList() {
 }
 
 // ---------- RENDER SELLER ORDERS ----------
+
+
+// ---------- CONTRATS (version 2) : texte officiel, acceptation obligatoire ----------
+var CONTRACT_VERSION = "2026-10-v2";
+var CONTRACT_HTML = { vendeur: "<h3 class=\"ct-h3\">Contrat Vendeur</h3><p class=\"ct-p\">Ce contrat est entre <strong>Sounsouni</strong> (RCCM ML-BKO-01-2026-A-05755, Sotelco, face à Bougouba, Bamako) et <strong>vous, le vendeur</strong>. En cochant « J'accepte » dans l'application, vous acceptez ce contrat.</p><h4 class=\"ct-h4\">Ce que vous devez retenir</h4><ul class=\"ct-list\"><li>Sounsouni garde <strong>7 %</strong> du prix de chaque article vendu.</li><li>Vous êtes payé <strong>deux fois par semaine</strong> : le <strong>mardi</strong> et le <strong>vendredi après-midi</strong>.</li><li>Les <strong>frais de transfert</strong> de l'argent sont à votre charge.</li><li>Vos photos, vos prix et votre stock doivent être <strong>vrais et à jour</strong>.</li><li>Les <strong>produits interdits</strong> (liste à la fin) entraînent la fermeture de votre boutique.</li><li>Si vous voyez le numéro d'un client (réservations), il sert <strong>uniquement à la réservation</strong>.</li></ul><h4 class=\"ct-h4\">1. Ce que Sounsouni fait pour vous</h4><p class=\"ct-p\">Sounsouni montre vos articles aux acheteurs, reçoit les commandes, organise la livraison et vous verse l'argent de vos ventes. Sounsouni peut aussi traduire vos articles en anglais et en hindi, et les partager pour les faire connaître.</p><h4 class=\"ct-h4\">2. La commission de Sounsouni</h4><p class=\"ct-p\">Sounsouni garde <strong>7 %</strong> du prix de chaque article vendu et livré. Le reste est pour vous.</p><p class=\"ct-p\"><strong>Exemple</strong> : vous vendez une robe à <strong>10 000 FCFA</strong>. Sounsouni garde <strong>700 FCFA</strong>. Vous recevez <strong>9 300 FCFA</strong>, moins les frais de transfert.</p><p class=\"ct-p\">Le prix de la livraison n'est pas pour vous : il paie le livreur et le point de retrait.</p><h4 class=\"ct-h4\">3. Quand vous êtes payé</h4><p class=\"ct-p\">Vous êtes payé <strong>deux fois par semaine</strong>, selon le <strong>jour où le client a reçu l'article</strong> (pas le jour de la commande).</p><div class=\"ct-table-wrap\"><table class=\"ct-table\"><tr><th>Article livré le...</th><th>Vous êtes payé le...</th></tr><tr><td>mardi, mercredi, jeudi ou vendredi</td><td><strong>mardi</strong> de la semaine suivante</td></tr><tr><td>samedi, dimanche ou lundi</td><td><strong>vendredi après-midi</strong> suivant</td></tr></table></div><p class=\"ct-p\"><strong>Exemples</strong> :</p><ul class=\"ct-list\"><li>Votre article est livré le <strong>samedi 10 octobre</strong>. Vous êtes payé le <strong>vendredi 16 octobre</strong> après-midi.</li><li>Votre article est livré le <strong>lundi 12 octobre</strong>. Vous êtes payé aussi le <strong>vendredi 16 octobre</strong> après-midi.</li><li>Votre article est livré le <strong>mercredi 14 octobre</strong>. Vous êtes payé le <strong>mardi 20 octobre</strong>.</li><li>Le client a commandé le lundi, mais il a reçu l'article le mercredi : c'est le <strong>mercredi</strong> qui compte.</li></ul><p class=\"ct-p\">Vous recevez donc votre argent <strong>entre 4 et 7 jours</strong> après la livraison. Ce délai permet de régler une réclamation d'un client avant de payer.</p><p class=\"ct-p\"><strong>Les règles du paiement</strong> :</p><ul class=\"ct-list\"><li>L'argent est envoyé sur votre compte <strong>mobile money</strong>. Vous choisissez votre opérateur dans l'application : <strong>Orange Money</strong>, <strong>Moov Money</strong> ou <strong>Wave</strong>, et le numéro qui reçoit l'argent.</li><li>Pour chaque envoi, l'opérateur prend des <strong>frais de transfert</strong>. Ces frais sont <strong>à votre charge</strong> : ils sont retirés de votre paiement. Les frais changent selon l'opérateur choisi.</li><li>Si vous êtes payé le mardi <strong>et</strong> le vendredi de la même semaine, il y a deux envois, donc <strong>deux fois des frais</strong>.</li><li><strong>Il n'y a pas de montant minimum</strong> : même 500 FCFA sont versés.</li><li>Si le jour de paiement est un <strong>jour férié</strong>, vous êtes payé le jour ouvrable suivant.</li><li>Si un client fait une <strong>réclamation</strong> sur une vente, l'argent de cette vente attend la fin de la réclamation.</li></ul><p class=\"ct-p\"><strong>Exemple complet</strong> : cette semaine, vous avez vendu deux articles livrés le mercredi : une robe à <strong>10 000 FCFA</strong> et un sac à <strong>5 000 FCFA</strong>, soit <strong>15 000 FCFA</strong>.</p><ol class=\"ct-list\"><li>Sounsouni garde sa commission de 7 % : <strong>1 050 FCFA</strong>.</li><li>Il reste <strong>13 950 FCFA</strong>.</li><li>Vous avez choisi votre opérateur, qui prend par exemple <strong>150 FCFA</strong> de frais pour cet envoi.</li><li>Vous recevez <strong>13 800 FCFA</strong> le mardi.</li></ol><p class=\"ct-p\">Les vrais frais de chaque opérateur sont affichés dans l'application avant chaque paiement.</p><p class=\"ct-p\"><strong>Conseil important pour fixer vos prix</strong> : quand vous mettez un prix sur un article, pensez à <strong>tous vos frais</strong> : la commission de Sounsouni (7 %), les frais de transfert de votre opérateur, et vos propres frais (achat de la marchandise, emballage...). Votre prix doit couvrir tout cela et vous laisser un <strong>bénéfice</strong>.</p><h4 class=\"ct-h4\">4. La livraison et les refus</h4><p class=\"ct-p\">Le client paie à la livraison. Il peut <strong>refuser l'article</strong> au moment de la livraison.</p><ul class=\"ct-list\"><li>Si le client refuse, l'article vous revient. <strong>Sounsouni paie la livraison</strong>, pas vous.</li><li>Si le client refuse parce que l'article <strong>ne correspond pas</strong> (autre couleur, autre taille, défectueux, différent de la photo), ce refus est <strong>compté contre vous</strong>.</li><li>Si cela arrive souvent, Sounsouni vous <strong>avertit</strong>, puis peut <strong>suspendre votre boutique</strong>.</li></ul><p class=\"ct-p\"><strong>Exemple</strong> : un client commande une robe rouge sur votre photo. Le livreur lui apporte une robe bleue. Le client refuse. Sounsouni paie la livraison, mais ce refus compte contre vous.</p><h4 class=\"ct-h4\">5. Vos obligations</h4><ul class=\"ct-list\"><li><strong>Photos vraies</strong> : vous montrez l'article que vous vendez vraiment.</li><li><strong>Prix vrai</strong> : le prix affiché est le prix que vous acceptez.</li><li><strong>Stock à jour</strong> : vous ne vendez pas un article que vous n'avez plus.</li><li><strong>Commande prête vite</strong> : quand vous recevez une commande, vous la confirmez et la préparez rapidement.</li><li><strong>Articles légaux</strong> : vous ne vendez aucun produit interdit (voir la liste à la fin).</li><li><strong>Vos impôts</strong> : vous restez responsable de vos impôts et de votre activité de commerce.</li></ul><p class=\"ct-p\"><strong>Vendeurs à l'étranger</strong> : vous indiquez le <strong>poids et les dimensions vrais</strong> de chaque article, et la <strong>quantité minimum</strong> de commande. Ils servent à calculer le transport.</p><h4 class=\"ct-h4\">6. Les produits interdits</h4><p class=\"ct-p\">Vous ne vendez <strong>jamais</strong> un produit interdit par la loi du Mali, ni un produit de la <strong>liste à la fin de ce document</strong>.</p><p class=\"ct-p\">Si vous le faites : Sounsouni <strong>retire l'article</strong> tout de suite et peut <strong>fermer votre boutique</strong>. Si la loi le demande, Sounsouni peut informer les autorités.</p><h4 class=\"ct-h4\">7. Les clients et leurs informations</h4><p class=\"ct-p\">Pour les <strong>commandes</strong>, vous ne voyez <strong>pas</strong> le numéro ni l'adresse du client : seuls le livreur et le point de retrait les voient. Pour les <strong>réservations</strong> (restaurant, hôtel, service), vous voyez le <strong>nom et le numéro</strong> du client, pour pouvoir le joindre.</p><ul class=\"ct-list\"><li>Ces informations servent <strong>uniquement</strong> à cette réservation.</li><li>Vous ne les utilisez <strong>pas</strong> pour faire de la publicité, envoyer des messages, ou les donner à quelqu'un d'autre.</li></ul><p class=\"ct-p\"><strong>Exemple</strong> : après une vente, vous n'avez <strong>pas le droit</strong> d'ajouter le client dans un groupe WhatsApp de promotion.</p><h4 class=\"ct-h4\">8. Vérification et contrôle</h4><ul class=\"ct-list\"><li>Sounsouni peut vous demander une <strong>pièce d'identité</strong> pour vérifier votre boutique.</li><li>Les clients peuvent <strong>signaler</strong> un article. Sounsouni peut alors le cacher et le contrôler.</li><li>Sounsouni peut <strong>retirer un article</strong> ou <strong>suspendre une boutique</strong> qui ne respecte pas ce contrat.</li></ul><h4 class=\"ct-h4\">9. La publicité payante</h4><p class=\"ct-p\">Si vous payez pour mettre un article en avant (« boost »), le prix et la durée sont indiqués avant de payer. <strong>Une publicité commencée n'est pas remboursée.</strong></p><h4 class=\"ct-h4\">10. Changement du contrat</h4><p class=\"ct-p\">Sounsouni peut changer ce contrat. Vous serez prévenu <strong>au moins 15 jours avant</strong>, dans l'application. Pour continuer à vendre, vous devrez accepter la nouvelle version.</p><h4 class=\"ct-h4\">11. Fin du contrat</h4><ul class=\"ct-list\"><li>Vous pouvez <strong>arrêter</strong> quand vous voulez, en fermant votre boutique.</li><li>Sounsouni peut <strong>arrêter</strong> le contrat si vous ne le respectez pas.</li><li>Dans les deux cas, l'argent de vos ventes déjà livrées vous est <strong>versé au prochain jour de paiement</strong>.</li></ul><h4 class=\"ct-h4\">12. En cas de désaccord</h4><p class=\"ct-p\">Vous et Sounsouni essayez d'abord de <strong>trouver une solution ensemble</strong>. Si ce n'est pas possible, le désaccord est réglé par les <strong>tribunaux de Bamako</strong>, selon la loi du Mali.</p><h3 class=\"ct-h3\">Annexe : les produits interdits sur Sounsouni</h3><p class=\"ct-p\">Ces produits sont <strong>interdits</strong> sur Sounsouni, <strong>sans exception</strong>. Cette liste vaut pour les vendeurs et pour les points de retrait. Sounsouni peut la compléter : la nouvelle liste s'affiche dans l'application.</p><p class=\"ct-p\"><strong>La règle générale</strong> : tout produit <strong>interdit par la loi du Mali</strong> est interdit sur Sounsouni, même s'il n'est pas dans cette liste.</p><div class=\"ct-table-wrap\"><table class=\"ct-table\"><tr><th>Produits interdits</th><th>Exemples</th></tr><tr><td>Alcool</td><td>bière, vin, liqueur, toute boisson alcoolisée</td></tr><tr><td>Tabac</td><td>cigarettes, chicha, tabac à mâcher, cigarettes électroniques</td></tr><tr><td>Drogues</td><td>cannabis, stupéfiants, et le matériel pour les consommer</td></tr><tr><td>Médicaments</td><td>comprimés, sirops, injections : ils se vendent uniquement en pharmacie</td></tr><tr><td>Armes</td><td>armes à feu, munitions, explosifs, pétards, couteaux de combat</td></tr><tr><td>Contrefaçons</td><td>faux produits de marque, copies vendues comme originales</td></tr><tr><td>Objets volés</td><td>tout objet dont vous n'êtes pas le propriétaire légitime</td></tr><tr><td>Faux documents</td><td>fausses pièces d'identité, faux diplômes, fausse monnaie</td></tr><tr><td>Animaux protégés</td><td>ivoire, peaux, carapaces, animaux sauvages vivants ou morts</td></tr><tr><td>Objets anciens du patrimoine</td><td>objets archéologiques, statues et objets culturels anciens du Mali</td></tr><tr><td>Produits pour la peau dangereux</td><td>crèmes éclaircissantes au mercure ou à l'hydroquinone</td></tr><tr><td>Produits chimiques dangereux</td><td>poisons, produits toxiques, acides</td></tr><tr><td>Contenus pour adultes</td><td>pornographie, objets sexuels</td></tr><tr><td>Produits périmés</td><td>aliments ou cosmétiques dont la date est dépassée</td></tr></table></div><p class=\"ct-p\"><strong>Si vous avez un doute</strong> sur un produit, demandez à Sounsouni <strong>avant</strong> de le mettre en vente.</p><p class=\"ct-p\"><strong>Ce qui arrive si vous vendez un produit interdit</strong> : l'article est retiré tout de suite, et votre boutique peut être fermée. Si la loi le demande, Sounsouni peut informer les autorités.</p>", relais: "<h3 class=\"ct-h3\">Contrat Point de retrait</h3><p class=\"ct-p\">Ce contrat est entre <strong>Sounsouni</strong> (RCCM ML-BKO-01-2026-A-05755, Sotelco, face à Bougouba, Bamako) et <strong>vous, le point de retrait</strong> : une boutique qui garde les colis des clients jusqu'à ce qu'ils viennent les chercher. En cochant « J'accepte » dans l'application, vous acceptez ce contrat.</p><h4 class=\"ct-h4\">Ce que vous devez retenir</h4><ul class=\"ct-list\"><li>Vous gagnez <strong>20 % du prix de la livraison</strong> de chaque colis remis au client.</li><li>Vous êtes payé <strong>une fois par semaine, le mardi</strong>.</li><li>Les <strong>frais de transfert</strong> de l'argent sont <strong>payés par Sounsouni</strong>, pas par vous.</li><li>Vous gardez un colis <strong>5 jours</strong> au maximum.</li><li>Vous ne remettez <strong>jamais</strong> un colis sans le <strong>bon code</strong> : au client avec son code de retrait, au livreur avec son code de reprise.</li><li>Le numéro et le nom des clients servent <strong>uniquement à la remise du colis</strong>.</li></ul><h4 class=\"ct-h4\">1. Votre rôle</h4><p class=\"ct-p\">Le livreur dépose chez vous les colis des clients. Vous les gardez en sécurité. Le client vient chercher son colis, et vous le lui remettez.</p><h4 class=\"ct-h4\">2. Ce que vous gagnez</h4><p class=\"ct-p\">Pour chaque colis <strong>remis au client</strong>, vous gagnez <strong>20 % du prix de la livraison</strong>.</p><p class=\"ct-p\"><strong>Exemple</strong> : la livraison d'un colis coûte <strong>1 500 FCFA</strong>. Le client vient le chercher chez vous. Vous gagnez <strong>300 FCFA</strong>. Sounsouni paie les frais de transfert : vous recevez les 300 FCFA en entier.</p><p class=\"ct-p\">Si le client ne vient pas chercher son colis, vous ne gagnez rien sur ce colis.</p><h4 class=\"ct-h4\">3. Quand vous êtes payé</h4><p class=\"ct-p\">Vous êtes payé <strong>une fois par semaine, le mardi</strong>, pour tous les colis <strong>remis aux clients</strong> pendant la semaine précédente (du lundi au dimanche).</p><div class=\"ct-table-wrap\"><table class=\"ct-table\"><tr><th>Colis remis au client...</th><th>Vous êtes payé le...</th></tr><tr><td>du lundi 5 au dimanche 11 octobre</td><td><strong>mardi 13 octobre</strong></td></tr><tr><td>du lundi 12 au dimanche 18 octobre</td><td><strong>mardi 20 octobre</strong></td></tr></table></div><p class=\"ct-p\"><strong>Exemples</strong> :</p><ul class=\"ct-list\"><li>Vous remettez un colis le <strong>dimanche 11 octobre</strong>. Vous êtes payé le <strong>mardi 13 octobre</strong>.</li><li>Vous remettez un colis le <strong>lundi 12 octobre</strong>. Il compte pour la semaine suivante : vous êtes payé le <strong>mardi 20 octobre</strong>.</li></ul><p class=\"ct-p\"><strong>Les règles du paiement</strong> :</p><ul class=\"ct-list\"><li>L'argent est envoyé sur votre compte <strong>mobile money</strong>. Vous choisissez votre opérateur dans l'application : <strong>Orange Money</strong>, <strong>Moov Money</strong> ou <strong>Wave</strong>, et le numéro qui reçoit l'argent.</li><li>Les <strong>frais de transfert sont payés par Sounsouni</strong>. Vous recevez la <strong>totalité</strong> de ce que vous avez gagné.</li><li><strong>Il n'y a pas de montant minimum</strong> : même 500 FCFA sont versés.</li><li>Si le mardi est un <strong>jour férié</strong>, vous êtes payé le jour ouvrable suivant.</li></ul><p class=\"ct-p\"><strong>Exemple</strong> : cette semaine, vous avez remis 10 colis. Chaque livraison coûtait 1 500 FCFA. Vous avez gagné 10 × 300 = <strong>3 000 FCFA</strong>. Le mardi, vous recevez <strong>3 000 FCFA</strong>, sans frais retirés.</p><h4 class=\"ct-h4\">4. Recevoir un colis</h4><ul class=\"ct-list\"><li>Le livreur vous donne un <strong>code de dépôt</strong>. Vous l'entrez dans l'application pour confirmer que le colis est chez vous.</li><li>Vous vérifiez que le colis est <strong>fermé et en bon état</strong>. S'il est abîmé, vous le signalez <strong>tout de suite</strong> dans l'application, avant de l'accepter.</li><li>Vous pouvez <strong>refuser</strong> un colis qui vous semble dangereux ou suspect.</li></ul><h4 class=\"ct-h4\">5. Garder un colis : 5 jours au maximum</h4><ul class=\"ct-list\"><li>Vous gardez le colis <strong>5 jours</strong> au maximum.</li><li>Le client reçoit un <strong>rappel automatique</strong> au <strong>2e jour</strong> et au <strong>4e jour</strong>.</li><li>Si le client vous dit qu'il ne viendra pas, ou s'il n'est toujours pas venu, vous appuyez sur <strong>« Le client n'est pas venu »</strong> dans l'application. Le vendeur et le livreur sont prévenus tout de suite.</li><li>Après 5 jours, si vous n'avez rien fait, le retour se déclenche <strong>automatiquement</strong>.</li><li>Le colis <strong>retourne chez le vendeur</strong>. <strong>Sounsouni paie ce retour</strong>, pas vous. Vous ne gagnez rien sur un colis non récupéré.</li></ul><p class=\"ct-p\"><strong>Exemple</strong> : un colis arrive chez vous le <strong>lundi</strong>. Le client reçoit un rappel le <strong>mercredi</strong>, puis le <strong>vendredi</strong>. S'il n'est pas venu le <strong>samedi</strong>, le retour se déclenche, et un livreur viendra reprendre le colis.</p><h4 class=\"ct-h4\">6. Remettre un colis : toujours avec le bon code</h4><ul class=\"ct-list\"><li>Le client vous montre son <strong>code de retrait</strong> ou son <strong>QR code</strong>.</li><li>Vous vérifiez le code dans l'application <strong>avant</strong> de remettre le colis.</li><li><strong>Sans le bon code, vous ne remettez jamais le colis</strong>, même à quelqu'un qui dit être le client ou un membre de sa famille.</li></ul><p class=\"ct-p\"><strong>Exemple</strong> : une personne vient chercher un colis « pour son frère », mais elle n'a pas le code. Vous refusez poliment, et vous lui demandez de revenir avec le code.</p><p class=\"ct-p\"><strong>Rendre un colis au livreur (retour)</strong> : quand un colis doit retourner chez le vendeur, le livreur vous donne un <strong>code de reprise</strong>. Vous le saisissez dans l'application (ou vous scannez son QR code). C'est la preuve que le colis a quitté votre boutique. <strong>Sans le bon code de reprise, vous ne donnez pas le colis.</strong></p><h4 class=\"ct-h4\">7. Votre responsabilité</h4><p class=\"ct-p\">Pendant que le colis est chez vous, vous en prenez soin. S'il est <strong>perdu, volé ou abîmé</strong> chez vous par négligence, ou remis <strong>sans le bon code</strong>, vous remboursez sa <strong>valeur</strong>.</p><p class=\"ct-p\">Si un client vous paie sa commande au moment du retrait, vous gardez cet argent en sécurité et vous le remettez à Sounsouni comme l'application l'indique.</p><h4 class=\"ct-h4\">8. Vos horaires</h4><p class=\"ct-p\">Vous indiquez vos <strong>jours et heures d'ouverture</strong> dans l'application, et vous les respectez. Si vous fermez exceptionnellement, vous le signalez dans l'application.</p><h4 class=\"ct-h4\">9. Les clients et leurs informations</h4><p class=\"ct-p\">Vous voyez le <strong>nom</strong> et parfois le <strong>numéro</strong> du client. Ces informations servent <strong>uniquement</strong> à lui remettre son colis.</p><ul class=\"ct-list\"><li>Vous ne les utilisez <strong>pas</strong> pour faire de la publicité, envoyer des messages, ou les donner à quelqu'un d'autre.</li><li>Vous n'ouvrez <strong>jamais</strong> un colis.</li></ul><h4 class=\"ct-h4\">10. Contrôle</h4><p class=\"ct-p\">Sounsouni peut <strong>suspendre</strong> votre point de retrait si vous ne respectez pas ce contrat, par exemple si des colis sont souvent remis sans code, perdus, ou si vous êtes souvent fermé aux heures annoncées.</p><h4 class=\"ct-h4\">11. Changement du contrat</h4><p class=\"ct-p\">Sounsouni peut changer ce contrat. Vous serez prévenu <strong>au moins 15 jours avant</strong>, dans l'application. Pour continuer, vous devrez accepter la nouvelle version.</p><h4 class=\"ct-h4\">12. Fin du contrat</h4><ul class=\"ct-list\"><li>Vous pouvez <strong>arrêter</strong> quand vous voulez. Vous prévenez Sounsouni au moins <strong>7 jours avant</strong>, pour que les colis en cours soient récupérés.</li><li>Sounsouni peut <strong>arrêter</strong> le contrat si vous ne le respectez pas.</li><li>Dans les deux cas, ce que vous avez gagné vous est <strong>versé au prochain jour de paiement</strong>.</li></ul><h4 class=\"ct-h4\">13. En cas de désaccord</h4><p class=\"ct-p\">Vous et Sounsouni essayez d'abord de <strong>trouver une solution ensemble</strong>. Si ce n'est pas possible, le désaccord est réglé par les <strong>tribunaux de Bamako</strong>, selon la loi du Mali.</p><h3 class=\"ct-h3\">Annexe : les produits interdits sur Sounsouni</h3><p class=\"ct-p\">Ces produits sont <strong>interdits</strong> sur Sounsouni, <strong>sans exception</strong>. Cette liste vaut pour les vendeurs et pour les points de retrait. Sounsouni peut la compléter : la nouvelle liste s'affiche dans l'application.</p><p class=\"ct-p\"><strong>La règle générale</strong> : tout produit <strong>interdit par la loi du Mali</strong> est interdit sur Sounsouni, même s'il n'est pas dans cette liste.</p><div class=\"ct-table-wrap\"><table class=\"ct-table\"><tr><th>Produits interdits</th><th>Exemples</th></tr><tr><td>Alcool</td><td>bière, vin, liqueur, toute boisson alcoolisée</td></tr><tr><td>Tabac</td><td>cigarettes, chicha, tabac à mâcher, cigarettes électroniques</td></tr><tr><td>Drogues</td><td>cannabis, stupéfiants, et le matériel pour les consommer</td></tr><tr><td>Médicaments</td><td>comprimés, sirops, injections : ils se vendent uniquement en pharmacie</td></tr><tr><td>Armes</td><td>armes à feu, munitions, explosifs, pétards, couteaux de combat</td></tr><tr><td>Contrefaçons</td><td>faux produits de marque, copies vendues comme originales</td></tr><tr><td>Objets volés</td><td>tout objet dont vous n'êtes pas le propriétaire légitime</td></tr><tr><td>Faux documents</td><td>fausses pièces d'identité, faux diplômes, fausse monnaie</td></tr><tr><td>Animaux protégés</td><td>ivoire, peaux, carapaces, animaux sauvages vivants ou morts</td></tr><tr><td>Objets anciens du patrimoine</td><td>objets archéologiques, statues et objets culturels anciens du Mali</td></tr><tr><td>Produits pour la peau dangereux</td><td>crèmes éclaircissantes au mercure ou à l'hydroquinone</td></tr><tr><td>Produits chimiques dangereux</td><td>poisons, produits toxiques, acides</td></tr><tr><td>Contenus pour adultes</td><td>pornographie, objets sexuels</td></tr><tr><td>Produits périmés</td><td>aliments ou cosmétiques dont la date est dépassée</td></tr></table></div><p class=\"ct-p\"><strong>Si vous avez un doute</strong> sur un produit, demandez à Sounsouni <strong>avant</strong> de le mettre en vente.</p><p class=\"ct-p\"><strong>Ce qui arrive si vous vendez un produit interdit</strong> : l'article est retiré tout de suite, et votre boutique peut être fermée. Si la loi le demande, Sounsouni peut informer les autorités.</p>" };
+function contractKindToAccept() {
+  if (!state.profile || state.adminUnlocked) return null;
+  if (state.profile.role === "vendeur" && state.profile.contractVendeurVersion !== CONTRACT_VERSION) return "vendeur";
+  if (state.profile.role === "point_vente" && state.profile.contractRelaisVersion !== CONTRACT_VERSION) return "relais";
+  return null;
+}
+// Écran du contrat : bloquant tant qu'il n'est pas accepté, ou simple lecture
+// ("Voir mon contrat").
+function renderContractGate() {
+  var mustAccept = contractKindToAccept();
+  var kind = mustAccept || state.showContractView;
+  if (!kind || !CONTRACT_HTML[kind]) return "";
+  var html = '<div class="modal-overlay" style="z-index:9000;">';
+  html += '<div class="modal-sheet" style="max-height:92vh;display:flex;flex-direction:column;">';
+  if (!mustAccept) html += '<button class="modal-close" data-action="close-contract-view"><i class="fa-solid fa-xmark"></i></button>';
+  html += '<div style="font-weight:800;font-size:16px;margin-bottom:4px;"><i class="fa-solid fa-file-signature"></i> ' + (mustAccept ? 'Nouveau contrat à accepter' : 'Mon contrat') + '</div>';
+  if (mustAccept) html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">Le contrat de Sounsouni a changé (paiements, produits interdits...). Lisez-le, puis acceptez-le pour continuer.</div>';
+  html += '<div class="ct-body" style="flex:1;overflow-y:auto;overflow-x:hidden;border:1px solid var(--border-color);border-radius:10px;padding:10px 12px;background:var(--bg-body);">' + CONTRACT_HTML[kind] + '</div>';
+  html += '<button class="btn-secondary" style="width:100%;margin-top:8px;" data-action="' + (kind === "relais" ? "download-relais-policy" : "download-seller-policy") + '"><i class="fa-solid fa-file-arrow-down"></i> Télécharger le contrat (PDF)</button>';
+  if (mustAccept) {
+    html += '<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin:10px 0;"><input type="checkbox" id="contract-accept-check" style="margin-top:3px;flex-shrink:0;" /> <span>J\'ai lu le contrat et je l\'accepte.</span></label>';
+    html += '<button class="btn-primary" style="width:100%;" data-action="accept-contract" data-value="' + kind + '"><i class="fa-solid fa-check"></i> J\'accepte le contrat</button>';
+  }
+  html += '</div></div>';
+  return html;
+}
+
+// ---------- VERSEMENTS (contrats : vendeurs mardi + vendredi, points de retrait mardi) ----------
+// Même calcul que le serveur (wallet-write) : article livré du mardi au
+// vendredi → payé le mardi suivant ; samedi, dimanche ou lundi → vendredi
+// suivant. Point de retrait : mardi suivant la semaine (lundi → dimanche).
+var PAYOUT_OPERATORS = [["orange", "Orange Money"], ["moov", "Moov Money"], ["wave", "Wave"]];
+function payoutDateFor(ts, kind) {
+  var d = new Date(ts || 0), day = d.getUTCDay(), add;
+  if (kind === "relais") add = (7 - ((day + 6) % 7)) + 1;
+  else add = (day >= 2 && day <= 5) ? (7 - day + 2) : (day === 6 ? 6 : (day === 0 ? 5 : 4));
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + add)).toISOString().slice(0, 10);
+}
+function fmtPayoutDate(iso) {
+  var loc = state.language === "en" ? "en-GB" : (state.language === "hi" ? "hi-IN" : "fr-FR");
+  return new Date(iso + "T12:00:00Z").toLocaleDateString(loc, { weekday: "long", day: "numeric", month: "long" });
+}
+function orderDeliveredAt(o) {
+  if (typeof o.deliveredAt === "number") return o.deliveredAt;
+  var h = Array.isArray(o.statusHistory) ? o.statusHistory.slice().reverse().find(function(x) { return x && x.status === "Livrée"; }) : null;
+  return h && (h.at || h.time || h.date) ? Number(h.at || h.time || h.date) : (o.createdAt || 0);
+}
+function payoutFeeFor(operator, gross) {
+  var cfg = null;
+  (state.settings || []).forEach(function(x) { if (x.id === "payout_fees") cfg = x.config || null; });
+  var f = cfg && cfg[operator] ? cfg[operator] : null;
+  if (!f) return 0;
+  return Math.max(0, Math.round(gross * (Number(f.pct) || 0) / 100 + (Number(f.fixed) || 0)));
+}
+// Carte "Recevoir mon argent" + "Prochain versement" (vendeur ou point de retrait)
+function renderPayoutCard(kind) {
+  if (!state.profile) return "";
+  var groups = {};
+  if (kind === "relais") {
+    (state.orders || []).forEach(function(o) {
+      if (o.deliveryMode === "relais" && o.relaisShopId === state.profile.id && o.status === "Livrée" && !o.commissionSettled && Number(o.commissionAmount) > 0) {
+        var dd = payoutDateFor(orderDeliveredAt(o), "relais");
+        groups[dd] = (groups[dd] || 0) + Number(o.commissionAmount);
+      }
+    });
+  } else {
+    ((state.myEarnings && state.myEarnings.transactions) || []).forEach(function(tx) {
+      if (tx && !tx.paidOutAt && Number(tx.amount) > 0) {
+        var dd = payoutDateFor(Number(tx.createdAt) || 0, "seller");
+        groups[dd] = (groups[dd] || 0) + Number(tx.amount);
+      }
+    });
+  }
+  var dates = Object.keys(groups).sort();
+  var op = state.profile.payoutOperator || "";
+  var html = '<div class="glass-card" style="padding:14px;margin-bottom:14px;">';
+  html += '<div style="font-weight:800;font-size:13.5px;margin-bottom:6px;"><i class="fa-solid fa-coins"></i> ' + t("payout_card_title") + '</div>';
+  if (dates.length) {
+    dates.slice(0, 3).forEach(function(dd, i) {
+      var gross = Math.round(groups[dd]);
+      var fee = kind === "relais" ? 0 : payoutFeeFor(op, gross);
+      html += '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12.5px;padding:4px 0;' + (i ? 'border-top:1px dashed var(--border-color);' : '') + '">';
+      html += '<span>' + (i === 0 ? '<strong>' + t("payout_next") + '</strong> ' : '') + esc(fmtPayoutDate(dd)) + '</span>';
+      html += '<strong style="color:var(--accent);">' + money(gross - fee) + '</strong></div>';
+      if (fee) html += '<div style="font-size:10.5px;color:var(--text-dim);">' + money(gross) + ' − ' + money(fee) + ' ' + t("payout_fee_word") + '</div>';
+    });
+  } else {
+    html += '<div style="font-size:12px;color:var(--text-dim);">' + t("payout_nothing") + '</div>';
+  }
+  html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:6px;">' + t(kind === "relais" ? "payout_rule_relais" : "payout_rule_seller") + '</div>';
+  html += '<button class="link-btn" style="font-size:11.5px;margin-top:4px;" data-action="open-contract-view" data-value="' + (kind === "relais" ? "relais" : "vendeur") + '"><i class="fa-solid fa-file-contract"></i> Voir mon contrat</button>';
+  // Moyen de réception
+  html += '<div style="font-size:12px;font-weight:700;margin:12px 0 6px;">' + t("payout_receive_on") + '</div>';
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">';
+  PAYOUT_OPERATORS.forEach(function(o) {
+    html += '<button class="' + (op === o[0] ? 'btn-primary' : 'btn-secondary') + '" style="padding:6px 10px;font-size:12px;flex:1;min-width:90px;" data-action="set-payout-operator" data-value="' + o[0] + '">' + o[1] + '</button>';
+  });
+  html += '</div>';
+  html += '<div style="display:flex;gap:6px;">';
+  html += '<input class="input" id="payout-number-input" type="tel" style="flex:1;min-width:0;" placeholder="' + esc(t("payout_number_ph")) + '" value="' + esc(state.profile.payoutNumber || state.profile.phone || "") + '" />';
+  html += '<button class="btn-secondary" style="flex:0;padding:8px 12px;font-size:12px;" data-action="save-payout-number">' + t("payout_save_btn") + '</button>';
+  html += '</div>';
+  if (!op) html += '<div style="font-size:11px;color:var(--danger);margin-top:6px;"><i class="fa-solid fa-circle-exclamation"></i> ' + t("payout_choose_operator") + '</div>';
+  // Derniers versements reçus (vendeur)
+  var pays = kind === "relais" ? [] : (((state.myEarnings && state.myEarnings.payouts) || []).slice(-3).reverse());
+  if (pays.length) {
+    html += '<div style="font-size:12px;font-weight:700;margin:12px 0 4px;">' + t("payout_history") + '</div>';
+    pays.forEach(function(py) {
+      html += '<div style="font-size:11.5px;color:var(--text-dim);">' + fmtDateTime(py.at) + ' · <strong>' + money(py.net) + '</strong>' + (py.reference ? ' · réf. ' + esc(py.reference) : '') + '</div>';
+    });
+  }
+  html += '</div>';
+  return html;
+}
+
 function renderSellerOrders() {
   var myOrders = [];
   for (var i = 0; i < state.orders.length; i++) {
@@ -27901,12 +28033,30 @@ function renderSellerOrders() {
       myOrders.push(o);
     }
   }
-  if (myOrders.length === 0) return '<div class="empty-state"><i class="fa-solid fa-inbox"></i><div class="title">' + t("seller_no_order") + '</div></div>';
+  // Retours à recevoir et carte « Mon argent » : affichés même sans commande en cours
+  var sellerTopHtml = (function() { var html = '';
+  // Retours en route vers le vendeur : il confirme la réception (fin de la chaîne)
+  var myRetours = (state.orders || []).filter(function(o) { return o.returnStatus === "repris_par_livreur" && state.profile && Array.isArray(o.sellerIds) && o.sellerIds.indexOf(state.profile.id) !== -1; });
+  if (myRetours.length) {
+    html += '<div class="glass-card" style="padding:12px;margin-bottom:12px;border-left:3px solid var(--accent);">';
+    html += '<div style="font-weight:800;font-size:13.5px;margin-bottom:6px;"><i class="fa-solid fa-rotate-left"></i> ' + t("seller_returns_title") + ' (' + myRetours.length + ')</div>';
+    myRetours.forEach(function(ro) {
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--border-color);flex-wrap:wrap;">';
+      html += '<div style="font-size:12.5px;min-width:0;">#' + ro.id.slice(-5).toUpperCase() + ' · ' + esc((ro.items[0] && ro.items[0].name) || '') + '</div>';
+      html += '<button class="btn-primary" style="padding:7px 12px;font-size:12px;" data-action="confirm-product-return" data-value="' + ro.id + '"><i class="fa-solid fa-check"></i> ' + t("seller_return_received_btn") + '</button>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+  html += renderPayoutCard("seller");
+  return html; })();
+  if (myOrders.length === 0) return sellerTopHtml + '<div class="empty-state"><i class="fa-solid fa-inbox"></i><div class="title">' + t("seller_no_order") + '</div></div>';
   // Les plus récentes en premier — sans ce tri, l'ordre suivait juste
   // l'arrivée en mémoire (souvent les plus anciennes en premier), au
   // point de faire croire à tort qu'une commande n'était jamais arrivée.
   myOrders.sort(function(a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
-  var html = '';
+  var html = sellerTopHtml;
+
   var toShow = state.showAllSellerOrders ? myOrders : myOrders.slice(0, 3);
   for (var k = 0; k < toShow.length; k++) {
     var o2 = toShow[k];
@@ -28421,15 +28571,29 @@ function renderLivreur() {
     }
   }
 
-  var toReturn = state.orders.filter(function(o) { return o.status === "Refusée au retrait" && o.returnStatus === "en_attente_retour"; });
+  var toReturn = state.orders.filter(function(o) { return o.status === "Refusée au retrait" && (o.returnStatus === "en_attente_retour" || o.returnStatus === "repris_par_livreur"); });
   if (toReturn.length > 0) {
-    html += '<div class="section-title" style="font-size:15px;margin-top:22px;color:var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i> Retours au vendeur (' + toReturn.length + ')</div>';
+    html += '<div class="section-title" style="font-size:15px;margin-top:22px;color:var(--danger);"><i class="fa-solid fa-rotate-left"></i> ' + t("livreur_returns_title") + ' (' + toReturn.length + ')</div>';
     for (var r = 0; r < toReturn.length; r++) {
       var ro = toReturn[r];
+      var sellerLabel = esc(ro.items[0] ? ro.items[0].sellerName : '');
       html += '<div class="card-row" style="flex-direction:column;align-items:stretch;">';
       html += '<div style="font-weight:700;font-size:13px;">#' + ro.id.slice(-5).toUpperCase() + '</div>';
-      html += '<div style="font-size:11.5px;color:var(--text-dim);margin:4px 0;">Refusé chez ' + esc(ro.relaisShopName) + ' — à ramener à : ' + esc(ro.items[0] ? ro.items[0].sellerName : '') + '</div>';
-      html += '<button class="btn-secondary" style="margin-top:6px;" data-action="confirm-product-return" data-value="' + ro.id + '"><i class="fa-solid fa-check"></i> Confirmer le retour au vendeur</button>';
+      if (ro.returnStatus === "en_attente_retour") {
+        // 1) Reprendre le colis au point de retrait avec le code de reprise
+        html += '<div style="font-size:11.5px;color:var(--text-dim);margin:4px 0;">' + t("livreur_return_pickup_at") + ' <strong>' + esc(ro.relaisShopName || '') + '</strong></div>';
+        if (ro.returnPickupCode) {
+          html += '<div style="background:var(--bg-body);border-radius:10px;padding:10px;text-align:center;margin-top:4px;">';
+          html += '<div style="font-size:11px;font-weight:700;color:var(--text-dim);">' + t("livreur_return_code_label") + '</div>';
+          html += '<div style="font-size:24px;font-weight:900;letter-spacing:6px;color:var(--accent);">' + esc(String(ro.returnPickupCode)) + '</div>';
+          html += '<div class="qr-code-slot" data-qr-value="' + esc(String(ro.returnPickupCode)) + '" style="display:flex;justify-content:center;margin-top:6px;"></div>';
+          html += '</div>';
+        }
+      } else {
+        // 2) Colis repris : à déposer chez le vendeur, qui confirmera la réception
+        html += '<div style="font-size:11.5px;color:var(--text-dim);margin:4px 0;">' + t("livreur_return_bring_to") + ' <strong>' + sellerLabel + '</strong></div>';
+        html += '<div style="font-size:11px;color:var(--text-dim);"><i class="fa-solid fa-hourglass-half"></i> ' + t("livreur_return_wait_seller") + '</div>';
+      }
       html += '</div>';
     }
   }
@@ -28572,6 +28736,7 @@ function renderPointVente() {
   html += '<button class="link-btn" data-action="edit-relais-info"><i class="fa-solid fa-pen"></i> ' + t("pv_edit_info") + '</button>';
   html += '</div>';
   html += '<button class="btn-secondary" style="width:100%;margin:10px 0;" data-action="open-external-parcels"><i class="fa-solid fa-box-open"></i> ' + t("pv_external_parcels") + (state.externalParcels.filter(function(p){return p.relaisShopId===shopId && p.status!=="Retiré" && p.status!=="Retour à l\'expéditeur";}).length > 0 ? ' (' + state.externalParcels.filter(function(p){return p.relaisShopId===shopId && p.status!=="Retiré" && p.status!=="Retour à l\'expéditeur";}).length + ')' : '') + '</button>';
+  html += renderPayoutCard("relais");
   html += '<button class="link-btn" style="width:100%;text-align:center;margin-bottom:10px;" data-action="view-relais-policy"><i class="fa-solid fa-file-lines"></i> Relire la politique d\'utilisation</button>';
   html += '<div class="stats-row">';
   html += '<div class="stat-card"><div class="stat-value">' + (enRoute.length + enBoutique.length) + '</div><div class="stat-label">' + t("pv_parcels_ongoing") + '</div></div>';
@@ -28610,6 +28775,13 @@ function renderPointVente() {
       var o2 = enBoutique[k];
       html += relaisOrderCard(o2, "retrait");
     }
+  }
+
+  // Colis à rendre au livreur (retours vers le vendeur)
+  var aRendre = myOrders.filter(function(o) { return o.status === "Refusée au retrait" && o.returnStatus === "en_attente_retour"; });
+  if (aRendre.length) {
+    html += '<div style="font-weight:800;font-size:13.5px;margin:18px 0 10px"><i class="fa-solid fa-rotate-left"></i> ' + t("relais_to_return") + ' (' + aRendre.length + ')</div>';
+    aRendre.forEach(function(ro) { html += relaisOrderCard(ro, "reprise"); });
   }
 
   if (livrees.length > 0) {
@@ -28685,6 +28857,15 @@ function relaisOrderCard(order, stage) {
     html += '<button class="btn-primary" style="flex:0;padding:8px 16px;font-size:13px;" data-action="confirm-retrait" data-value="' + order.id + '">' + t("livreur_validate") + '</button>';
     html += '</div></div>';
     html += '<button class="link-btn" style="color:var(--danger);margin-top:8px;width:100%;text-align:center;" data-action="refuse-relais-product" data-value="' + order.id + '"><i class="fa-solid fa-triangle-exclamation"></i> ' + t("pv_client_refused") + '</button>';
+    html += '<button class="link-btn" style="color:var(--text-secondary);margin-top:6px;width:100%;text-align:center;" data-action="relais-not-collected" data-value="' + order.id + '"><i class="fa-solid fa-user-clock"></i> ' + t("relais_not_collected_btn") + '</button>';
+  } else if (stage === "reprise") {
+    html += '<div style="margin-top:8px;padding:10px;background:var(--bg-body);border-radius:10px;">';
+    html += '<div style="font-size:11px;font-weight:700;color:var(--text-dim);margin-bottom:4px;">' + t("relais_reprise_code_label") + '</div>';
+    html += '<div style="display:flex;gap:8px;">';
+    html += '<input class="input" id="reprise-input-' + order.id + '" style="flex:1;padding:8px;font-size:18px;text-align:center;letter-spacing:4px;min-width:0;" placeholder="0000" maxlength="4" inputmode="numeric" />';
+    html += '<button class="btn-secondary" style="flex:0;padding:8px 12px;" data-action="open-scanner" data-target="reprise-input-' + order.id + '" data-confirm-action="confirm-return-pickup" data-confirm-value="' + order.id + '"><i class="fa-solid fa-qrcode"></i></button>';
+    html += '<button class="btn-primary" style="flex:0;padding:8px 16px;font-size:13px;" data-action="confirm-return-pickup" data-value="' + order.id + '">' + t("livreur_validate") + '</button>';
+    html += '</div></div>';
   }
   html += '</div>';
   return html;
@@ -28867,6 +29048,7 @@ var ADMIN_MODULES_META = {
   reviews:            { icon: "fa-star",                 get name() { return t("admin_mod_reviews"); },      get sub() { return t("admin_mod_reviews_sub"); } },
   filature:           { icon: "fa-user-secret",           get name() { return t("admin_mod_filature"); },     get sub() { return t("admin_mod_filature_sub"); } },
   moderation:         { icon: "fa-shield-virus",           name: "Modération des articles", sub: "Articles signalés ou suspects, en attente de ta décision" },
+  versements:         { icon: "fa-money-bill-transfer",   name: "Versements", sub: "Paiements du mardi et du vendredi aux vendeurs et points de retrait" },
   test:               { icon: "fa-bug",                    name: "Test", sub: "Journaux d'erreurs et diagnostics" }
 };
 
@@ -29062,8 +29244,8 @@ function renderAdmin() {
   }
 
   // ---- Modules valides pour ce rôle (Groupe 1 complet, Groupe 2 restreint) ----
-  var validTabsOwner = ["dashboard","comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","moderation","filature","test"];
-  var validTabsEmployee = ["dashboard","comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","pub","reviews","moderation","partenaires"];
+  var validTabsOwner = ["dashboard","comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","moderation","versements","filature","test"];
+  var validTabsEmployee = ["dashboard","comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","pub","reviews","moderation","versements","partenaires"];
   var validTabs = isOwner ? validTabsOwner : validTabsEmployee;
   if (validTabs.indexOf(state.adminTab) === -1) state.adminTab = "dashboard";
 
@@ -29104,6 +29286,7 @@ function renderAdmin() {
   else if (state.adminTab === "security") html += renderAdminSecurity();
   else if (state.adminTab === "reviews") html += renderAdminReviews();
   else if (state.adminTab === "filature" && currentAdminHasFilatureAccess()) html += renderAdminFilature();
+  else if (state.adminTab === "versements") html += renderAdminVersements();
   else if (state.adminTab === "test") html += renderAdminTest();
 
   html += '</div></div>';
@@ -30197,6 +30380,109 @@ function currentAdminHasFilatureAccess() {
 // rejetées, console.error) + quelques boutons pour déclencher des
 // vérifications précises à la demande — avec un bouton "Copier" pour
 // coller directement le résultat dans la conversation.
+
+// ---------- ADMIN : VERSEMENTS DU JOUR ----------
+function loadAdminPayoutList() {
+  var di = document.getElementById("admin-payout-date");
+  var date = di && di.value ? di.value : new Date().toISOString().slice(0, 10);
+  state.payoutList = { date: date, loading: true, items: [] };
+  render();
+  callWalletOperation({ operation: "admin_payout_list", date: date }).then(function(res) {
+    state.payoutList = { date: date, loading: false, items: (res && res.items) || [], error: res && !res.success ? (res.error || "erreur") : null };
+    render();
+  });
+}
+function saveAdminPayoutFees() {
+  var cfg = {};
+  PAYOUT_OPERATORS.forEach(function(o) {
+    var pct = document.getElementById("fee-pct-" + o[0]), fixed = document.getElementById("fee-fixed-" + o[0]);
+    cfg[o[0]] = { pct: pct ? Number(pct.value) || 0 : 0, fixed: fixed ? Number(fixed.value) || 0 : 0 };
+  });
+  var doc = { id: "payout_fees", config: cfg, updatedAt: Date.now() };
+  if (!state.settings) state.settings = [];
+  var idx = state.settings.findIndex(function(x) { return x.id === "payout_fees"; });
+  if (idx === -1) state.settings.push(doc); else state.settings[idx] = doc;
+  save(); saveDoc("settings", doc);
+  showToast("✅ Frais de transfert enregistrés.");
+  render();
+}
+function markAdminPayout(i) {
+  var pl = state.payoutList; if (!pl || !pl.items || !pl.items[i]) return;
+  var it = pl.items[i];
+  var refEl = document.getElementById("payout-ref-" + i);
+  var reference = refEl ? String(refEl.value || "").trim() : "";
+  if (!reference) { showToast("❌ Indiquez la référence du transfert (numéro de la transaction)."); return; }
+  var fee = payoutFeeFor(it.operator || "", it.amount);
+  var payload = { operation: "admin_mark_payout", kind: it.kind, key: it.key, operator: it.operator || "", number: it.number || "", reference: reference, fee: fee };
+  if (it.kind === "ledger") payload.txnIds = it.txnIds; else payload.orderIds = it.orderIds;
+  it.saving = true; render();
+  callWalletOperation(payload).then(function(res) {
+    if (res && res.success) {
+      pl.items.splice(i, 1);
+      showToast("✅ Versement enregistré : " + money(res.net) + ". Le bénéficiaire est prévenu.");
+    } else {
+      it.saving = false;
+      showToast("❌ Versement non enregistré : " + ((res && res.error) || "erreur"));
+    }
+    render();
+  });
+}
+function renderAdminPayoutsCard() {
+  var pl = state.payoutList || {};
+  var cfg = {};
+  (state.settings || []).forEach(function(x) { if (x.id === "payout_fees") cfg = x.config || {}; });
+  var today = new Date().toISOString().slice(0, 10);
+  var html = '<div style="padding:10px;margin-bottom:12px;border-radius:10px;background:var(--bg-body);">';
+  html += '<div style="font-size:12.5px;font-weight:700;margin-bottom:4px;"><i class="fa-solid fa-money-bill-transfer"></i> Versements du jour (mardi et vendredi)</div>';
+  html += '<div style="font-size:10.5px;color:var(--text-dim);margin-bottom:8px;">Vendeurs et parrains : mardi et vendredi (frais à leur charge). Points de retrait : mardi (frais payés par Sounsouni). Faites le transfert, puis appuyez sur « Payé » avec sa référence.</div>';
+  html += '<div style="display:flex;gap:6px;margin-bottom:8px;"><input class="input" type="date" id="admin-payout-date" style="flex:1;min-width:0;" value="' + esc(pl.date || today) + '" /><button class="btn-primary" style="flex:0;padding:8px 12px;font-size:12px;" data-action="admin-load-payouts">Afficher</button></div>';
+  if (pl.loading) html += '<div style="font-size:12px;">Chargement…</div>';
+  else if (pl.error) html += '<div style="font-size:12px;color:var(--danger);">Erreur : ' + esc(pl.error) + '</div>';
+  else if (pl.items) {
+    if (!pl.items.length && pl.date) html += '<div style="font-size:12px;">✅ Aucun versement dû à cette date.</div>';
+    var opName = {}; PAYOUT_OPERATORS.forEach(function(o) { opName[o[0]] = o[1]; });
+    pl.items.forEach(function(it, i) {
+      var fee = payoutFeeFor(it.operator || "", it.amount);
+      var beneficiaryPays = it.feeBy !== "sounsouni";
+      var toSend = beneficiaryPays ? it.amount - fee : it.amount;
+      html += '<div style="border-top:1px solid var(--border-color);padding:8px 0;">';
+      html += '<div style="display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap;"><strong style="font-size:12.5px;">' + esc(it.name) + '</strong><span style="font-size:11px;color:var(--text-dim);">' + (it.kind === "relais" ? "Point de retrait" : "Vendeur / parrain") + ' · ' + it.count + ' élément(s)</span></div>';
+      html += '<div style="font-size:12px;">' + (it.operator ? esc(opName[it.operator] || it.operator) : '<span style="color:var(--danger);">opérateur non choisi</span>') + ' · ' + esc(it.number || "?") + '</div>';
+      html += '<div style="font-size:12px;">Montant dû ' + money(it.amount) + (fee ? ' · frais ' + money(fee) + (beneficiaryPays ? ' (à sa charge)' : ' (payés par Sounsouni)') : '') + ' → <strong style="color:var(--accent);">à envoyer : ' + money(toSend) + '</strong></div>';
+      html += '<div style="display:flex;gap:6px;margin-top:6px;"><input class="input" id="payout-ref-' + i + '" style="flex:1;min-width:0;" placeholder="Référence du transfert" /><button class="btn-primary" style="flex:0;padding:8px 12px;font-size:12px;" data-action="admin-mark-payout" data-value="' + i + '"' + (it.saving ? ' disabled' : '') + '>Payé</button></div>';
+      html += '</div>';
+    });
+  }
+  // Frais de transfert par opérateur
+  html += '<div style="font-size:12px;font-weight:700;margin:12px 0 4px;">Frais de transfert par opérateur</div>';
+  html += '<div style="font-size:10.5px;color:var(--text-dim);margin-bottom:6px;">Frais = pourcentage du montant + montant fixe. Exemple : 1 % + 0 FCFA.</div>';
+  var canEditFees = !!state.adminIsOwner;
+  if (!canEditFees) {
+    PAYOUT_OPERATORS.forEach(function(o) {
+      var c = cfg[o[0]] || {};
+      html += '<div style="font-size:12px;">' + o[1] + ' : ' + (c.pct || 0) + ' % + ' + money(c.fixed || 0) + '</div>';
+    });
+    html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;">Seul l\'Admin principal peut modifier ces frais.</div>';
+    html += '</div>';
+    return html;
+  }
+  PAYOUT_OPERATORS.forEach(function(o) {
+    var c = cfg[o[0]] || {};
+    html += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap;"><span style="font-size:12px;min-width:92px;">' + o[1] + '</span>';
+    html += '<input class="input" id="fee-pct-' + o[0] + '" type="number" step="0.1" min="0" style="flex:1;min-width:60px;" placeholder="%" value="' + (c.pct != null ? c.pct : "") + '" />';
+    html += '<input class="input" id="fee-fixed-' + o[0] + '" type="number" step="1" min="0" style="flex:1;min-width:60px;" placeholder="FCFA" value="' + (c.fixed != null ? c.fixed : "") + '" /></div>';
+  });
+  html += '<button class="btn-secondary" style="width:100%;" data-action="admin-save-payout-fees">Enregistrer les frais</button>';
+  html += '</div>';
+  return html;
+}
+
+function renderAdminVersements() {
+  var html = '<div class="glass-card" style="padding:14px;margin-bottom:14px;">';
+  html += renderAdminPayoutsCard();
+  html += '</div>';
+  return html;
+}
 function renderAdminTest() {
   var html = '<div class="glass-card" style="padding:14px;margin-bottom:14px;">';
   html += '<div class="section-title" style="margin-bottom:10px;"><i class="fa-solid fa-bug"></i> Test & diagnostic</div>';
@@ -30871,8 +31157,8 @@ function renderAdminDashboard(stats) {
 
   // ---- Grille des modules — cœur de la navigation du centre de contrôle ----
   var tileList = state.adminIsOwner
-    ? ["comptes","vendeurs","disputes","moderation","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","test"]
-    : ["comptes","vendeurs","disputes","moderation","relaisapplications","livreurapplications","quartiers","messagerie","pub","reviews","partenaires"];
+    ? ["comptes","vendeurs","versements","disputes","moderation","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","test"]
+    : ["comptes","vendeurs","versements","disputes","moderation","relaisapplications","livreurapplications","quartiers","messagerie","pub","reviews","partenaires"];
   html += '<div class="section-head" style="display:flex;align-items:baseline;justify-content:space-between;margin:20px 0 12px;"><h2 style="font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--mc-dim);font-weight:700;margin:0;">' + t("ad_modules_title") + '</h2></div>';
   html += renderAdminTileGrid(tileList);
 
@@ -35644,11 +35930,11 @@ root.addEventListener("click", function(e) {
     case "view-seller-policy": state.view = "sellerPolicyView"; render(); break;
     case "close-seller-policy-view": state.view = "seller"; render(); break;
     case "download-relais-policy": {
-      downloadPolicyAsPdf("Politique d'utilisation — Point de Retrait", relaisPolicyBodyHtml(), "Politique-Point-de-Retrait-Sounsouni.pdf");
+      downloadPolicyAsPdf("Contrat Point de retrait — Sounsouni", relaisPolicyBodyHtml(), "Contrat-Point-de-retrait-Sounsouni.pdf");
       break;
     }
     case "download-seller-policy": {
-      downloadPolicyAsPdf("Politique d'utilisation — Vendeur", sellerPolicyBodyHtml(), "Politique-Vendeur-Sounsouni.pdf");
+      downloadPolicyAsPdf("Contrat Vendeur — Sounsouni", sellerPolicyBodyHtml(), "Contrat-Vendeur-Sounsouni.pdf");
       break;
     }
     case "download-user-guide": {
@@ -39581,6 +39867,42 @@ root.addEventListener("click", function(e) {
       break;
     }
     case "confirm-product-return": confirmProductReturn(value); break;
+    case "relais-not-collected": relaisNotCollected(value); break;
+    case "open-contract-view": state.showContractView = value; render(); break;
+    case "close-contract-view": state.showContractView = null; render(); break;
+    case "accept-contract": {
+      var chk = document.getElementById("contract-accept-check");
+      if (!chk || !chk.checked) { showToast("Cochez d'abord « J'ai lu le contrat et je l'accepte »."); break; }
+      if (value === "relais") { state.profile.contractRelaisVersion = CONTRACT_VERSION; state.profile.contractRelaisAcceptedAt = Date.now(); }
+      else { state.profile.contractVendeurVersion = CONTRACT_VERSION; state.profile.contractVendeurAcceptedAt = Date.now(); }
+      persistProfileToAccounts();
+      showToast("✅ Contrat accepté. Merci !");
+      render();
+      break;
+    }
+    case "set-payout-operator": {
+      if (!state.profile) break;
+      state.profile.payoutOperator = value;
+      if (!state.profile.payoutNumber) state.profile.payoutNumber = state.profile.phone || "";
+      persistProfileToAccounts();
+      showToast("✅ " + t("payout_saved"));
+      render();
+      break;
+    }
+    case "save-payout-number": {
+      var pin = document.getElementById("payout-number-input");
+      var num = pin ? String(pin.value || "").replace(/[^0-9+]/g, "") : "";
+      if (num.replace(/\D/g, "").length < 8) { showToast("❌ " + t("payout_number_invalid")); break; }
+      state.profile.payoutNumber = num;
+      persistProfileToAccounts();
+      showToast("✅ " + t("payout_saved"));
+      render();
+      break;
+    }
+    case "admin-load-payouts": loadAdminPayoutList(); break;
+    case "admin-save-payout-fees": saveAdminPayoutFees(); break;
+    case "admin-mark-payout": markAdminPayout(Number(value)); break;
+    case "confirm-return-pickup": confirmReturnPickup(value); break;
     case "set-dispute-status": setDisputeStatus(btn.dataset.order, value); break;
     case "open-non-livrable-modal": {
       state.nonLivrableOrderId = value;
