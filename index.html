@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-03-b";
+    window.SOUNSOUNI_VERSION = "2026-10-03-c";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -5107,7 +5107,9 @@ function saveDoc(collectionName, docData) {
       if (res.success) { if (res.doc) applyServerDoc(collectionName, res.doc); return; }
       if (res.httpStatus === 403 || res.httpStatus === 401) {
         // Refus définitif (droits) : on ne réessaie pas, et on revient à la vérité du serveur.
-        try { pushDebugLog("error", "Écriture refusée par le serveur (" + collectionName + ")", JSON.stringify(res).slice(0, 300)); } catch (e) {}
+        // Les réglages refusés (cache des taux de change, écrits par tous les
+        // téléphones) sont sans gravité : pas de message dans le journal.
+        if (collectionName !== "settings") { try { pushDebugLog("error", "Écriture refusée par le serveur (" + collectionName + ")", JSON.stringify(res).slice(0, 300)); } catch (e) {} }
         if (res.doc) applyServerDoc(collectionName, res.doc);
         return;
       }
@@ -16559,20 +16561,20 @@ function finalizeOrder(order, opts) {
   }
   
   save();
-  secureOrderSaveDoc(order);
-  // Coordonnées GPS/repère/téléphones — envoyés à part, une seule fois
-  // ici (à la création), vers la collection protégée dédiée. Jamais
-  // dans "orders" lui-même, qui reste largement synchronisé.
-  if (order.buyerLat != null || order.buyerLng != null || order.repere || order.buyerPhone || order.contactPhone) {
-    callOrderContactOperation({
-      operation: "save_order_contact",
-      orderId: order.id,
-      buyerPhone: order.buyerPhone || null,
-      contactPhone: order.contactPhone || null,
-      repere: order.repere || null,
-      buyerLat: order.buyerLat != null ? order.buyerLat : null,
-      buyerLng: order.buyerLng != null ? order.buyerLng : null
-    });
+  // Coordonnées GPS/repère/téléphones — envoyées à part, vers la collection
+  // protégée dédiée, une fois la commande ENREGISTRÉE sur le serveur.
+  var contactPayload = (order.buyerLat != null || order.buyerLng != null || order.repere || order.buyerPhone || order.contactPhone) ? {
+    operation: "save_order_contact",
+    orderId: order.id,
+    buyerPhone: order.buyerPhone || null,
+    contactPhone: order.contactPhone || null,
+    repere: order.repere || null,
+    buyerLat: order.buyerLat != null ? order.buyerLat : null,
+    buyerLng: order.buyerLng != null ? order.buyerLng : null
+  } : null;
+  var orderSaved = secureOrderSaveDoc(order);
+  if (contactPayload) {
+    Promise.resolve(orderSaved).then(function() { saveOrderContactReliably(contactPayload, 0); });
   }
   affectedProducts.forEach(function(p) { saveDoc("products", p); });
   render();
@@ -16653,7 +16655,7 @@ function runPayoutCatchUp() {
   (function next() {
     if (i >= todo.length) {
       state.payoutCatchUp.running = false;
-      state.payoutCatchUp.msg = "✅ Terminé : " + state.payoutCatchUp.ok + " commande(s) réglée(s) sur " + todo.length + ".";
+      state.payoutCatchUp.msg = "Terminé : " + state.payoutCatchUp.ok + " commande(s) avec versement effectué sur " + todo.length + ". Le détail s'affiche à côté de chaque commande.";
       syncPersonalCollections();
       render(); return;
     }
@@ -16661,7 +16663,11 @@ function runPayoutCatchUp() {
     // Pas d'attente ici : ces commandes sont livrées depuis longtemps.
     callWalletOperation({ operation: "settle_order_payouts", orderId: o.id }).then(function(res) {
       state.payoutCatchUp.done++;
-      if (res && res.success) state.payoutCatchUp.ok++;
+      state.payoutResults = state.payoutResults || {};
+      var paidParts = res && res.settled ? Object.keys(res.settled).length : 0;
+      var reasons = res && res.skipped ? Object.keys(res.skipped).map(function(k) { return res.skipped[k]; }) : [];
+      if (res && res.success && paidParts) state.payoutCatchUp.ok++;
+      state.payoutResults[o.id] = !res || !res.success ? ("refusé : " + ((res && res.error) || "erreur")) : (paidParts ? "✅ versé" : (reasons.length ? reasons.join(", ") : "rien à verser"));
       render();
       setTimeout(next, 400);
     });
@@ -17783,7 +17789,7 @@ function secureOrderSaveDoc(order) {
   // "hors ligne" à tort et empêcher silencieusement toute tentative,
   // sans même une erreur à capturer). Seul un vrai échec (réseau ou
   // serveur) la met en file d'attente, via le .then/.catch ci-dessous.
-  fetch(supabaseConfig.url + "/functions/v1/order-write", {
+  return fetch(supabaseConfig.url + "/functions/v1/order-write", {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify({ docId: cleaned.id, data: cleaned, referralCode: currentReferralCode() })
@@ -17793,12 +17799,31 @@ function secureOrderSaveDoc(order) {
       if (!res.success) {
         console.error("Erreur order-write :", res.error);
         queuePendingSync("orders", cleaned);
+        return false;
       }
+      return true;
     })
     .catch(function(err) {
       console.error("Erreur réseau order-write :", err);
       queuePendingSync("orders", cleaned);
+      return false;
     });
+}
+
+// Coordonnées du client (numéro, GPS, repère) : envoyées APRÈS
+// l'enregistrement de la commande — avant, elles partaient en même temps et
+// le serveur, ne trouvant pas encore la commande, les refusait (le livreur
+// ne recevait alors jamais le numéro ni la position du client).
+function saveOrderContactReliably(payload, attempt) {
+  attempt = attempt || 0;
+  var delays = [0, 3000, 8000, 20000];
+  setTimeout(function() {
+    callOrderContactOperation(payload).then(function(res) {
+      if (res && res.success) return;
+      if (attempt + 1 < delays.length) saveOrderContactReliably(payload, attempt + 1);
+      else { try { pushDebugLog("error", "Coordonnées de la commande non enregistrées", payload.orderId + " — " + (res && res.error)); } catch (e) {} }
+    }).catch(function() { if (attempt + 1 < delays.length) saveOrderContactReliably(payload, attempt + 1); });
+  }, delays[attempt]);
 }
 
 // Appelle une opération de wallet-write — le serveur recalcule tout
@@ -17931,6 +17956,15 @@ function fetchMyOrderContacts() {
   return callOrderContactOperation({ operation: "get_contact_batch", orderIds: relevantIds }).then(function(res) {
     if (!res.success) return;
     var contacts = res.contacts || {};
+    // Commandes de l'acheteur dont les coordonnées n'ont jamais été
+    // enregistrées (ancien défaut) : on renvoie au moins son numéro.
+    window._contactRepairSent = window._contactRepairSent || {};
+    (state.orders || []).forEach(function(o) {
+      if (!state.profile || o.buyerId !== state.profile.id || contacts[o.id] || window._contactRepairSent[o.id]) return;
+      if (o.status === "Livrée" || o.status === "Annulée" || !state.profile.phone) return;
+      window._contactRepairSent[o.id] = true;
+      saveOrderContactReliably({ operation: "save_order_contact", orderId: o.id, buyerPhone: state.profile.phone, contactPhone: o.contactPhone || state.profile.phone, repere: o.repere || null, buyerLat: o.buyerLat != null ? o.buyerLat : null, buyerLng: o.buyerLng != null ? o.buyerLng : null }, 0);
+    });
     for (var i = 0; i < state.orders.length; i++) {
       var c = contacts[state.orders[i].id];
       if (c) {
@@ -30187,7 +30221,8 @@ function renderAdminTest() {
         var sids = Array.isArray(o.sellerIds) && o.sellerIds.length ? o.sellerIds : (o.items || []).map(function(it) { return it.sellerId; }).filter(Boolean);
         if (sids.some(function(id) { return !paid[id]; })) why.push("vendeur");
         if (o.affiliateId && !o.affiliateCommissionCredited) why.push("parrain");
-        html += '<div style="font-size:11px;color:var(--text-dim);">#' + o.id.slice(-5).toUpperCase() + ' · ' + fmtDateTime(o.deliveredAt || o.createdAt) + ' · ' + why.join(" + ") + '</div>';
+        var lastRes = (state.payoutResults || {})[o.id];
+        html += '<div style="font-size:11px;color:var(--text-dim);">#' + o.id.slice(-5).toUpperCase() + ' · ' + fmtDateTime(o.deliveredAt || o.createdAt) + ' · ' + why.join(" + ") + (lastRes ? ' — <em>' + esc(lastRes) + '</em>' : '') + '</div>';
       });
       if (unsettled.length > 8) html += '<div style="font-size:11px;color:var(--text-dim);">… et ' + (unsettled.length - 8) + ' autre(s)</div>';
       html += '<button class="btn-primary" style="width:100%;margin-top:8px;" data-action="admin-payout-catch-up"><i class="fa-solid fa-coins"></i> Verser maintenant</button>';
