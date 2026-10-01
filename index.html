@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-02-e";
+    window.SOUNSOUNI_VERSION = "2026-10-03-a";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -6811,7 +6811,7 @@ var ADMIN_RESTRICTED_ACTIONS = [
   "toggle-section-style-bold", "set-brand-image-field", "set-section-style-field", "save-market-display-config",
   "admin-cancel-boost", "approve-relais-edit", "reject-relais-edit",
   "admin-add-quartier", "admin-remove-quartier", "undo-quartier-change",
-  "admin-add-quartier-proche", "admin-remove-quartier-proche", "undo-quartier-proche-change", "toggle-user-test-mode", "moderation-approve", "moderation-reject", "run-full-push-diagnostic", "toggle-diagnostics-visible", "admin-translate-products",
+  "admin-add-quartier-proche", "admin-remove-quartier-proche", "undo-quartier-proche-change", "toggle-user-test-mode", "moderation-approve", "moderation-reject", "run-full-push-diagnostic", "toggle-diagnostics-visible", "admin-translate-products", "admin-payout-catch-up",
   "send-admin-broadcast", "toggle-employee-permission", "add-boost-tier", "remove-boost-tier", "save-boost-tiers",
   "save-vip-rotation-seconds", "save-delivery-base-config", "admin-add-commune", "admin-remove-commune",
   "save-admin-product-edit", "admin-delete-account", "save-relais-commission", "save-delivery-fees", "save-intercity-delivery-fees", "save-international-shipping-rates",
@@ -16596,11 +16596,73 @@ function finalizeOrder(order, opts) {
 // wallet-write, opération "settle_order_payouts") : ce téléphone ne fait
 // que déclencher la vérification, il ne calcule et n'envoie plus aucun
 // montant lui-même.
-function settleOrderPayouts(order) {
-  callWalletOperation({ operation: "settle_order_payouts", orderId: order.id }).then(function(res) {
-    if (!res.success) { console.error("Erreur settle_order_payouts :", res.error); return; }
-    fetchMyWalletState();
+// Versements d'une commande livrée (vendeurs + parrain), faits par le
+// serveur. Le serveur refuse tant qu'il ne voit pas la commande "Livrée" —
+// or le statut est enregistré juste APRÈS cette demande : on attend donc un
+// peu, et on réessaie plusieurs fois au lieu d'abandonner au premier refus
+// (avant : versements jamais faits, vendeurs et parrains non crédités).
+// Sans risque de double paiement : le serveur ne verse jamais deux fois.
+var SETTLE_RETRY_DELAYS = [2000, 5000, 12000, 30000];
+function settleOrderPayouts(order, attempt) {
+  attempt = attempt || 0;
+  var orderId = order && order.id;
+  if (!orderId) return Promise.resolve(false);
+  return new Promise(function(resolve) {
+    setTimeout(function() {
+      callWalletOperation({ operation: "settle_order_payouts", orderId: orderId }).then(function(res) {
+        if (res && res.success) {
+          fetchMyWalletState();
+          // Recharge les commandes : leur état "réglée" vient du serveur.
+          clearTimeout(window._settleResyncTimer);
+          window._settleResyncTimer = setTimeout(function() { try { syncPersonalCollections(); } catch (e) {} }, 800);
+          resolve(true); return;
+        }
+        var err = res && res.error;
+        if (attempt + 1 < SETTLE_RETRY_DELAYS.length && (!err || err === "order_not_delivered" || /network|fetch|timeout/i.test(String(err)))) {
+          settleOrderPayouts(order, attempt + 1).then(resolve);
+          return;
+        }
+        try { pushDebugLog("error", "Versement de la commande non effectué", orderId + " — " + err); } catch (e) {}
+        resolve(false);
+      });
+    }, SETTLE_RETRY_DELAYS[attempt]);
   });
+}
+
+// Commandes livrées dont un versement (vendeur ou parrain) n'a jamais été
+// fait — pour le rattrapage depuis l'Admin.
+function unsettledDeliveredOrders() {
+  return (state.orders || []).filter(function(o) {
+    if (!o || o.status !== "Livrée") return false;
+    var paid = o.sellerPayoutSettled || {};
+    var sellerIds = Array.isArray(o.sellerIds) && o.sellerIds.length ? o.sellerIds : (o.items || []).map(function(it) { return it.sellerId; }).filter(Boolean);
+    var sellerMissing = sellerIds.some(function(id) { return !paid[id]; });
+    var affiliateMissing = !!o.affiliateId && !o.affiliateCommissionCredited && !o.isInternational && o.affiliateId !== o.buyerId;
+    return sellerMissing || affiliateMissing;
+  }).sort(function(a, b) { return (b.deliveredAt || b.createdAt || 0) - (a.deliveredAt || a.createdAt || 0); });
+}
+function runPayoutCatchUp() {
+  if (state.payoutCatchUp && state.payoutCatchUp.running) return;
+  var todo = unsettledDeliveredOrders();
+  state.payoutCatchUp = { running: true, done: 0, ok: 0, total: todo.length, msg: "" };
+  render();
+  var i = 0;
+  (function next() {
+    if (i >= todo.length) {
+      state.payoutCatchUp.running = false;
+      state.payoutCatchUp.msg = "✅ Terminé : " + state.payoutCatchUp.ok + " commande(s) réglée(s) sur " + todo.length + ".";
+      syncPersonalCollections();
+      render(); return;
+    }
+    var o = todo[i++];
+    // Pas d'attente ici : ces commandes sont livrées depuis longtemps.
+    callWalletOperation({ operation: "settle_order_payouts", orderId: o.id }).then(function(res) {
+      state.payoutCatchUp.done++;
+      if (res && res.success) state.payoutCatchUp.ok++;
+      render();
+      setTimeout(next, 400);
+    });
+  })();
 }
 
 function setOrderStatus(orderId, status) {
@@ -30082,6 +30144,33 @@ function renderAdminTest() {
   html += '<div style="font-size:12.5px;min-width:0;"><strong>Outils de test visibles par les utilisateurs</strong><br><span style="font-size:10.5px;color:var(--text-dim);">' + (diagnosticsEnabled() ? '⚠️ ACTIVÉS — rapport de démarrage, détails des erreurs, #diag, boutons de test du Profil. Pensez à les désactiver après usage.' : 'Désactivés (normal). À activer seulement pour diagnostiquer un problème chez un utilisateur.') + '</span></div>';
   html += '<div class="toggle-switch ' + (diagnosticsEnabled() ? 'active' : '') + '" data-action="toggle-diagnostics-visible" style="flex-shrink:0;"><div class="toggle-knob"></div></div>';
   html += '</div>';
+  // ---- Versements en attente (vendeurs + parrains) ----
+  var unsettled = unsettledDeliveredOrders();
+  var pc = state.payoutCatchUp;
+  html += '<div style="padding:10px;margin-bottom:12px;border-radius:10px;background:var(--bg-body);">';
+  html += '<div style="font-size:12.5px;font-weight:700;margin-bottom:4px;"><i class="fa-solid fa-coins"></i> Versements en attente</div>';
+  html += '<div style="font-size:10.5px;color:var(--text-dim);margin-bottom:8px;">Commandes livrées dont le versement au vendeur ou au parrain n\'a pas été fait. Aucun risque de double paiement : le serveur ne verse jamais deux fois.</div>';
+  if (pc && pc.running) {
+    html += '<div style="font-size:12px;">Versements en cours… ' + pc.done + ' / ' + pc.total + '</div>';
+  } else {
+    if (pc && pc.msg) html += '<div style="font-size:11.5px;margin-bottom:6px;">' + esc(pc.msg) + '</div>';
+    if (unsettled.length) {
+      html += '<div style="font-size:12px;margin-bottom:6px;"><strong>' + unsettled.length + '</strong> commande(s) concernée(s) :</div>';
+      unsettled.slice(0, 8).forEach(function(o) {
+        var why = [];
+        var paid = o.sellerPayoutSettled || {};
+        var sids = Array.isArray(o.sellerIds) && o.sellerIds.length ? o.sellerIds : (o.items || []).map(function(it) { return it.sellerId; }).filter(Boolean);
+        if (sids.some(function(id) { return !paid[id]; })) why.push("vendeur");
+        if (o.affiliateId && !o.affiliateCommissionCredited) why.push("parrain");
+        html += '<div style="font-size:11px;color:var(--text-dim);">#' + o.id.slice(-5).toUpperCase() + ' · ' + fmtDateTime(o.deliveredAt || o.createdAt) + ' · ' + why.join(" + ") + '</div>';
+      });
+      if (unsettled.length > 8) html += '<div style="font-size:11px;color:var(--text-dim);">… et ' + (unsettled.length - 8) + ' autre(s)</div>';
+      html += '<button class="btn-primary" style="width:100%;margin-top:8px;" data-action="admin-payout-catch-up"><i class="fa-solid fa-coins"></i> Verser maintenant</button>';
+    } else {
+      html += '<div style="font-size:12px;">✅ Aucun versement en attente.</div>';
+    }
+  }
+  html += '</div>';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;margin-bottom:10px;border-bottom:1px solid var(--border-color);">';
   html += '<div style="font-size:12.5px;"><strong>Capture des erreurs</strong><br><span style="font-size:10.5px;color:var(--text-dim);">À désactiver une fois le problème réglé — sinon ça continue à occuper de la place pour rien.</span></div>';
   html += '<div class="toggle-switch ' + (state.debugLoggingEnabled ? 'active' : '') + '" data-action="toggle-debug-logging"><div class="toggle-knob"></div></div>';
@@ -36551,6 +36640,13 @@ root.addEventListener("click", function(e) {
       save();
       showToast(t("toast_notifications_disabled"));
       render();
+      break;
+    }
+    case "admin-payout-catch-up": {
+      var nb = unsettledDeliveredOrders().length;
+      if (!nb) break;
+      if (!confirm("Effectuer les versements de " + nb + " commande(s) livrée(s) ? (vendeurs et parrains — jamais deux fois)")) break;
+      runPayoutCatchUp();
       break;
     }
     case "toggle-diagnostics-visible": {
