@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-03-a";
+    window.SOUNSOUNI_VERSION = "2026-10-03-b";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -5197,7 +5197,7 @@ function flushPendingSyncQueue() {
       request = fetch(supabaseConfig.url + "/functions/v1/order-write", {
         method: "POST",
         headers: authHeaders(),
-        body: JSON.stringify({ docId: entry.id, data: entry.data, referralCode: localStorage.getItem('gems_referral') || null })
+        body: JSON.stringify({ docId: entry.id, data: entry.data, referralCode: currentReferralCode() })
       })
         .then(function(r) { return r.json(); })
         .then(function(res) { return { error: res.success ? null : (res.error || "order_write_failed") }; })
@@ -9839,6 +9839,7 @@ const TRANSLATIONS = {
     filter_reset: "Réinitialiser les filtres",
     filter_see_results: "Voir les résultats",
     dispute_title: "Signaler un problème",
+    livreur_contact_after_pickup: "Le numéro et la position du client s'afficheront dès que vous prenez la commande en charge.",
     order_full_history: "Historique complet",
     rep_new: "Nouveau vendeur",
     rep_excellent: "Excellent",
@@ -11569,6 +11570,7 @@ const TRANSLATIONS = {
     filter_reset: "Reset filters",
     filter_see_results: "See results",
     dispute_title: "Report a problem",
+    livreur_contact_after_pickup: "The customer's number and location will appear as soon as you take charge of the order.",
     order_full_history: "Full history",
     rep_new: "New seller",
     rep_excellent: "Excellent",
@@ -13299,6 +13301,7 @@ const TRANSLATIONS = {
     filter_reset: "फ़िल्टर रीसेट करें",
     filter_see_results: "परिणाम देखें",
     dispute_title: "समस्या की रिपोर्ट करें",
+    livreur_contact_after_pickup: "ऑर्डर लेते ही ग्राहक का नंबर और स्थान दिखाई देगा।",
     order_full_history: "पूरा इतिहास",
     rep_new: "नया विक्रेता",
     rep_excellent: "उत्कृष्ट",
@@ -16696,6 +16699,14 @@ function setOrderStatus(orderId, status) {
     order.livreurId = state.profile.id;
     order.livreurName = state.profile.name;
     order.livreurPhone = state.profile.phone;
+    // Coordonnées du client (numéro, GPS, repère) récupérées tout de suite —
+    // en réessayant le temps que le serveur enregistre l'attribution.
+    [2500, 6000, 12000].forEach(function(delay) {
+      setTimeout(function() {
+        var o = (state.orders || []).find(function(x) { return x.id === orderId; });
+        if (o && !(o.buyerPhone || o.contactPhone)) { try { fetchMyOrderContacts().then(function() { renderOrDefer(); }); } catch (e) {} }
+      }, delay);
+    });
   }
   if (status === "Prête") {
     var readyMsg = "📦 Commande #" + orderId.slice(-5).toUpperCase() + " prête à être récupérée chez " + (order.items[0] ? order.items[0].sellerName : "le vendeur") + ".";
@@ -17775,7 +17786,7 @@ function secureOrderSaveDoc(order) {
   fetch(supabaseConfig.url + "/functions/v1/order-write", {
     method: "POST",
     headers: authHeaders(),
-    body: JSON.stringify({ docId: cleaned.id, data: cleaned, referralCode: localStorage.getItem('gems_referral') || null })
+    body: JSON.stringify({ docId: cleaned.id, data: cleaned, referralCode: currentReferralCode() })
   })
     .then(function(r) { return r.json(); })
     .then(function(res) {
@@ -18335,6 +18346,17 @@ function openPendingProductLink() {
     u.searchParams.delete("product");
     history.replaceState(history.state, "", u.pathname + (u.search || "") + u.hash);
   } catch (e) {}
+}
+
+// Code du parrain à joindre à une commande : celui mémorisé sur ce
+// téléphone (lien ouvert ici), sinon celui enregistré sur le COMPTE du
+// filleul à son inscription — il suit donc le filleul sur tous ses
+// appareils (avant : achat depuis un autre appareil = parrain oublié).
+function currentReferralCode() {
+  var code = null;
+  try { code = localStorage.getItem('gems_referral'); } catch (e) {}
+  if (!code && state.profile && state.profile.referredBy) code = state.profile.referredBy;
+  return code || null;
 }
 
 function detectReferral() {
@@ -28247,7 +28269,10 @@ function renderLivreur() {
       }
       html += '</div>';
       
-      html += '<div style="font-size:12.5px;color:var(--text-dim);margin:10px 0 6px"><i class="fa-solid fa-location-dot"></i> ' + o2.city + ', ' + esc(o2.zone) + (o2.quartier ? ' — ' + esc(o2.quartier) : '') + ' — ' + esc(o2.repere) + (o2.buyerLat && o2.buyerLng ? ' · <a href="https://www.google.com/maps?q=' + o2.buyerLat + ',' + o2.buyerLng + '" target="_blank" style="color:var(--accent);font-weight:700;">' + t("livreur_see_on_map") + '</a>' : '') + '</div>';
+      html += '<div style="font-size:12.5px;color:var(--text-dim);margin:10px 0 6px"><i class="fa-solid fa-location-dot"></i> ' + o2.city + ', ' + esc(o2.zone) + (o2.quartier ? ' — ' + esc(o2.quartier) : '') + (o2.repere ? ' — ' + esc(o2.repere) : '') + (o2.buyerLat && o2.buyerLng ? ' · <a href="https://www.google.com/maps?q=' + o2.buyerLat + ',' + o2.buyerLng + '" target="_blank" style="color:var(--accent);font-weight:700;">' + t("livreur_see_on_map") + '</a>' : '') + '</div>';
+      // Commande pas encore prise en charge : coordonnées du client non
+      // transmises (sinon tous les livreurs verraient tous les clients).
+      if (!o2.livreurId) html += '<div style="font-size:11px;color:var(--text-dim);margin:-2px 0 8px;"><i class="fa-solid fa-lock"></i> ' + t("livreur_contact_after_pickup") + '</div>';
       // Coordonnées complètes acheteur + vendeur(s) — le livreur en a besoin
       // sur le terrain, pas juste un nom sans moyen de le joindre.
       html += '<div style="background:var(--bg-body);border-radius:10px;padding:8px 10px;margin-bottom:8px;">';
