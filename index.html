@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-03-c";
+    window.SOUNSOUNI_VERSION = "2026-10-03-d";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -16640,9 +16640,11 @@ function unsettledDeliveredOrders() {
   return (state.orders || []).filter(function(o) {
     if (!o || o.status !== "Livrée") return false;
     var paid = o.sellerPayoutSettled || {};
+    // Un compte supprimé (vieilles commandes de test) : personne à payer.
+    var exists = function(id) { return (state.accounts || []).some(function(a) { return a && a.id === id; }); };
     var sellerIds = Array.isArray(o.sellerIds) && o.sellerIds.length ? o.sellerIds : (o.items || []).map(function(it) { return it.sellerId; }).filter(Boolean);
-    var sellerMissing = sellerIds.some(function(id) { return !paid[id]; });
-    var affiliateMissing = !!o.affiliateId && !o.affiliateCommissionCredited && !o.isInternational && o.affiliateId !== o.buyerId;
+    var sellerMissing = sellerIds.some(function(id) { return !paid[id] && exists(id); });
+    var affiliateMissing = !!o.affiliateId && !o.affiliateCommissionCredited && !o.isInternational && o.affiliateId !== o.buyerId && exists(o.affiliateId);
     return sellerMissing || affiliateMissing;
   }).sort(function(a, b) { return (b.deliveredAt || b.createdAt || 0) - (a.deliveredAt || a.createdAt || 0); });
 }
