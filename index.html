@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-09-e";
+    window.SOUNSOUNI_VERSION = "2026-10-09-f";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -10460,6 +10460,8 @@ const TRANSLATIONS = {
     seller_chat: "Chat",
     seller_cannot_deliver_confirmed: "Vous avez signalé ne pas pouvoir livrer ces articles.",
     seller_prep_done: "Préparation terminée — livreur en charge.",
+    seller_wait_other_shops: "Votre part est prête. En attente des autres boutiques ({n}/{t} prêtes) : la commande partira chez les livreurs quand toutes seront prêtes.",
+    seller_wait_courier: "Préparation terminée — en attente d'un livreur.",
     seller_order_no_longer_active: "Cette commande n'est plus active (annulée ou déjà terminée) — rien à faire ici.",
     seller_international_agent_managed: "Commande suivie par votre agent de sourcing — rien à faire de votre côté pour l'instant.",
     seller_confirm_your_part: "Appuyer ici pour confirmer votre part",
@@ -12221,6 +12223,8 @@ const TRANSLATIONS = {
     seller_chat: "Chat",
     seller_cannot_deliver_confirmed: "You reported being unable to deliver these items.",
     seller_prep_done: "Preparation complete — delivery person in charge.",
+    seller_wait_other_shops: "Your part is ready. Waiting for the other shops ({n}/{t} ready): the order goes to couriers once all are ready.",
+    seller_wait_courier: "Preparation complete — waiting for a courier.",
     seller_order_no_longer_active: "This order is no longer active (cancelled or already completed) — nothing to do here.",
     seller_international_agent_managed: "Order tracked by your sourcing agent — nothing to do on your side for now.",
     seller_confirm_your_part: "Tap here to confirm your part",
@@ -13982,6 +13986,8 @@ const TRANSLATIONS = {
     seller_chat: "चैट",
     seller_cannot_deliver_confirmed: "आपने बताया कि आप ये वस्तुएं डिलीवर नहीं कर सकते।",
     seller_prep_done: "तैयारी पूरी — डिलीवरी व्यक्ति ज़िम्मेदार।",
+    seller_wait_other_shops: "आपका हिस्सा तैयार है। बाकी दुकानों का इंतज़ार ({n}/{t} तैयार): सब तैयार होने पर ऑर्डर डिलीवरी वालों को जाएगा।",
+    seller_wait_courier: "तैयारी पूरी — डिलीवरी व्यक्ति का इंतज़ार।",
     seller_order_no_longer_active: "यह ऑर्डर अब सक्रिय नहीं है (रद्द या पहले से पूरा) — यहाँ कुछ करने को नहीं है।",
     seller_international_agent_managed: "आपके सोर्सिंग एजेंट द्वारा ट्रैक किया जा रहा ऑर्डर — फिलहाल आपकी ओर से कुछ करने की ज़रूरत नहीं।",
     seller_confirm_your_part: "अपना हिस्सा पुष्टि करने के लिए यहां दबाएं",
@@ -28600,7 +28606,16 @@ function renderSellerOrders() {
     } else if (myVendorStatus === "Refusée") {
       html += '<div style="font-size:11.5px;color:var(--danger);margin-top:8px"><i class="fa-solid fa-circle-xmark"></i> ' + t("seller_cannot_deliver_confirmed") + '</div>';
     } else if (sellerDone) {
-      html += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:8px"><i class="fa-solid fa-circle-check" style="color:var(--success)"></i> ' + t("seller_prep_done") + '</div>';
+      // Message exact selon où en est VRAIMENT la commande — avant, le vendeur
+      // lisait « livreur en charge » alors que les autres boutiques n'avaient
+      // pas encore validé et qu'aucun livreur ne voyait la commande.
+      var vsKeys = Object.keys(o2.vendorStatuses || {}).filter(function(k) { return o2.vendorStatuses[k] !== "Refusée" && o2.vendorStatuses[k] !== "Annulée"; });
+      var vsReady = vsKeys.filter(function(k) { return o2.vendorStatuses[k] === "Prête"; }).length;
+      var doneMsg;
+      if (o2.status === "Nouvelle" && vsKeys.length > 1) doneMsg = t("seller_wait_other_shops").replace("{n}", vsReady).replace("{t}", vsKeys.length);
+      else if (!o2.livreurId && o2.status === "Prête") doneMsg = t("seller_wait_courier");
+      else doneMsg = t("seller_prep_done");
+      html += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:8px"><i class="fa-solid fa-circle-check" style="color:var(--success)"></i> ' + doneMsg + '</div>';
     } else if (["Livrée", "Annulée", "Non livrable", "Refusée au retrait"].indexOf(o2.status) !== -1) {
       // La commande dans son ensemble est déjà terminée (annulée par
       // l'acheteur, par exemple) — même si CE vendeur n'avait encore rien
@@ -28774,6 +28789,22 @@ function renderAgentSourcing() {
   return html;
 }
 
+// Commande à plusieurs boutiques encore en attente : quelles boutiques
+// ont déjà validé, lesquelles pas encore (le livreur sait pourquoi elle attend).
+function livreurPendingShopsLine(p) {
+  var vs = p.vendorStatuses || {};
+  var keys = Object.keys(vs);
+  if (keys.length < 2) return '';
+  var parts = keys.map(function(k) {
+    var shop = (p.pickupShops || []).find(function(x) { return x && x.sellerId === k; });
+    var it = (p.items || []).find(function(x) { return x && x.sellerId === k; });
+    var acc = (state.accounts || []).find(function(a) { return a.id === k; });
+    var name = (shop && shop.shopName) || (it && it.sellerName) || (acc && (acc.shopName || acc.name)) || "?";
+    var st = vs[k];
+    return esc(name) + ' ' + (st === "Prête" ? '<span style="color:var(--success);">✓</span>' : (st === "Refusée" || st === "Annulée" ? '<span style="color:var(--danger);">✗</span>' : '⏳'));
+  });
+  return '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">' + parts.join(' · ') + '</div>';
+}
 function renderLivreur() {
   var pending = [];
   var toDeliver = [];
@@ -28856,7 +28887,7 @@ function renderLivreur() {
       var p = pending[k];
       var pendingExpanded = state.expandedPendingLivreurOrder === p.id;
       html += '<div class="card-row" style="opacity:0.85;cursor:pointer;flex-direction:column;align-items:stretch;" data-action="toggle-pending-livreur-order" data-value="' + p.id + '">';
-      html += '<div style="display:flex;align-items:center;gap:10px;"><div class="emoji-thumb"><i class="fa-solid fa-clock"></i></div><div style="flex:1"><div style="font-weight:700;font-size:13px">#' + p.id.slice(-5).toUpperCase() + ' — ' + p.city + '</div><div style="font-size:11.5px;color:var(--text-dim)">' + p.items.length + ' ' + t("livreur_items_count") + '</div></div><i class="fa-solid ' + (pendingExpanded ? 'fa-chevron-up' : 'fa-chevron-down') + '" style="color:var(--text-dim);"></i></div>';
+      html += '<div style="display:flex;align-items:center;gap:10px;"><div class="emoji-thumb"><i class="fa-solid fa-clock"></i></div><div style="flex:1"><div style="font-weight:700;font-size:13px">#' + p.id.slice(-5).toUpperCase() + ' — ' + p.city + '</div><div style="font-size:11.5px;color:var(--text-dim)">' + p.items.length + ' ' + t("livreur_items_count") + '</div>' + livreurPendingShopsLine(p) + '</div><i class="fa-solid ' + (pendingExpanded ? 'fa-chevron-up' : 'fa-chevron-down') + '" style="color:var(--text-dim);"></i></div>';
       if (pendingExpanded) {
         html += '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border-color);">';
         for (var pk = 0; pk < p.items.length; pk++) {
