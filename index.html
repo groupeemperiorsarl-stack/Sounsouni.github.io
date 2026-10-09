@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-09-b";
+    window.SOUNSOUNI_VERSION = "2026-10-09-e";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -5373,6 +5373,21 @@ function flushPendingSyncQueue(manual) {
         .then(readServerJson)
         .then(function(res) { if (res.success) ordersSent = true; return { error: res.success ? null : (res.error || "order_write_failed"), detail: res.detail }; })
         .catch(function(err) { return { error: "network_error", detail: String((err && err.message) || err) }; });
+    } else if (entry.collection === "notifications" && entry.type !== "delete") {
+      // La base refuse l'écriture directe des notifications (verrouillage de
+      // sécurité) : elles passent par la fonction serveur social-write.
+      // Avant, elles restaient bloquées ici pour toujours — le vendeur ne
+      // recevait jamais « nouvelle commande ».
+      var nd = entry.data || {};
+      request = secureSocialWrite({ operation: "create_notification", notification: nd }, null).then(function(res) {
+        if (res && res.success && nd.read && state.profile && nd.userId === state.profile.id) secureSocialWrite({ operation: "mark_notifications_read", ids: [nd.id] }, null);
+        if (res && res.success) return { error: null };
+        if (res && res.fallback) return { error: res.error ? "network_error" : "session_required" };
+        var e = (res && res.error) || "social_write_failed";
+        // Refus définitif (destinataire supprimé, message vide...) : inutile d'insister.
+        if (["unknown_user", "invalid_id", "invalid_message", "invalid_user", "broadcast_admin_only"].indexOf(e) !== -1) { pushDebugLog("info", "Notification abandonnée", nd.id + " — " + e); return { error: null }; }
+        return { error: e, detail: res && res.detail };
+      });
     } else if (["wallets", "earningsLedgers", "savedAddresses", "orderContacts"].indexOf(entry.collection) !== -1) {
       // Ces collections ne devraient plus jamais atterrir ici du tout
       // (tous leurs points d'entrée passent déjà par une fonction
@@ -9339,6 +9354,7 @@ function convertForDisplay(amount, fromCountry, toCountry) {
 // jamais les deux valeurs à la fois (l'originale ET la convertie) :
 // seule celle qui est utile à cette personne, dans sa propre devise.
 function displayAmount(n, itemCountry, viewerCountry) {
+  n = Number(n); if (!isFinite(n)) n = 0; // un montant absent ne s'affiche jamais « NaN »
   itemCountry = itemCountry || "Mali"; // voir money() ci-dessous pour le pourquoi de ce repli
   var itemCur = currencyForCountry(itemCountry);
   if (!viewerCountry || itemCountry === viewerCountry) {
@@ -9718,7 +9734,7 @@ function secureSocialWrite(payload, fallbackFn, useAdminToken) {
   return fetch(supabaseConfig.url + "/functions/v1/social-write", { method: "POST", headers: authHeaders({}, !!useAdminToken), body: JSON.stringify(payload) })
     .then(function(r) {
       if (r.status === 404) { if (fallbackFn) fallbackFn(); return { success: false, fallback: true }; }
-      return r.json().then(function(res) {
+      return readServerJson(r).then(function(res) {
         if (!res.success) { try { pushDebugLog("error", "social-write refusé : " + payload.operation, JSON.stringify(res)); } catch (e) {} }
         return res;
       });
@@ -9730,7 +9746,7 @@ function addNotification(channel, message, userId, target) {
   var notif = { id: uid(), channel: channel, message: message, userId: userId || null, time: Date.now(), read: false, target: target || null };
   state.notifications.unshift(notif);
   save();
-  secureSocialWrite({ operation: "create_notification", notification: notif }, function() { saveDoc("notifications", notif); });
+  secureSocialWrite({ operation: "create_notification", notification: notif }, function() { queuePendingSync("notifications", notif); });
   triggerPushNotification(userId, message);
 }
 
@@ -10256,6 +10272,9 @@ const TRANSLATIONS = {
     livreur_return_wait_seller: "Le vendeur confirmera la réception.",
     seller_returns_title: "Retours en route vers vous",
     seller_return_received_btn: "J'ai reçu le retour",
+    livreur_shop_ready: "prête",
+    livreur_to_collect: "À encaisser auprès du client",
+    livreur_shop_preparing: "en préparation",
     livreur_contact_after_pickup: "Le numéro et la position du client s'afficheront dès que vous prenez la commande en charge.",
     order_full_history: "Historique complet",
     rep_new: "Nouveau vendeur",
@@ -12014,6 +12033,9 @@ const TRANSLATIONS = {
     livreur_return_wait_seller: "The seller will confirm receipt.",
     seller_returns_title: "Returns on the way to you",
     seller_return_received_btn: "I received the return",
+    livreur_shop_ready: "ready",
+    livreur_to_collect: "To collect from the customer",
+    livreur_shop_preparing: "being prepared",
     livreur_contact_after_pickup: "The customer's number and location will appear as soon as you take charge of the order.",
     order_full_history: "Full history",
     rep_new: "New seller",
@@ -13772,6 +13794,9 @@ const TRANSLATIONS = {
     livreur_return_wait_seller: "विक्रेता प्राप्ति की पुष्टि करेगा।",
     seller_returns_title: "आपकी ओर आ रही वापसी",
     seller_return_received_btn: "मुझे वापसी मिल गई",
+    livreur_shop_ready: "तैयार",
+    livreur_to_collect: "ग्राहक से लेना है",
+    livreur_shop_preparing: "तैयार हो रहा है",
     livreur_contact_after_pickup: "ऑर्डर लेते ही ग्राहक का नंबर और स्थान दिखाई देगा।",
     order_full_history: "पूरा इतिहास",
     rep_new: "नया विक्रेता",
@@ -15751,7 +15776,7 @@ function mergeAccountsByPhone(primaryId) {
   });
   secureSocialWrite({ operation: "admin_merge_accounts", primaryId: primaryId, duplicateIds: mergeDupIds }, function() {
     mergeLocalConvs.forEach(function(c) { saveDoc("conversations", c); });
-    mergeLocalNotifs.forEach(function(n) { saveDoc("notifications", n); });
+    mergeLocalNotifs.forEach(function(n) { queuePendingSync("notifications", n); });
   }, true);
 
   state.boosts.forEach(function(bo) {
@@ -17193,7 +17218,7 @@ function setOrderStatus(orderId, status) {
     [2500, 6000, 12000].forEach(function(delay) {
       setTimeout(function() {
         var o = (state.orders || []).find(function(x) { return x.id === orderId; });
-        if (o && !(o.buyerPhone || o.contactPhone)) { try { fetchMyOrderContacts().then(function() { renderOrDefer(); }); } catch (e) {} }
+        if (o && !(o.buyerPhone || o.contactPhone)) { try { fetchMyOrderContacts().then(function() { renderOrDefer(); }); fetchMyOrderDetails([orderId]); } catch (e) {} }
       }, delay);
     });
   }
@@ -18322,6 +18347,15 @@ function secureOrderSaveDoc(order) {
         if (res.error === "session_required") noteSessionRejected();
         queuePendingSync("orders", cleaned);
         return false;
+      }
+      // Commande multi-boutiques : le serveur a vu que TOUTES les boutiques
+      // ont validé (même si ce téléphone ne le savait pas) → on prévient les livreurs.
+      if (res.promotedReady) {
+        var po = (state.orders || []).find(function(x) { return x.id === cleaned.id; });
+        if (po && po.status === "Nouvelle") logOrderStatusChange(po, "Prête");
+        var prMsg = "📦 Commande #" + cleaned.id.slice(-5).toUpperCase() + " prête à être récupérée.";
+        (state.accounts || []).forEach(function(acc) { if (acc.livreurApplicationStatus === "approved") addNotification("whatsapp", prMsg, acc.id, "livreur"); });
+        save(); renderOrDefer();
       }
       return true;
     })
@@ -21838,6 +21872,9 @@ function setupMarketInfiniteScroll() {
 
 function render() {
   window._renderTick = (window._renderTick || 0) + 1;
+  // Depuis le verrouillage, une commande peut arriver sans sa liste
+  // d'articles (rangée à part sur le serveur) : jamais de plantage d'écran.
+  (state.orders || []).forEach(function(o) { if (o && !Array.isArray(o.items)) o.items = []; });
   if (window._pendingProductLink && typeof _splashFinished !== "undefined" && _splashFinished) { try { openPendingProductLink(); } catch (e) {} }
   try { syncDiagnosticsMirror(); } catch (e) {}
   if (window.__bootMark && window._renderTick <= 6) window.__bootMark("affichage n°" + window._renderTick + " (" + state.view + (state.profile ? ", connecté" : ", visiteur") + ")");
@@ -28900,15 +28937,24 @@ function renderLivreur() {
       html += '<div style="font-size:11.5px;font-weight:700;color:var(--text-dim);margin-bottom:4px;"><i class="fa-solid fa-address-book"></i> ' + t("livreur_contacts") + '</div>';
       var orderContactPhone = o2.contactPhone || o2.buyerPhone;
       html += '<div style="font-size:12px;margin-bottom:2px;"><i class="fa-solid fa-user"></i> ' + esc(o2.buyerName) + ' ' + t("livreur_buyer_label") + (orderContactPhone ? ' — <a href="tel:' + esc(orderContactPhone) + '" style="color:var(--accent);font-weight:700;">' + esc(orderContactPhone) + '</a>' : '') + '</div>';
+      // Une ligne par boutique où récupérer — articles de la commande, puis
+      // liste des boutiques envoyée par le serveur (pickupShops : téléphone,
+      // adresse et GPS du vendeur, que la liste publique ne contient plus).
       var seenSellers2 = {};
-      for (var svi = 0; svi < o2.items.length; svi++) {
-        var svItem = o2.items[svi];
-        if (!svItem.sellerId || seenSellers2[svItem.sellerId]) continue;
-        seenSellers2[svItem.sellerId] = true;
+      var shopRows = [];
+      (o2.items || []).forEach(function(x) { if (x && x.sellerId && !seenSellers2[x.sellerId]) { seenSellers2[x.sellerId] = true; shopRows.push({ sellerId: x.sellerId, sellerName: x.sellerName }); } });
+      (o2.pickupShops || []).forEach(function(x) { if (x && x.sellerId && !seenSellers2[x.sellerId]) { seenSellers2[x.sellerId] = true; shopRows.push({ sellerId: x.sellerId, sellerName: x.shopName }); } });
+      (o2.sellerIds || []).forEach(function(sid) { if (sid && !seenSellers2[sid]) { seenSellers2[sid] = true; shopRows.push({ sellerId: sid, sellerName: "" }); } });
+      for (var svi = 0; svi < shopRows.length; svi++) {
+        var svItem = shopRows[svi];
         var svAcc = null;
         for (var svj = 0; svj < state.accounts.length; svj++) { if (state.accounts[svj].id === svItem.sellerId) { svAcc = state.accounts[svj]; break; } }
+        var svShop = (o2.pickupShops || []).find(function(x) { return x && x.sellerId === svItem.sellerId; }) || null;
+        if (svShop) svAcc = Object.assign({}, svAcc || {}, { shopName: svShop.shopName || (svAcc && svAcc.shopName), shopPhone: svShop.phone || (svAcc && (svAcc.shopPhone || svAcc.phone)), shopAddress: svShop.shopAddress || (svAcc && svAcc.shopAddress), shopLat: svShop.shopLat != null ? svShop.shopLat : (svAcc && svAcc.shopLat), shopLng: svShop.shopLng != null ? svShop.shopLng : (svAcc && svAcc.shopLng) });
         var svPhone = svAcc ? (svAcc.shopPhone || svAcc.phone) : null;
-        html += '<div style="font-size:12px;"><i class="fa-solid fa-store"></i> ' + esc(svItem.sellerName || (svAcc ? svAcc.shopName : '')) + ' ' + t("livreur_seller_label") + (svPhone ? ' — <a href="tel:' + esc(svPhone) + '" style="color:var(--accent);font-weight:700;">' + esc(svPhone) + '</a>' : '') + '</div>';
+        var svVs = o2.vendorStatuses && o2.vendorStatuses[svItem.sellerId];
+        var svBadge = shopRows.length > 1 && svVs ? (svVs === "Prête" ? ' <span style="color:var(--success);font-weight:700;">✓ ' + t("livreur_shop_ready") + '</span>' : (svVs === "Nouvelle" ? ' <span style="color:var(--text-dim);">⏳ ' + t("livreur_shop_preparing") + '</span>' : '')) : '';
+        html += '<div style="font-size:12px;"><i class="fa-solid fa-store"></i> ' + esc(svItem.sellerName || (svAcc ? svAcc.shopName : '')) + ' ' + t("livreur_seller_label") + (svPhone ? ' — <a href="tel:' + esc(svPhone) + '" style="color:var(--accent);font-weight:700;">' + esc(svPhone) + '</a>' : '') + svBadge + '</div>';
         if (svAcc && svAcc.shopAddress) {
           html += '<div style="font-size:11px;color:var(--text-dim);margin:0 0 4px 20px;"><i class="fa-solid fa-location-dot"></i> ' + esc(svAcc.shopAddress) + (svAcc.shopLat && svAcc.shopLng ? ' · <a href="https://www.google.com/maps?q=' + svAcc.shopLat + ',' + svAcc.shopLng + '" target="_blank" style="color:var(--accent);font-weight:700;">' + t("livreur_map_short") + '</a>' : '') + '</div>';
         }
@@ -28923,8 +28969,7 @@ function renderLivreur() {
         }
       }
       html += '</div>';
-      html += renderOrderStatusHistory(o2);
-      for (var m = 0; m < o2.items.length; m++) {
+      for (var m = 0; m < (o2.items || []).length; m++) {
         var it = o2.items[m];
         var itProd = null;
         for (var ip = 0; ip < state.products.length; ip++) { if (state.products[ip].id === it.productId) { itProd = state.products[ip]; break; } }
@@ -28937,7 +28982,7 @@ function renderLivreur() {
         html += '<div style="font-size:13px;flex:1;">' + it.qty + '× ' + esc(orderItemName(it)) + itemVariant(it) + (itProd && itProd.description ? '<div style="font-size:10.5px;color:var(--text-dim);">' + esc(itProd.description.slice(0,60)) + (itProd.description.length > 60 ? '…' : '') + '</div>' : '') + (itProd ? '<button class="link-btn" style="font-size:10px;padding:0;margin-top:2px;" data-action="open-product" data-value="' + itProd.id + '">' + t("livreur_view_full_product") + ' <i class="fa-solid fa-arrow-up-right-from-square"></i></button>' : '') + '</div>';
         html += '</div>';
       }
-      if (o2.otp && o2.status !== "Livrée") {
+      if (o2.otp && o2.livreurId === state.profile.id && (o2.status === "Récupérée" || o2.status === "En route")) {
         html += '<div style="margin-top:8px;padding:10px;background:var(--bg-body);border-radius:10px;">';
         html += '<div style="font-size:11px;font-weight:700;color:var(--text-dim);margin-bottom:4px;">' + t("livreur_enter_otp") + '</div>';
         html += '<div style="display:flex;gap:8px;">';
@@ -28953,12 +28998,20 @@ function renderLivreur() {
         html += '</div>';
       }
       html += '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:13px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border-color)"><span>' + t("livreur_delivery_earning") + '</span><span style="color:var(--accent)">' + money(o2.deliveryFee) + '</span></div>';
+      // Paiement à la livraison : le livreur doit savoir combien demander au client.
+      if (o2.deliveryMode !== "relais" && typeof o2.total === "number" && o2.paymentStatus !== "paid") {
+        html += '<div style="display:flex;justify-content:space-between;font-weight:800;font-size:13px;margin-top:4px;"><span><i class="fa-solid fa-money-bill-wave"></i> ' + t("livreur_to_collect") + '</span><span>' + money(o2.total, o2.country) + '</span></div>';
+      }
       if (o2.deliveryMode === "relais") {
         // Adresse complète, GPS cliquable et téléphone de la boutique de
         // retrait — avant, le livreur n'avait que son nom, sans aucun moyen
         // de savoir où elle se trouve exactement ni de la joindre.
         var relaisAccForLivreur = null;
         for (var rli = 0; rli < state.accounts.length; rli++) { if (state.accounts[rli].id === o2.relaisShopId) { relaisAccForLivreur = state.accounts[rli]; break; } }
+        if (o2.relaisShopInfo) {
+          var rsi2 = o2.relaisShopInfo;
+          relaisAccForLivreur = Object.assign({}, relaisAccForLivreur || {}, { commune: rsi2.commune || (relaisAccForLivreur && relaisAccForLivreur.commune), quartier: rsi2.quartier || (relaisAccForLivreur && relaisAccForLivreur.quartier), addressDetail: rsi2.addressDetail || (relaisAccForLivreur && relaisAccForLivreur.addressDetail), shopLat: rsi2.shopLat != null ? rsi2.shopLat : (relaisAccForLivreur && relaisAccForLivreur.shopLat), shopLng: rsi2.shopLng != null ? rsi2.shopLng : (relaisAccForLivreur && relaisAccForLivreur.shopLng), phone: rsi2.phone || (relaisAccForLivreur && relaisAccForLivreur.phone) });
+        }
         html += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:8px;padding:8px;background:var(--bg-body);border-radius:8px;">';
         html += '<i class="fa-solid fa-shop"></i> ' + t("livreur_pickup_at") + ' <strong>' + esc(o2.relaisShopName) + '</strong> — ' + t("livreur_relais_note");
         if (relaisAccForLivreur) {
@@ -28979,6 +29032,7 @@ function renderLivreur() {
       for (var n = 0; n < LIVREUR_STATUS_FLOW.length; n++) {
         var st = LIVREUR_STATUS_FLOW[n];
         if (o2.deliveryMode === "relais" && st === "Livrée") continue; // cette étape appartient à la boutique
+        if (st === "Prête") continue; // c'est le vendeur qui valide, pas le livreur
         if (st === "Livrée" && o2.otp) continue; // uniquement via la saisie du code OTP, plus haut sur la carte
         html += '<button class="' + (o2.status === st ? 'active' : '') + '" data-action="set-order-status" data-order="' + o2.id + '" data-value="' + st + '"><i class="fa-solid ' + STATUS_ICONS[st] + '"></i> ' + st + '</button>';
       }
@@ -29160,7 +29214,7 @@ function renderPointVente() {
 
   var totalEncaisse = 0, commissionDue = 0, commissionReglee = 0;
   for (var i = 0; i < livrees.length; i++) {
-    totalEncaisse += livrees[i].total;
+    totalEncaisse += Number(livrees[i].total) || 0;
     if (livrees[i].commissionSettled) commissionReglee += livrees[i].commissionAmount || 0;
     else commissionDue += livrees[i].commissionAmount || 0;
   }
@@ -37598,7 +37652,7 @@ root.addEventListener("click", function(e) {
       }
       if (readNotifIds.length) {
         secureSocialWrite({ operation: "mark_notifications_read", ids: readNotifIds }, function() {
-          readNotifDocs.forEach(function(n) { saveDoc("notifications", n); });
+          readNotifDocs.forEach(function(n) { queuePendingSync("notifications", n); });
         });
       }
       save();
