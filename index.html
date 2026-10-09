@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-05-a";
+    window.SOUNSOUNI_VERSION = "2026-10-09-b";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -5080,6 +5080,152 @@ const SHARED_KEYS = [
 // modifie que ce qu'il a le droit de modifier). Tant que la fonction n'est
 // pas déployée, repli sur l'écriture directe.
 var SECURE_WRITE_COLLECTIONS = ["accounts", "products", "settings", "nationalAdmins", "sourcingAgentWhitelist", "group2GlobalWhitelist", "apiPartners", "webhookPartners", "dashboardPartners", "platformCommissions", "vipAds"];
+// Lit la réponse d'une fonction serveur. Si ce n'est pas du JSON (fonction
+// plantée, limite atteinte...), on garde le vrai code HTTP et le début du
+// texte, au lieu d'un simple "network_error" qui ne dit rien.
+function readServerJson(r) {
+  return r.text().then(function(txt) {
+    try { var j = JSON.parse(txt); if (j && typeof j === "object" && !("httpStatus" in j)) j.httpStatus = r.status; return j; }
+    catch (e) { return { success: false, error: "http_" + r.status, detail: maskSecrets(String(txt || "").slice(0, 140)), httpStatus: r.status }; }
+  });
+}
+// Filet général : n'importe quelle fonction serveur (portefeuille,
+// messages, adresses...) qui refuse la clé du compte déclenche le
+// renouvellement — sans devoir modifier chaque appel un par un.
+(function() {
+  if (!window.fetch || window._snsFetchWrapped) return;
+  window._snsFetchWrapped = true;
+  var originalFetch = window.fetch;
+  window.fetch = function(input, opts) {
+    var p = originalFetch.apply(this, arguments);
+    try {
+      var url = String((input && input.url) || input || "");
+      if (url.indexOf("/functions/v1/") !== -1 && url.indexOf("verify-login") === -1) {
+        p.then(function(r) {
+          if (r.status !== 401) return;
+          r.clone().text().then(function(txt) {
+            if (txt.indexOf("session_required") === -1) return;
+            var hdrs = (opts && opts.headers) || {};
+            var sent = hdrs["X-Session-Token"] || hdrs["x-session-token"] || null;
+            if (!sent || sent === state.sessionToken) noteSessionRejected();
+          }).catch(function() {});
+        }).catch(function() {});
+      }
+    } catch (e) {}
+    return p;
+  };
+})();
+function networkFailure(err) {
+  return { success: false, error: "network_error", detail: String((err && err.message) || err || "") };
+}
+
+// ---------- CLÉ DE SESSION : renouvellement automatique ----------
+// La clé (jeton) prouve au serveur qui envoie une commande. Elle expire
+// après 30 jours. Avant, rien ne prévenait : le téléphone croyait que tout
+// partait, alors que le serveur refusait tout. Maintenant :
+//  1) une clé bientôt périmée (ou périmée) est renouvelée en silence ;
+//  2) si c'est impossible, on demande de se reconnecter (mot de passe, ou
+//     nom + numéro pour un acheteur sans mot de passe) ;
+//  3) juste après, tout ce qui attendait repart tout seul.
+function decodeSessionToken(tok) {
+  try {
+    var p = String(tok || "").split(".")[0].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(decodeURIComponent(escape(atob(p + "===".slice((p.length + 3) % 4)))));
+  } catch (e) { return null; }
+}
+var _sessionCheckRunning = false, _sessionLastCheck = 0;
+function sessionHealth() {
+  if (!state.profile) return "none";
+  var p = decodeSessionToken(state.sessionToken);
+  if (!p || !p.accountId) return state.sessionToken ? "broken" : "missing";
+  if (p.accountId !== state.profile.id) return "other_account";
+  if (p.expiresAt < Date.now()) return "expired";
+  if (p.expiresAt - Date.now() < 5 * 86400000) return "expiring";
+  return "ok";
+}
+function afterSessionRestored() {
+  state.showReconnectSheet = false;
+  (state.pendingSyncQueue || []).forEach(function(e) { e.blocked = false; e.attempts = 0; });
+  save();
+  setTimeout(function() { flushPendingSyncQueue(true); }, 300);
+  setTimeout(function() { try { fetchMyOrderContacts(); fetchMyOrderDetails(); fetchMyWalletState(); } catch (e) {} }, 2500);
+  renderOrDefer();
+}
+function ensureFreshSession(force) {
+  if (!FIREBASE_ENABLED || !state.profile || state.adminUnlocked && !state.profile) return Promise.resolve(false);
+  var health = sessionHealth();
+  if (health === "ok" && !force) return Promise.resolve(true);
+  if (_sessionCheckRunning) return Promise.resolve(false);
+  if (!force && Date.now() - _sessionLastCheck < 60000) return Promise.resolve(false);
+  _sessionCheckRunning = true; _sessionLastCheck = Date.now();
+  var headers = { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey };
+  if (state.sessionToken) headers["X-Session-Token"] = state.sessionToken;
+  var tryRefresh = state.sessionToken && health !== "broken"
+    ? fetch(supabaseConfig.url + "/functions/v1/secure-write", { method: "POST", headers: headers, body: JSON.stringify({ operation: "refresh_session", accountId: state.profile.id }) }).then(readServerJson).catch(networkFailure)
+    : Promise.resolve({ success: false, error: "no_token" });
+  return tryRefresh.then(function(res) {
+    if (res.success && res.sessionToken) {
+      state.sessionToken = res.sessionToken;
+      pushDebugLog("info", "Clé de session renouvelée", "automatiquement (" + health + ")");
+      afterSessionRestored();
+      return true;
+    }
+    if (res.error === "network_error") return false; // pas de réseau : on réessaiera plus tard
+    pushDebugLog("error", "Clé de session refusée", health + " / " + (res.error || "?"));
+    return reconnectWithoutPassword();
+  }).finally(function() { _sessionCheckRunning = false; });
+}
+// Acheteur sans mot de passe : le serveur redonne une clé avec nom + numéro,
+// puis on lui fait créer un mot de passe. Sinon : fenêtre de reconnexion.
+function reconnectWithoutPassword() {
+  var p = state.profile;
+  if (!p) return Promise.resolve(false);
+  if (p.hasPassword) { state.showReconnectSheet = true; renderOrDefer(); return Promise.resolve(false); }
+  var digits = String(p.phone || "").replace(/\D/g, "");
+  return secureWrite("accounts", { operation: "find_account", name: String(p.name || "").trim(), phone: digits.slice(-8), fullPhone: p.phone || "" }).then(function(res) {
+    if (res && res.found && res.accountId === p.id && res.sessionToken) {
+      state.sessionToken = res.sessionToken;
+      pushDebugLog("info", "Clé de session renouvelée", "par nom + numéro (sans mot de passe)");
+      afterSessionRestored();
+      setTimeout(function() { requirePasswordSetup("afterReconnect"); }, 1200);
+      return true;
+    }
+    state.reconnectNeedsHelp = !!(res && res.needsHelp);
+    state.showReconnectSheet = true;
+    renderOrDefer();
+    return false;
+  }).catch(function() { return false; });
+}
+// Appelée dès qu'une fonction serveur répond "session_required".
+function noteSessionRejected() {
+  setTimeout(function() { ensureFreshSession(true); }, 200);
+}
+function renderReconnectSheet() {
+  if (!state.showReconnectSheet || !state.profile) return "";
+  var lang = state.language === "en" ? "en" : (state.language === "hi" ? "hi" : "fr");
+  var T = {
+    fr: { title: "Reconnectez-vous", text: "Pour votre sécurité, votre connexion doit être renouvelée. Vos commandes en attente partiront juste après.", pw: "Votre mot de passe", btn: "Me reconnecter", forgot: "Mot de passe oublié", help: "Ce compte a une boutique ou des gains. Pour le protéger, appelez Sounsouni au +223 93 01 01 23 pour le récupérer.", later: "Plus tard", bad: "Mot de passe incorrect." },
+    en: { title: "Please sign in again", text: "For your security, your connection must be renewed. Your waiting orders will be sent right after.", pw: "Your password", btn: "Sign in", forgot: "Forgot password", help: "This account has a shop or earnings. To protect it, call Sounsouni on +223 93 01 01 23 to recover it.", later: "Later", bad: "Wrong password." },
+    hi: { title: "फिर से लॉग इन करें", text: "आपकी सुरक्षा के लिए, आपका कनेक्शन नवीनीकृत होना चाहिए। आपके रुके हुए ऑर्डर तुरंत बाद भेजे जाएँगे।", pw: "आपका पासवर्ड", btn: "लॉग इन करें", forgot: "पासवर्ड भूल गए", help: "इस खाते में दुकान या कमाई है। इसे सुरक्षित रखने के लिए Sounsouni को +223 93 01 01 23 पर कॉल करें।", later: "बाद में", bad: "गलत पासवर्ड।" }
+  }[lang];
+  var html = '<div class="modal-overlay" style="z-index:9100;"><div class="modal-sheet">';
+  html += '<div style="font-weight:800;font-size:16px;margin-bottom:6px;"><i class="fa-solid fa-key"></i> ' + T.title + '</div>';
+  html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">' + T.text + '</div>';
+  html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;">' + esc(state.profile.name || "") + ' · ' + esc(state.profile.phone || "") + '</div>';
+  if (state.profile.hasPassword) {
+    html += '<input class="input" id="reconnect-password" type="password" placeholder="' + T.pw + '" autocomplete="current-password" />';
+    if (state.reconnectError) html += '<div style="color:var(--danger);font-size:12px;margin-top:6px;">' + T.bad + '</div>';
+    html += '<button class="btn-primary" style="width:100%;margin-top:12px;" data-action="reconnect-with-password"><i class="fa-solid fa-right-to-bracket"></i> ' + T.btn + '</button>';
+    html += '<button class="link-btn" style="width:100%;text-align:center;margin-top:10px;" data-action="open-forgot-password">' + T.forgot + '</button>';
+  } else {
+    html += '<div style="font-size:12.5px;background:rgba(255,170,0,0.12);border-radius:10px;padding:10px 12px;">' + (state.reconnectNeedsHelp ? T.help : T.text) + '</div>';
+    if (!state.reconnectNeedsHelp) html += '<button class="btn-primary" style="width:100%;margin-top:12px;" data-action="reconnect-retry"><i class="fa-solid fa-rotate"></i> ' + T.btn + '</button>';
+  }
+  html += '<button class="btn-secondary" style="width:100%;margin-top:10px;" data-action="reconnect-later">' + T.later + '</button>';
+  html += '</div></div>';
+  return html;
+}
+
 function secureWriteToken() {
   if (state.adminUnlocked && state.adminSessionToken) return state.adminSessionToken;
   return state.sessionToken || null;
@@ -5104,7 +5250,7 @@ function secureWrite(collectionName, payload) {
   return fetch(supabaseConfig.url + "/functions/v1/secure-write", { method: "POST", headers: headers, body: JSON.stringify(Object.assign({ collection: collectionName }, payload)) })
     .then(function(r) {
       if (r.status === 404) return { notDeployed: true };
-      return r.json().then(function(res) { res.httpStatus = r.status; return res; });
+      return readServerJson(r).then(function(res) { if (res.error === "session_required" && !state.adminUnlocked) noteSessionRejected(); return res; });
     });
 }
 
@@ -5114,6 +5260,7 @@ function saveDoc(collectionName, docData) {
     return secureWrite(collectionName, { operation: "save", doc: docData }).then(function(res) {
       if (res.notDeployed) return saveDocDirect(collectionName, docData);
       if (res.success) { if (res.doc) applyServerDoc(collectionName, res.doc); return; }
+      if (res.error === "session_required" && collectionName !== "settings") { queuePendingSync(collectionName, docData); return; }
       if (res.httpStatus === 403 || res.httpStatus === 401) {
         // Refus définitif (droits) : on ne réessaie pas, et on revient à la vérité du serveur.
         // Les réglages refusés (cache des taux de change, écrits par tous les
@@ -5183,7 +5330,8 @@ function queuePendingSync(collectionName, docData, type) {
   for (var i = 0; i < state.pendingSyncQueue.length; i++) {
     if (state.pendingSyncQueue[i].collection === collectionName && state.pendingSyncQueue[i].id === docData.id) { idx = i; break; }
   }
-  var entry = { collection: collectionName, id: docData.id, data: docData, type: type || "save", queuedAt: Date.now() };
+  var prev = idx === -1 ? null : state.pendingSyncQueue[idx];
+  var entry = { collection: collectionName, id: docData.id, data: docData, type: type || "save", queuedAt: prev ? prev.queuedAt : Date.now(), attempts: prev ? (prev.attempts || 0) : 0, lastError: prev ? prev.lastError : null };
   if (idx === -1) state.pendingSyncQueue.push(entry); else state.pendingSyncQueue[idx] = entry;
   save();
 }
@@ -5191,12 +5339,24 @@ function queuePendingSync(collectionName, docData, type) {
 // Réessaie d'envoyer tout ce qui est resté en attente — appelée dès que le
 // navigateur signale un retour de connexion, et par sécurité toutes les
 // 20 secondes (le signal "en ligne" n'est pas toujours fiable sur mobile).
-function flushPendingSyncQueue() {
+// Refus que renvoyer ne changera pas (sauf après une nouvelle clé) : on
+// arrête d'insister toutes les 20 s, mais l'entrée reste visible dans le
+// rapport de test avec sa raison, et le bouton « Renvoyer maintenant ».
+var PERMANENT_QUEUE_ERRORS = ["not_your_order", "not_linked_to_order", "missing_fields", "forbidden", "invalid_doc", "invalid_id", "admin_only"];
+var _queueFlushing = false;
+function flushPendingSyncQueue(manual) {
   if (!FIREBASE_ENABLED || !state.pendingSyncQueue || state.pendingSyncQueue.length === 0) return;
+  if (_queueFlushing) return;
+  if (sessionHealth() !== "ok" && sessionHealth() !== "expiring" && state.profile && !manual) { ensureFreshSession(); return; }
+  _queueFlushing = true;
+  var flushDone = 0, flushTotal = 0, sessionRejected = false, ordersSent = false;
+  function oneDone() { flushDone++; if (flushDone >= flushTotal) { _queueFlushing = false; save(); if (sessionRejected) noteSessionRejected(); if (ordersSent) setTimeout(function() { try { fetchMyOrderContacts(); } catch (e) {} }, 1500); } }
   // Volontairement PAS de vérification navigator.onLine ici non plus —
   // déjà peu fiable sur mobile (voir plus haut) ; chaque requête gère de
   // toute façon son propre échec sans rien casser si vraiment hors ligne.
-  var queue = state.pendingSyncQueue.slice();
+  var queue = state.pendingSyncQueue.filter(function(e) { return manual || !e.blocked; });
+  flushTotal = queue.length;
+  if (!flushTotal) { _queueFlushing = false; return; }
   queue.forEach(function(entry) {
     var request;
     if (entry.collection === "orders" && entry.type !== "delete") {
@@ -5210,9 +5370,9 @@ function flushPendingSyncQueue() {
         headers: authHeaders(),
         body: JSON.stringify({ docId: entry.id, data: entry.data, referralCode: currentReferralCode() })
       })
-        .then(function(r) { return r.json(); })
-        .then(function(res) { return { error: res.success ? null : (res.error || "order_write_failed") }; })
-        .catch(function(err) { return { error: err }; });
+        .then(readServerJson)
+        .then(function(res) { if (res.success) ordersSent = true; return { error: res.success ? null : (res.error || "order_write_failed"), detail: res.detail }; })
+        .catch(function(err) { return { error: "network_error", detail: String((err && err.message) || err) }; });
     } else if (["wallets", "earningsLedgers", "savedAddresses", "orderContacts"].indexOf(entry.collection) !== -1) {
       // Ces collections ne devraient plus jamais atterrir ici du tout
       // (tous leurs points d'entrée passent déjà par une fonction
@@ -5233,10 +5393,11 @@ function flushPendingSyncQueue() {
               : sb.from("app_data").upsert({ collection: entry.collection, id: entry.id, data: entry.data, updated_at: new Date().toISOString() }, { onConflict: "collection,id" });
           }
           if (res.success && res.doc) applyServerDoc(entry.collection, res.doc);
+          if (res.error === "session_required") return { error: "session_required" };
           // Un refus définitif (droits) retire aussi l'entrée de la file.
-          return { error: (res.success || res.httpStatus === 403 || res.httpStatus === 401) ? null : (res.error || "secure_write_failed") };
+          return { error: (res.success || res.httpStatus === 403 || res.httpStatus === 401) ? null : (res.error || "secure_write_failed"), detail: res.detail };
         })
-        .catch(function(err) { return { error: err }; });
+        .catch(function(err) { return { error: "network_error", detail: String((err && err.message) || err) }; });
     } else {
       request = entry.type === "delete"
         ? sb.from("app_data").delete().eq("collection", entry.collection).eq("id", entry.id)
@@ -5245,11 +5406,18 @@ function flushPendingSyncQueue() {
     request.then(function(res) {
       if (!res.error) {
         state.pendingSyncQueue = (state.pendingSyncQueue || []).filter(function(e) { return !(e.collection === entry.collection && e.id === entry.id); });
-        save();
         renderOrDefer();
+      } else {
+        var errTxt = typeof res.error === "string" ? res.error : (res.error && res.error.message) || "erreur";
+        entry.attempts = (entry.attempts || 0) + 1;
+        entry.lastError = errTxt + (res.detail ? " — " + String(res.detail).slice(0, 100) : "");
+        entry.lastTriedAt = Date.now();
+        if (errTxt === "session_required") sessionRejected = true;
+        if (PERMANENT_QUEUE_ERRORS.indexOf(errTxt) !== -1) entry.blocked = true;
       }
     })
-    .catch(function() {});
+    .catch(function() {})
+    .finally(oneDone);
   });
 }
 window.addEventListener("online", flushPendingSyncQueue);
@@ -5268,7 +5436,7 @@ function deleteRemoteDoc(collectionName, docId) {
   if (SECURE_WRITE_COLLECTIONS.indexOf(collectionName) !== -1) {
     secureWrite(collectionName, { operation: "delete", id: docId }).then(function(res) {
       if (res.notDeployed) return deleteRemoteDocDirect(collectionName, docId);
-      if (!res.success && res.httpStatus !== 403 && res.httpStatus !== 401) queuePendingSync(collectionName, { id: docId }, "delete");
+      if (!res.success && (res.error === "session_required" || (res.httpStatus !== 403 && res.httpStatus !== 401))) queuePendingSync(collectionName, { id: docId }, "delete");
     }).catch(function() { queuePendingSync(collectionName, { id: docId }, "delete"); });
     return;
   }
@@ -8214,6 +8382,203 @@ const COUNTRY_CODES = [
   { code: '+234', label: '🇳🇬 Nigeria', minDigits: 7, maxDigits: 10, country: 'Nigeria', currency: 'NGN' },
   { code: '+232', label: '🇸🇱 Sierra Leone', minDigits: 8, maxDigits: 8, country: 'Sierra Leone', currency: 'SLL' },
   { code: '+91', label: '🇮🇳 Inde', minDigits: 10, maxDigits: 10, country: 'Inde', currency: 'INR' },
+  // Tous les autres pays du monde (diaspora, vendeurs internationaux) — par ordre alphabétique.
+  { code: '+93', label: '🇦🇫 Afghanistan', minDigits: 9, maxDigits: 9, country: 'Afghanistan', currency: 'AFN' },
+  { code: '+27', label: '🇿🇦 Afrique du Sud', minDigits: 5, maxDigits: 10, country: 'Afrique du Sud', currency: 'ZAR' },
+  { code: '+355', label: '🇦🇱 Albanie', minDigits: 6, maxDigits: 9, country: 'Albanie', currency: 'ALL' },
+  { code: '+213', label: '🇩🇿 Algérie', minDigits: 8, maxDigits: 9, country: 'Algérie', currency: 'DZD' },
+  { code: '+49', label: '🇩🇪 Allemagne', minDigits: 4, maxDigits: 15, country: 'Allemagne', currency: 'EUR' },
+  { code: '+376', label: '🇦🇩 Andorre', minDigits: 6, maxDigits: 9, country: 'Andorre', currency: 'EUR' },
+  { code: '+244', label: '🇦🇴 Angola', minDigits: 9, maxDigits: 9, country: 'Angola', currency: 'AOA' },
+  { code: '+966', label: '🇸🇦 Arabie saoudite', minDigits: 9, maxDigits: 10, country: 'Arabie saoudite', currency: 'SAR' },
+  { code: '+54', label: '🇦🇷 Argentine', minDigits: 10, maxDigits: 11, country: 'Argentine', currency: 'ARS' },
+  { code: '+374', label: '🇦🇲 Arménie', minDigits: 8, maxDigits: 8, country: 'Arménie', currency: 'AMD' },
+  { code: '+297', label: '🇦🇼 Aruba', minDigits: 7, maxDigits: 7, country: 'Aruba', currency: 'AWG' },
+  { code: '+61', label: '🇦🇺 Australie', minDigits: 5, maxDigits: 12, country: 'Australie', currency: 'AUD' },
+  { code: '+43', label: '🇦🇹 Autriche', minDigits: 4, maxDigits: 13, country: 'Autriche', currency: 'EUR' },
+  { code: '+994', label: '🇦🇿 Azerbaïdjan', minDigits: 9, maxDigits: 9, country: 'Azerbaïdjan', currency: 'AZN' },
+  { code: '+973', label: '🇧🇭 Bahreïn', minDigits: 8, maxDigits: 8, country: 'Bahreïn', currency: 'BHD' },
+  { code: '+880', label: '🇧🇩 Bangladesh', minDigits: 6, maxDigits: 10, country: 'Bangladesh', currency: 'BDT' },
+  { code: '+32', label: '🇧🇪 Belgique', minDigits: 8, maxDigits: 9, country: 'Belgique', currency: 'EUR' },
+  { code: '+501', label: '🇧🇿 Belize', minDigits: 7, maxDigits: 11, country: 'Belize', currency: 'BZD' },
+  { code: '+229', label: '🇧🇯 Bénin', minDigits: 8, maxDigits: 10, country: 'Bénin', currency: 'XOF' },
+  { code: '+975', label: '🇧🇹 Bhoutan', minDigits: 7, maxDigits: 8, country: 'Bhoutan', currency: 'BTN' },
+  { code: '+375', label: '🇧🇾 Biélorussie', minDigits: 6, maxDigits: 11, country: 'Biélorussie', currency: 'BYN' },
+  { code: '+591', label: '🇧🇴 Bolivie', minDigits: 8, maxDigits: 9, country: 'Bolivie', currency: 'BOB' },
+  { code: '+387', label: '🇧🇦 Bosnie-Herzégovine', minDigits: 8, maxDigits: 9, country: 'Bosnie-Herzégovine', currency: 'BAM' },
+  { code: '+267', label: '🇧🇼 Botswana', minDigits: 7, maxDigits: 10, country: 'Botswana', currency: 'BWP' },
+  { code: '+55', label: '🇧🇷 Brésil', minDigits: 8, maxDigits: 11, country: 'Brésil', currency: 'BRL' },
+  { code: '+673', label: '🇧🇳 Brunei', minDigits: 7, maxDigits: 7, country: 'Brunei', currency: 'BND' },
+  { code: '+359', label: '🇧🇬 Bulgarie', minDigits: 6, maxDigits: 12, country: 'Bulgarie', currency: 'EUR' },
+  { code: '+257', label: '🇧🇮 Burundi', minDigits: 8, maxDigits: 8, country: 'Burundi', currency: 'BIF' },
+  { code: '+855', label: '🇰🇭 Cambodge', minDigits: 8, maxDigits: 10, country: 'Cambodge', currency: 'KHR' },
+  { code: '+237', label: '🇨🇲 Cameroun', minDigits: 8, maxDigits: 9, country: 'Cameroun', currency: 'XAF' },
+  { code: '+238', label: '🇨🇻 Cap-Vert', minDigits: 7, maxDigits: 7, country: 'Cap-Vert', currency: 'CVE' },
+  { code: '+56', label: '🇨🇱 Chili', minDigits: 9, maxDigits: 11, country: 'Chili', currency: 'CLP' },
+  { code: '+86', label: '🇨🇳 Chine', minDigits: 7, maxDigits: 12, country: 'Chine', currency: 'CNY' },
+  { code: '+357', label: '🇨🇾 Chypre', minDigits: 8, maxDigits: 8, country: 'Chypre', currency: 'EUR' },
+  { code: '+57', label: '🇨🇴 Colombie', minDigits: 8, maxDigits: 11, country: 'Colombie', currency: 'COP' },
+  { code: '+269', label: '🇰🇲 Comores', minDigits: 7, maxDigits: 7, country: 'Comores', currency: 'KMF' },
+  { code: '+242', label: '🇨🇬 Congo-Brazzaville', minDigits: 9, maxDigits: 9, country: 'Congo-Brazzaville', currency: 'XAF' },
+  { code: '+243', label: '🇨🇩 Congo-Kinshasa', minDigits: 7, maxDigits: 10, country: 'Congo-Kinshasa', currency: 'CDF' },
+  { code: '+850', label: '🇰🇵 Corée du Nord', minDigits: 8, maxDigits: 10, country: 'Corée du Nord', currency: 'KPW' },
+  { code: '+82', label: '🇰🇷 Corée du Sud', minDigits: 5, maxDigits: 14, country: 'Corée du Sud', currency: 'KRW' },
+  { code: '+506', label: '🇨🇷 Costa Rica', minDigits: 8, maxDigits: 10, country: 'Costa Rica', currency: 'CRC' },
+  { code: '+385', label: '🇭🇷 Croatie', minDigits: 7, maxDigits: 9, country: 'Croatie', currency: 'EUR' },
+  { code: '+53', label: '🇨🇺 Cuba', minDigits: 6, maxDigits: 10, country: 'Cuba', currency: 'CUP' },
+  { code: '+599', label: '🇨🇼 Curaçao', minDigits: 7, maxDigits: 8, country: 'Curaçao', currency: 'XCG' },
+  { code: '+45', label: '🇩🇰 Danemark', minDigits: 8, maxDigits: 8, country: 'Danemark', currency: 'DKK' },
+  { code: '+253', label: '🇩🇯 Djibouti', minDigits: 8, maxDigits: 8, country: 'Djibouti', currency: 'DJF' },
+  { code: '+20', label: '🇪🇬 Égypte', minDigits: 8, maxDigits: 10, country: 'Égypte', currency: 'EGP' },
+  { code: '+971', label: '🇦🇪 Émirats arabes unis', minDigits: 5, maxDigits: 12, country: 'Émirats arabes unis', currency: 'AED' },
+  { code: '+593', label: '🇪🇨 Équateur', minDigits: 8, maxDigits: 11, country: 'Équateur', currency: 'USD' },
+  { code: '+291', label: '🇪🇷 Érythrée', minDigits: 7, maxDigits: 7, country: 'Érythrée', currency: 'ERN' },
+  { code: '+34', label: '🇪🇸 Espagne', minDigits: 9, maxDigits: 9, country: 'Espagne', currency: 'EUR' },
+  { code: '+372', label: '🇪🇪 Estonie', minDigits: 7, maxDigits: 10, country: 'Estonie', currency: 'EUR' },
+  { code: '+268', label: '🇸🇿 Eswatini', minDigits: 8, maxDigits: 9, country: 'Eswatini', currency: 'SZL' },
+  { code: '+1', label: '🇺🇸 États-Unis / Canada', minDigits: 7, maxDigits: 10, country: 'États-Unis', currency: 'USD' },
+  { code: '+251', label: '🇪🇹 Éthiopie', minDigits: 9, maxDigits: 9, country: 'Éthiopie', currency: 'ETB' },
+  { code: '+679', label: '🇫🇯 Fidji', minDigits: 7, maxDigits: 11, country: 'Fidji', currency: 'FJD' },
+  { code: '+358', label: '🇫🇮 Finlande', minDigits: 5, maxDigits: 12, country: 'Finlande', currency: 'EUR' },
+  { code: '+33', label: '🇫🇷 France', minDigits: 9, maxDigits: 9, country: 'France', currency: 'EUR' },
+  { code: '+241', label: '🇬🇦 Gabon', minDigits: 7, maxDigits: 8, country: 'Gabon', currency: 'XAF' },
+  { code: '+995', label: '🇬🇪 Géorgie', minDigits: 9, maxDigits: 9, country: 'Géorgie', currency: 'GEL' },
+  { code: '+233', label: '🇬🇭 Ghana', minDigits: 8, maxDigits: 9, country: 'Ghana', currency: 'GHS' },
+  { code: '+350', label: '🇬🇮 Gibraltar', minDigits: 8, maxDigits: 8, country: 'Gibraltar', currency: 'GIP' },
+  { code: '+30', label: '🇬🇷 Grèce', minDigits: 10, maxDigits: 12, country: 'Grèce', currency: 'EUR' },
+  { code: '+299', label: '🇬🇱 Groenland', minDigits: 6, maxDigits: 6, country: 'Groenland', currency: 'DKK' },
+  { code: '+590', label: '🇬🇵 Guadeloupe', minDigits: 9, maxDigits: 9, country: 'Guadeloupe', currency: 'EUR' },
+  { code: '+502', label: '🇬🇹 Guatemala', minDigits: 8, maxDigits: 11, country: 'Guatemala', currency: 'GTQ' },
+  { code: '+240', label: '🇬🇶 Guinée équatoriale', minDigits: 9, maxDigits: 9, country: 'Guinée équatoriale', currency: 'XAF' },
+  { code: '+245', label: '🇬🇼 Guinée-Bissau', minDigits: 7, maxDigits: 9, country: 'Guinée-Bissau', currency: 'XOF' },
+  { code: '+592', label: '🇬🇾 Guyana', minDigits: 7, maxDigits: 7, country: 'Guyana', currency: 'GYD' },
+  { code: '+594', label: '🇬🇫 Guyane française', minDigits: 9, maxDigits: 9, country: 'Guyane française', currency: 'EUR' },
+  { code: '+509', label: '🇭🇹 Haïti', minDigits: 8, maxDigits: 8, country: 'Haïti', currency: 'HTG' },
+  { code: '+504', label: '🇭🇳 Honduras', minDigits: 8, maxDigits: 11, country: 'Honduras', currency: 'HNL' },
+  { code: '+36', label: '🇭🇺 Hongrie', minDigits: 8, maxDigits: 9, country: 'Hongrie', currency: 'HUF' },
+  { code: '+247', label: '🇦🇨 Île de l\'Ascension', minDigits: 5, maxDigits: 6, country: 'Île de l\'Ascension', currency: 'USD' },
+  { code: '+672', label: '🇳🇫 Île Norfolk', minDigits: 6, maxDigits: 6, country: 'Île Norfolk', currency: 'AUD' },
+  { code: '+682', label: '🇨🇰 Îles Cook', minDigits: 5, maxDigits: 5, country: 'Îles Cook', currency: 'NZD' },
+  { code: '+298', label: '🇫🇴 Îles Féroé', minDigits: 6, maxDigits: 6, country: 'Îles Féroé', currency: 'DKK' },
+  { code: '+500', label: '🇫🇰 Îles Malouines', minDigits: 5, maxDigits: 5, country: 'Îles Malouines', currency: 'FKP' },
+  { code: '+692', label: '🇲🇭 Îles Marshall', minDigits: 7, maxDigits: 7, country: 'Îles Marshall', currency: 'USD' },
+  { code: '+677', label: '🇸🇧 Îles Salomon', minDigits: 5, maxDigits: 7, country: 'Îles Salomon', currency: 'SBD' },
+  { code: '+62', label: '🇮🇩 Indonésie', minDigits: 7, maxDigits: 17, country: 'Indonésie', currency: 'IDR' },
+  { code: '+964', label: '🇮🇶 Irak', minDigits: 8, maxDigits: 10, country: 'Irak', currency: 'IQD' },
+  { code: '+98', label: '🇮🇷 Iran', minDigits: 4, maxDigits: 10, country: 'Iran', currency: 'IRR' },
+  { code: '+353', label: '🇮🇪 Irlande', minDigits: 7, maxDigits: 10, country: 'Irlande', currency: 'EUR' },
+  { code: '+354', label: '🇮🇸 Islande', minDigits: 7, maxDigits: 9, country: 'Islande', currency: 'ISK' },
+  { code: '+972', label: '🇮🇱 Israël', minDigits: 7, maxDigits: 12, country: 'Israël', currency: 'ILS' },
+  { code: '+39', label: '🇮🇹 Italie', minDigits: 6, maxDigits: 12, country: 'Italie', currency: 'EUR' },
+  { code: '+81', label: '🇯🇵 Japon', minDigits: 8, maxDigits: 17, country: 'Japon', currency: 'JPY' },
+  { code: '+962', label: '🇯🇴 Jordanie', minDigits: 8, maxDigits: 9, country: 'Jordanie', currency: 'JOD' },
+  { code: '+254', label: '🇰🇪 Kenya', minDigits: 7, maxDigits: 10, country: 'Kenya', currency: 'KES' },
+  { code: '+996', label: '🇰🇬 Kirghizstan', minDigits: 9, maxDigits: 10, country: 'Kirghizstan', currency: 'KGS' },
+  { code: '+686', label: '🇰🇮 Kiribati', minDigits: 5, maxDigits: 8, country: 'Kiribati', currency: 'AUD' },
+  { code: '+383', label: '🇽🇰 Kosovo', minDigits: 8, maxDigits: 12, country: 'Kosovo', currency: 'EUR' },
+  { code: '+965', label: '🇰🇼 Koweït', minDigits: 7, maxDigits: 8, country: 'Koweït', currency: 'KWD' },
+  { code: '+262', label: '🇷🇪 La Réunion', minDigits: 9, maxDigits: 9, country: 'La Réunion', currency: 'EUR' },
+  { code: '+856', label: '🇱🇦 Laos', minDigits: 8, maxDigits: 10, country: 'Laos', currency: 'LAK' },
+  { code: '+266', label: '🇱🇸 Lesotho', minDigits: 8, maxDigits: 8, country: 'Lesotho', currency: 'LSL' },
+  { code: '+371', label: '🇱🇻 Lettonie', minDigits: 8, maxDigits: 8, country: 'Lettonie', currency: 'EUR' },
+  { code: '+961', label: '🇱🇧 Liban', minDigits: 7, maxDigits: 8, country: 'Liban', currency: 'LBP' },
+  { code: '+231', label: '🇱🇷 Liberia', minDigits: 7, maxDigits: 9, country: 'Liberia', currency: 'LRD' },
+  { code: '+218', label: '🇱🇾 Libye', minDigits: 9, maxDigits: 9, country: 'Libye', currency: 'LYD' },
+  { code: '+423', label: '🇱🇮 Liechtenstein', minDigits: 7, maxDigits: 9, country: 'Liechtenstein', currency: 'CHF' },
+  { code: '+370', label: '🇱🇹 Lituanie', minDigits: 8, maxDigits: 8, country: 'Lituanie', currency: 'EUR' },
+  { code: '+352', label: '🇱🇺 Luxembourg', minDigits: 4, maxDigits: 11, country: 'Luxembourg', currency: 'EUR' },
+  { code: '+389', label: '🇲🇰 Macédoine du Nord', minDigits: 8, maxDigits: 8, country: 'Macédoine du Nord', currency: 'MKD' },
+  { code: '+261', label: '🇲🇬 Madagascar', minDigits: 9, maxDigits: 9, country: 'Madagascar', currency: 'MGA' },
+  { code: '+60', label: '🇲🇾 Malaisie', minDigits: 8, maxDigits: 10, country: 'Malaisie', currency: 'MYR' },
+  { code: '+265', label: '🇲🇼 Malawi', minDigits: 7, maxDigits: 9, country: 'Malawi', currency: 'MWK' },
+  { code: '+960', label: '🇲🇻 Maldives', minDigits: 7, maxDigits: 10, country: 'Maldives', currency: 'MVR' },
+  { code: '+356', label: '🇲🇹 Malte', minDigits: 8, maxDigits: 8, country: 'Malte', currency: 'EUR' },
+  { code: '+212', label: '🇲🇦 Maroc', minDigits: 9, maxDigits: 9, country: 'Maroc', currency: 'MAD' },
+  { code: '+596', label: '🇲🇶 Martinique', minDigits: 9, maxDigits: 9, country: 'Martinique', currency: 'EUR' },
+  { code: '+230', label: '🇲🇺 Maurice', minDigits: 7, maxDigits: 10, country: 'Maurice', currency: 'MUR' },
+  { code: '+222', label: '🇲🇷 Mauritanie', minDigits: 8, maxDigits: 8, country: 'Mauritanie', currency: 'MRU' },
+  { code: '+52', label: '🇲🇽 Mexique', minDigits: 10, maxDigits: 10, country: 'Mexique', currency: 'MXN' },
+  { code: '+691', label: '🇫🇲 Micronésie', minDigits: 7, maxDigits: 7, country: 'Micronésie', currency: 'USD' },
+  { code: '+373', label: '🇲🇩 Moldavie', minDigits: 8, maxDigits: 8, country: 'Moldavie', currency: 'MDL' },
+  { code: '+377', label: '🇲🇨 Monaco', minDigits: 8, maxDigits: 9, country: 'Monaco', currency: 'EUR' },
+  { code: '+976', label: '🇲🇳 Mongolie', minDigits: 8, maxDigits: 10, country: 'Mongolie', currency: 'MNT' },
+  { code: '+382', label: '🇲🇪 Monténégro', minDigits: 8, maxDigits: 9, country: 'Monténégro', currency: 'EUR' },
+  { code: '+258', label: '🇲🇿 Mozambique', minDigits: 8, maxDigits: 9, country: 'Mozambique', currency: 'MZN' },
+  { code: '+95', label: '🇲🇲 Myanmar (Birmanie)', minDigits: 6, maxDigits: 10, country: 'Myanmar (Birmanie)', currency: 'MMK' },
+  { code: '+264', label: '🇳🇦 Namibie', minDigits: 8, maxDigits: 9, country: 'Namibie', currency: 'NAD' },
+  { code: '+674', label: '🇳🇷 Nauru', minDigits: 7, maxDigits: 7, country: 'Nauru', currency: 'AUD' },
+  { code: '+977', label: '🇳🇵 Népal', minDigits: 8, maxDigits: 11, country: 'Népal', currency: 'NPR' },
+  { code: '+505', label: '🇳🇮 Nicaragua', minDigits: 8, maxDigits: 8, country: 'Nicaragua', currency: 'NIO' },
+  { code: '+683', label: '🇳🇺 Niue', minDigits: 4, maxDigits: 7, country: 'Niue', currency: 'NZD' },
+  { code: '+47', label: '🇳🇴 Norvège', minDigits: 5, maxDigits: 8, country: 'Norvège', currency: 'NOK' },
+  { code: '+687', label: '🇳🇨 Nouvelle-Calédonie', minDigits: 6, maxDigits: 6, country: 'Nouvelle-Calédonie', currency: 'XPF' },
+  { code: '+64', label: '🇳🇿 Nouvelle-Zélande', minDigits: 5, maxDigits: 10, country: 'Nouvelle-Zélande', currency: 'NZD' },
+  { code: '+968', label: '🇴🇲 Oman', minDigits: 7, maxDigits: 9, country: 'Oman', currency: 'OMR' },
+  { code: '+256', label: '🇺🇬 Ouganda', minDigits: 9, maxDigits: 9, country: 'Ouganda', currency: 'UGX' },
+  { code: '+998', label: '🇺🇿 Ouzbékistan', minDigits: 9, maxDigits: 9, country: 'Ouzbékistan', currency: 'UZS' },
+  { code: '+92', label: '🇵🇰 Pakistan', minDigits: 8, maxDigits: 12, country: 'Pakistan', currency: 'PKR' },
+  { code: '+680', label: '🇵🇼 Palaos', minDigits: 7, maxDigits: 7, country: 'Palaos', currency: 'USD' },
+  { code: '+507', label: '🇵🇦 Panama', minDigits: 7, maxDigits: 11, country: 'Panama', currency: 'PAB' },
+  { code: '+675', label: '🇵🇬 Papouasie-Nouvelle-Guinée', minDigits: 7, maxDigits: 8, country: 'Papouasie-Nouvelle-Guinée', currency: 'PGK' },
+  { code: '+595', label: '🇵🇾 Paraguay', minDigits: 6, maxDigits: 11, country: 'Paraguay', currency: 'PYG' },
+  { code: '+31', label: '🇳🇱 Pays-Bas', minDigits: 5, maxDigits: 11, country: 'Pays-Bas', currency: 'EUR' },
+  { code: '+51', label: '🇵🇪 Pérou', minDigits: 8, maxDigits: 9, country: 'Pérou', currency: 'PEN' },
+  { code: '+63', label: '🇵🇭 Philippines', minDigits: 6, maxDigits: 13, country: 'Philippines', currency: 'PHP' },
+  { code: '+48', label: '🇵🇱 Pologne', minDigits: 6, maxDigits: 10, country: 'Pologne', currency: 'PLN' },
+  { code: '+689', label: '🇵🇫 Polynésie française', minDigits: 6, maxDigits: 9, country: 'Polynésie française', currency: 'XPF' },
+  { code: '+351', label: '🇵🇹 Portugal', minDigits: 9, maxDigits: 9, country: 'Portugal', currency: 'EUR' },
+  { code: '+974', label: '🇶🇦 Qatar', minDigits: 7, maxDigits: 11, country: 'Qatar', currency: 'QAR' },
+  { code: '+852', label: '🇭🇰 R.A.S. chinoise de Hong Kong', minDigits: 5, maxDigits: 11, country: 'R.A.S. chinoise de Hong Kong', currency: 'HKD' },
+  { code: '+853', label: '🇲🇴 R.A.S. chinoise de Macao', minDigits: 7, maxDigits: 8, country: 'R.A.S. chinoise de Macao', currency: 'MOP' },
+  { code: '+236', label: '🇨🇫 République centrafricaine', minDigits: 8, maxDigits: 8, country: 'République centrafricaine', currency: 'XAF' },
+  { code: '+40', label: '🇷🇴 Roumanie', minDigits: 6, maxDigits: 9, country: 'Roumanie', currency: 'RON' },
+  { code: '+44', label: '🇬🇧 Royaume-Uni', minDigits: 7, maxDigits: 10, country: 'Royaume-Uni', currency: 'GBP' },
+  { code: '+7', label: '🇷🇺 Russie / Kazakhstan', minDigits: 10, maxDigits: 14, country: 'Russie', currency: 'RUB' },
+  { code: '+250', label: '🇷🇼 Rwanda', minDigits: 8, maxDigits: 9, country: 'Rwanda', currency: 'RWF' },
+  { code: '+378', label: '🇸🇲 Saint-Marin', minDigits: 8, maxDigits: 10, country: 'Saint-Marin', currency: 'EUR' },
+  { code: '+508', label: '🇵🇲 Saint-Pierre-et-Miquelon', minDigits: 6, maxDigits: 9, country: 'Saint-Pierre-et-Miquelon', currency: 'EUR' },
+  { code: '+290', label: '🇸🇭 Sainte-Hélène', minDigits: 4, maxDigits: 5, country: 'Sainte-Hélène', currency: 'SHP' },
+  { code: '+503', label: '🇸🇻 Salvador', minDigits: 7, maxDigits: 11, country: 'Salvador', currency: 'USD' },
+  { code: '+685', label: '🇼🇸 Samoa', minDigits: 5, maxDigits: 10, country: 'Samoa', currency: 'WST' },
+  { code: '+239', label: '🇸🇹 Sao Tomé-et-Principe', minDigits: 7, maxDigits: 7, country: 'Sao Tomé-et-Principe', currency: 'STN' },
+  { code: '+381', label: '🇷🇸 Serbie', minDigits: 6, maxDigits: 12, country: 'Serbie', currency: 'RSD' },
+  { code: '+248', label: '🇸🇨 Seychelles', minDigits: 7, maxDigits: 7, country: 'Seychelles', currency: 'SCR' },
+  { code: '+65', label: '🇸🇬 Singapour', minDigits: 8, maxDigits: 11, country: 'Singapour', currency: 'SGD' },
+  { code: '+421', label: '🇸🇰 Slovaquie', minDigits: 6, maxDigits: 9, country: 'Slovaquie', currency: 'EUR' },
+  { code: '+386', label: '🇸🇮 Slovénie', minDigits: 5, maxDigits: 8, country: 'Slovénie', currency: 'EUR' },
+  { code: '+252', label: '🇸🇴 Somalie', minDigits: 6, maxDigits: 9, country: 'Somalie', currency: 'SOS' },
+  { code: '+249', label: '🇸🇩 Soudan', minDigits: 9, maxDigits: 9, country: 'Soudan', currency: 'SDG' },
+  { code: '+211', label: '🇸🇸 Soudan du Sud', minDigits: 9, maxDigits: 9, country: 'Soudan du Sud', currency: 'SSP' },
+  { code: '+94', label: '🇱🇰 Sri Lanka', minDigits: 9, maxDigits: 9, country: 'Sri Lanka', currency: 'LKR' },
+  { code: '+46', label: '🇸🇪 Suède', minDigits: 6, maxDigits: 12, country: 'Suède', currency: 'SEK' },
+  { code: '+41', label: '🇨🇭 Suisse', minDigits: 9, maxDigits: 12, country: 'Suisse', currency: 'CHF' },
+  { code: '+597', label: '🇸🇷 Suriname', minDigits: 6, maxDigits: 7, country: 'Suriname', currency: 'SRD' },
+  { code: '+963', label: '🇸🇾 Syrie', minDigits: 8, maxDigits: 9, country: 'Syrie', currency: 'SYP' },
+  { code: '+992', label: '🇹🇯 Tadjikistan', minDigits: 9, maxDigits: 9, country: 'Tadjikistan', currency: 'TJS' },
+  { code: '+886', label: '🇹🇼 Taïwan', minDigits: 7, maxDigits: 11, country: 'Taïwan', currency: 'TWD' },
+  { code: '+255', label: '🇹🇿 Tanzanie', minDigits: 9, maxDigits: 9, country: 'Tanzanie', currency: 'TZS' },
+  { code: '+235', label: '🇹🇩 Tchad', minDigits: 8, maxDigits: 8, country: 'Tchad', currency: 'XAF' },
+  { code: '+420', label: '🇨🇿 Tchéquie', minDigits: 9, maxDigits: 12, country: 'Tchéquie', currency: 'CZK' },
+  { code: '+246', label: '🇮🇴 Territoire britannique de l\'océan Indien', minDigits: 7, maxDigits: 7, country: 'Territoire britannique de l\'océan Indien', currency: 'USD' },
+  { code: '+970', label: '🇵🇸 Territoires palestiniens', minDigits: 8, maxDigits: 10, country: 'Territoires palestiniens', currency: 'ILS' },
+  { code: '+66', label: '🇹🇭 Thaïlande', minDigits: 8, maxDigits: 13, country: 'Thaïlande', currency: 'THB' },
+  { code: '+670', label: '🇹🇱 Timor oriental', minDigits: 7, maxDigits: 8, country: 'Timor oriental', currency: 'USD' },
+  { code: '+228', label: '🇹🇬 Togo', minDigits: 8, maxDigits: 8, country: 'Togo', currency: 'XOF' },
+  { code: '+690', label: '🇹🇰 Tokelau', minDigits: 4, maxDigits: 7, country: 'Tokelau', currency: 'NZD' },
+  { code: '+676', label: '🇹🇴 Tonga', minDigits: 5, maxDigits: 7, country: 'Tonga', currency: 'TOP' },
+  { code: '+216', label: '🇹🇳 Tunisie', minDigits: 8, maxDigits: 8, country: 'Tunisie', currency: 'TND' },
+  { code: '+993', label: '🇹🇲 Turkménistan', minDigits: 8, maxDigits: 8, country: 'Turkménistan', currency: 'TMT' },
+  { code: '+90', label: '🇹🇷 Turquie', minDigits: 7, maxDigits: 13, country: 'Turquie', currency: 'TRY' },
+  { code: '+688', label: '🇹🇻 Tuvalu', minDigits: 5, maxDigits: 7, country: 'Tuvalu', currency: 'AUD' },
+  { code: '+380', label: '🇺🇦 Ukraine', minDigits: 9, maxDigits: 10, country: 'Ukraine', currency: 'UAH' },
+  { code: '+598', label: '🇺🇾 Uruguay', minDigits: 4, maxDigits: 13, country: 'Uruguay', currency: 'UYU' },
+  { code: '+678', label: '🇻🇺 Vanuatu', minDigits: 5, maxDigits: 7, country: 'Vanuatu', currency: 'VUV' },
+  { code: '+58', label: '🇻🇪 Venezuela', minDigits: 10, maxDigits: 10, country: 'Venezuela', currency: 'VES' },
+  { code: '+84', label: '🇻🇳 Viêt Nam', minDigits: 7, maxDigits: 10, country: 'Viêt Nam', currency: 'VND' },
+  { code: '+681', label: '🇼🇫 Wallis-et-Futuna', minDigits: 6, maxDigits: 9, country: 'Wallis-et-Futuna', currency: 'XPF' },
+  { code: '+967', label: '🇾🇪 Yémen', minDigits: 7, maxDigits: 9, country: 'Yémen', currency: 'YER' },
+  { code: '+260', label: '🇿🇲 Zambie', minDigits: 9, maxDigits: 9, country: 'Zambie', currency: 'ZMW' },
+  { code: '+263', label: '🇿🇼 Zimbabwe', minDigits: 7, maxDigits: 10, country: 'Zimbabwe', currency: 'ZWG' },
   { code: '+XXX', label: '🌍 Autre', minDigits: 7, maxDigits: 10, country: 'Autre', currency: 'XOF' },
 ];
 
@@ -8228,6 +8593,15 @@ const CFA_COUNTRIES = ['Mali', 'Sénégal', 'Côte d\'Ivoire', 'Burkina Faso', '
 // "+XXX" (Autre) est volontairement exclu : ce code couvre n'importe quel
 // pays non listé, donc potentiellement hors Afrique.
 const AFRICAN_COUNTRY_CODES = ['+223', '+221', '+225', '+226', '+224', '+227', '+220', '+234', '+232'];
+
+// Les gens à l'étranger tapent souvent leur numéro avec le 0 du pays
+// (ex : France 06 12 34 56 78) : on retire ce 0 devant l'indicatif.
+// Jamais pour les pays d'Afrique de l'Ouest déjà en place (inchangés).
+function stripTrunkZero(code, digits) {
+  digits = String(digits || "").replace(/\D/g, "");
+  if (isAfricanCountryCode(code) || code === "+XXX" || code === "+39" || code === "+229") return digits; // Italie, Bénin : le 0 fait partie du numéro
+  return digits.length > 6 && digits.charAt(0) === "0" ? digits.slice(1) : digits;
+}
 
 function isAfricanCountryCode(code) {
   return AFRICAN_COUNTRY_CODES.indexOf(code || '+223') !== -1;
@@ -8664,11 +9038,16 @@ let state = defaultState();
 // navigateur pour voir ce qui plante — donc l'app capte elle-même tout
 // ce qui se passe (erreurs JS, promesses rejetées, console.error) et le
 // garde en mémoire, consultable et copiable depuis Admin > Test.
+// Une clé de session ne doit JAMAIS apparaître dans le journal ni dans un
+// rapport copié (il circule par WhatsApp) : on la remplace par « [clé masquée] ».
+function maskSecrets(txt) {
+  return String(txt || "").replace(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, "[clé masquée]");
+}
 function pushDebugLog(type, message, detail) {
   if (!state.debugLoggingEnabled) return;
   try {
     state.debugLog = state.debugLog || [];
-    state.debugLog.unshift({ type: type, message: String(message || ""), detail: detail ? String(detail) : "", at: Date.now() });
+    state.debugLog.unshift({ type: type, message: maskSecrets(message), detail: detail ? maskSecrets(detail) : "", at: Date.now() });
     // Jamais plus de 200 entrées — sinon ça grossirait indéfiniment dans
     // le stockage local d'un téléphone qui reste connecté des jours.
     if (state.debugLog.length > 200) state.debugLog.length = 200;
@@ -8931,7 +9310,7 @@ function refreshExchangeRatesIfStale() {
 // appartient (produit, commande...) — XOF pour tous les pays CFA, sinon
 // la devise propre à ce pays (voir currencyForCountry / CFA_COUNTRIES).
 function currencySymbol(code) {
-  var symbols = { XOF: "FCFA", NGN: "₦", GMD: "D", SLL: "Le", GNF: "FG", INR: "₹" };
+  var symbols = { XOF: "FCFA", XAF: "FCFA", NGN: "₦", GMD: "D", SLL: "Le", GNF: "FG", INR: "₹", EUR: "€", USD: "$", GBP: "£", CAD: "$ CA", CNY: "¥", MAD: "DH", GHS: "GH₵" };
   return symbols[code] || code;
 }
 
@@ -9854,7 +10233,7 @@ const TRANSLATIONS = {
     payout_next: "Prochain versement :",
     payout_fee_word: "de frais de transfert",
     payout_nothing: "Aucun versement en attente pour le moment.",
-    payout_rule_seller: "Livré du mardi au vendredi → payé le mardi suivant. Livré samedi, dimanche ou lundi → payé le vendredi suivant. Frais de transfert à votre charge.",
+    payout_rule_seller: "Payé chaque jour vers 17 h, même le week-end. Livré avant 17 h → payé le jour même. Livré après 17 h → payé le lendemain. Frais de transfert à votre charge.",
     payout_rule_relais: "Colis remis du lundi au dimanche → payé le mardi suivant. Frais de transfert payés par Sounsouni.",
     payout_receive_on: "Je reçois mon argent sur :",
     payout_number_ph: "Numéro qui reçoit l'argent",
@@ -11612,7 +11991,7 @@ const TRANSLATIONS = {
     payout_next: "Next payout:",
     payout_fee_word: "transfer fee",
     payout_nothing: "No pending payout for now.",
-    payout_rule_seller: "Delivered Tuesday to Friday → paid the next Tuesday. Delivered Saturday, Sunday or Monday → paid the next Friday. Transfer fees are yours.",
+    payout_rule_seller: "Paid every day around 5 pm, weekends included. Delivered before 5 pm → paid the same day. Delivered after 5 pm → paid the next day. Transfer fees are yours.",
     payout_rule_relais: "Parcels handed over Monday to Sunday → paid the next Tuesday. Transfer fees paid by Sounsouni.",
     payout_receive_on: "I receive my money on:",
     payout_number_ph: "Number that receives the money",
@@ -13370,7 +13749,7 @@ const TRANSLATIONS = {
     payout_next: "अगला भुगतान:",
     payout_fee_word: "ट्रांसफर शुल्क",
     payout_nothing: "अभी कोई भुगतान बाकी नहीं है।",
-    payout_rule_seller: "मंगलवार से शुक्रवार डिलीवर → अगले मंगलवार भुगतान। शनिवार, रविवार या सोमवार डिलीवर → अगले शुक्रवार भुगतान। ट्रांसफर शुल्क आपका।",
+    payout_rule_seller: "हर दिन शाम लगभग 5 बजे भुगतान, शनिवार-रविवार भी। शाम 5 बजे से पहले डिलीवर → उसी दिन भुगतान। 5 बजे के बाद → अगले दिन। ट्रांसफर शुल्क आपका।",
     payout_rule_relais: "सोमवार से रविवार तक दिए गए पार्सल → अगले मंगलवार भुगतान। ट्रांसफर शुल्क Sounsouni देता है।",
     payout_receive_on: "मुझे पैसा यहाँ मिलता है:",
     payout_number_ph: "पैसा पाने वाला नंबर",
@@ -14859,7 +15238,7 @@ function registerAccount() {
   
   // 2. Téléphone
   var phoneRaw = d.phone || "";
-  var phoneDigits = phoneRaw.replace(/\D/g, "");
+  var phoneDigits = stripTrunkZero(d.countryCode || "+223", phoneRaw);
   if (!phoneDigits) {
     showToast(t("toast_phone_required1"));
     return;
@@ -15486,7 +15865,7 @@ function attemptFindAccount() {
   if (isLikelyBot("connexion", d)) { showToast("❌ Une erreur est survenue, veuillez réessayer."); return; }
   if (!d.name || !d.name.trim()) { showToast(t("toast_enter_fullname")); return; }
   if (!d.phone || !d.phone.trim()) { showToast(t("toast_enter_phone1")); return; }
-  var digits = d.phone.replace(/\D/g, "");
+  var digits = stripTrunkZero(d.countryCode, d.phone);
   var fullPhone = d.countryCode + digits;
   var nameNorm = d.name.trim().toLowerCase();
   // On cherche d'abord par nom + téléphone SEULS — le mot de passe, s'il y
@@ -15528,9 +15907,21 @@ function finishFindAccount(candidate, d) {
     });
     return;
   }
-  state.showFindAccountModal = false;
-  loginAccount(candidate.id);
-  showToast(t("dt_welcome_back") + candidate.name + t("dt_exclaim"));
+  // Sans mot de passe : avant, aucune clé n'était donnée — le téléphone
+  // semblait connecté mais le serveur refusait toutes ses commandes.
+  var fdDigits = stripTrunkZero(d.countryCode, d.phone);
+  secureWrite("accounts", { operation: "find_account", name: String(d.name || "").trim(), phone: fdDigits, fullPhone: d.countryCode + fdDigits }).then(function(res) {
+    if (res && res.found && res.hasPassword) { candidate.hasPassword = true; showToast(t("toast_account_has_password_enter")); render(); return; }
+    if (res && res.found && res.accountId === candidate.id && res.sessionToken) state.sessionToken = res.sessionToken;
+    state.showFindAccountModal = false;
+    loginAccount(candidate.id);
+    showToast(t("dt_welcome_back") + candidate.name + t("dt_exclaim"));
+    if (res && res.sessionToken) setTimeout(function() { requirePasswordSetup("afterReconnect"); }, 1500);
+    else if (res && res.needsHelp) { state.reconnectNeedsHelp = true; state.showReconnectSheet = true; render(); }
+  }).catch(function() {
+    state.showFindAccountModal = false;
+    loginAccount(candidate.id);
+  });
 }
 
 function loginAccount(accountId) {
@@ -15808,7 +16199,7 @@ function submitAdminGate() {
       // de fond (sans bloquer l'accès), au cas où ce mot de passe est
       // aussi le vrai mot de passe serveur du compte admin_owner.
       verifyAccountPassword("admin_owner", enteredPass).then(function(match) {
-        pushDebugLog("info", "Jeton Admin (X-Session-Token)", state.adminSessionToken || "(aucun jeton obtenu — ce mot de passe ne correspond pas au mot de passe serveur de admin_owner)");
+        pushDebugLog("info", "Jeton Admin", state.adminSessionToken ? "obtenu" : "(aucun jeton obtenu — ce mot de passe ne correspond pas au mot de passe serveur de admin_owner)");
       });
       applyRoleSwitch(state.pendingRole);
       return;
@@ -15824,7 +16215,7 @@ function submitAdminGate() {
         // Affiché dans Admin > Test > journal de debug, pour pouvoir copier
         // le jeton depuis le téléphone (utile pour tester une fonction
         // serveur avec X-Session-Token sans avoir besoin d'un ordinateur).
-        pushDebugLog("info", "Jeton Admin (X-Session-Token)", state.adminSessionToken || "(aucun jeton obtenu)");
+        pushDebugLog("info", "Jeton Admin", state.adminSessionToken ? "obtenu" : "(aucun jeton obtenu)");
         applyRoleSwitch(state.pendingRole);
         return;
       }
@@ -17923,10 +18314,12 @@ function secureOrderSaveDoc(order) {
     headers: authHeaders(),
     body: JSON.stringify({ docId: cleaned.id, data: cleaned, referralCode: currentReferralCode() })
   })
-    .then(function(r) { return r.json(); })
+    .then(readServerJson)
     .then(function(res) {
       if (!res.success) {
         console.error("Erreur order-write :", res.error);
+        try { pushDebugLog("error", "Commande pas encore acceptée par le serveur", cleaned.id + " — " + res.error + (res.detail ? " (" + res.detail + ")" : "")); } catch (e) {}
+        if (res.error === "session_required") noteSessionRejected();
         queuePendingSync("orders", cleaned);
         return false;
       }
@@ -17950,7 +18343,7 @@ function saveOrderContactReliably(payload, attempt) {
     callOrderContactOperation(payload).then(function(res) {
       if (res && res.success) return;
       if (attempt + 1 < delays.length) saveOrderContactReliably(payload, attempt + 1);
-      else { try { pushDebugLog("error", "Coordonnées de la commande non enregistrées", payload.orderId + " — " + (res && res.error)); } catch (e) {} }
+      else { try { pushDebugLog("error", "Coordonnées de la commande non enregistrées", payload.orderId + " — " + (res && res.error) + (res && res.detail ? " (" + res.detail + ")" : "") + (res && res.httpStatus ? " [HTTP " + res.httpStatus + "]" : "")); } catch (e) {} }
     }).catch(function() { if (attempt + 1 < delays.length) saveOrderContactReliably(payload, attempt + 1); });
   }, delays[attempt]);
 }
@@ -18051,10 +18444,11 @@ function callOrderContactOperation(payload, useAdminToken) {
     headers: authHeaders(null, useAdminToken),
     body: JSON.stringify(payload)
   })
-    .then(function(r) { return r.json(); })
+    .then(readServerJson)
+    .then(function(res) { if (res && res.error === "session_required") noteSessionRejected(); return res; })
     .catch(function(err) {
       console.error("Erreur réseau order-contact :", err);
-      return { success: false, error: "network_error" };
+      return networkFailure(err);
     });
 }
 
@@ -18090,6 +18484,7 @@ function fetchMyOrderContacts() {
     window._contactRepairSent = window._contactRepairSent || {};
     (state.orders || []).forEach(function(o) {
       if (!state.profile || o.buyerId !== state.profile.id || contacts[o.id] || window._contactRepairSent[o.id]) return;
+      if ((state.pendingSyncQueue || []).some(function(e) { return e.collection === "orders" && e.id === o.id; })) return; // pas encore sur le serveur
       if (o.status === "Livrée" || o.status === "Annulée" || !state.profile.phone) return;
       window._contactRepairSent[o.id] = true;
       saveOrderContactReliably({ operation: "save_order_contact", orderId: o.id, buyerPhone: state.profile.phone, contactPhone: o.contactPhone || state.profile.phone, repere: o.repere || null, buyerLat: o.buyerLat != null ? o.buyerLat : null, buyerLng: o.buyerLng != null ? o.buyerLng : null }, 0);
@@ -21854,6 +22249,7 @@ function buildHTML() {
   if (state.showVendorHub) html += renderVendorHubModal();
   if (state.showProfileScreen) html += renderProfileModal();
   html += renderContractGate();
+  html += renderReconnectSheet();
   if (state.showSellerTypeModal) html += renderSellerTypeModal();
   if (state.showSellerSectorModal) html += renderSellerSectorModal();
   if (state.showBoostModal) html += renderBoostModal();
@@ -22696,7 +23092,25 @@ function renderOnboardStepCommissionConsent(d) {
   return html;
 }
 
+// Version pour le vendeur international : dans SA langue, sans renvoyer
+// au contrat vendeur malien (mobile money, points de retrait...).
+var INTL_PROHIBITED_TEXT = {
+  fr: { title: "Engagement du vendeur international", intro: "Sur Sounsouni, vos articles sont vendus à des clients au Mali. Il est strictement interdit de vendre :", items: ["armes, munitions et explosifs", "drogues et stupéfiants", "médicaments sans autorisation", "alcool et tabac", "produits contrefaits", "produits volés ou d'origine douteuse", "tout produit interdit à la sortie de votre pays ou à l'entrée au Mali"], outro: "Tout article interdit sera retiré, et le compte pourra être suspendu. Vous restez seul responsable des produits que vous mettez en vente. Vos paiements passent par votre agent de sourcing.", check: "Je m'engage à ne vendre aucun produit interdit, et j'accepte que mes articles et mon compte puissent être retirés en cas de non-respect.", btn: "Je m'engage — Créer mon compte", back: "Retour" },
+  en: { title: "International seller commitment", intro: "On Sounsouni, your items are sold to customers in Mali. It is strictly forbidden to sell:", items: ["weapons, ammunition and explosives", "drugs and narcotics", "medicines without authorization", "alcohol and tobacco", "counterfeit products", "stolen or doubtful products", "any product banned from export in your country or from import into Mali"], outro: "Any forbidden item will be removed, and the account may be suspended. You alone are responsible for the products you sell. Your payments go through your sourcing agent.", check: "I commit to sell no forbidden product, and I accept that my items and account may be removed if I break this rule.", btn: "I commit — Create my account", back: "Back" },
+  hi: { title: "अंतरराष्ट्रीय विक्रेता की प्रतिबद्धता", intro: "Sounsouni पर आपके उत्पाद माली के ग्राहकों को बेचे जाते हैं। इन्हें बेचना सख्त मना है:", items: ["हथियार, गोला-बारूद और विस्फोटक", "ड्रग्स और नशीले पदार्थ", "बिना अनुमति की दवाइयाँ", "शराब और तंबाकू", "नकली उत्पाद", "चोरी के या संदिग्ध उत्पाद", "आपके देश से निर्यात या माली में आयात पर प्रतिबंधित कोई भी उत्पाद"], outro: "कोई भी प्रतिबंधित उत्पाद हटा दिया जाएगा, और खाता निलंबित हो सकता है। आप अपने उत्पादों के लिए अकेले जिम्मेदार हैं। आपके भुगतान आपके सोर्सिंग एजेंट के माध्यम से होते हैं।", check: "मैं कोई प्रतिबंधित उत्पाद नहीं बेचने की प्रतिबद्धता करता/करती हूँ, और नियम तोड़ने पर मेरे उत्पाद और खाता हटाए जा सकते हैं।", btn: "मैं प्रतिबद्ध हूँ — खाता बनाएँ", back: "वापस" }
+};
 function renderOnboardStepProhibitedGoods(d) {
+  if (d.sellerType === "international") {
+    var T = INTL_PROHIBITED_TEXT[state.language] || INTL_PROHIBITED_TEXT.en;
+    var h = '<button class="link-btn" style="margin-bottom:14px" data-action="onboard-back-step" data-value="internationalDetails"><i class="fa-solid fa-arrow-left"></i> ' + T.back + '</button>';
+    h += '<div style="background:rgba(255,255,255,0.94);border-radius:14px;padding:12px 14px;margin-bottom:10px;"><div class="section-title" style="margin:0;font-weight:800;"><i class="fa-solid fa-scale-balanced"></i> ' + T.title + '</div></div>';
+    h += '<div class="glass-card" style="padding:16px;font-size:13px;line-height:1.6;background:rgba(255,255,255,0.92);"><p style="margin:0 0 10px;">' + T.intro + '</p><ul style="margin:0 0 10px;padding-left:18px;">';
+    T.items.forEach(function(it) { h += '<li>' + it + '</li>'; });
+    h += '</ul><p style="margin:0;">' + T.outro + '</p></div>';
+    h += '<label style="display:flex;gap:10px;align-items:flex-start;margin:16px 0;font-size:13px;background:rgba(255,255,255,0.94);border-radius:10px;padding:12px;cursor:pointer;"><input type="checkbox" id="prohibited-goods-checkbox" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;" /><span>' + T.check + '</span></label>';
+    h += '<button class="btn-primary" data-action="accept-prohibited-goods-consent"><i class="fa-solid fa-check"></i> ' + T.btn + '</button>';
+    return h;
+  }
   var backStep = d.prohibitedConsentReturnStep || "vendorType";
   if (backStep === "prohibitedGoodsConsent" || backStep === "commissionConsent") backStep = d.commissionConsentReturnStep || "vendorType";
   var html = '<button class="link-btn" style="margin-bottom:14px" data-action="onboard-back-step" data-value="' + backStep + '"><i class="fa-solid fa-arrow-left"></i> Retour</button>';
@@ -22707,6 +23121,7 @@ function renderOnboardStepProhibitedGoods(d) {
   html += '<li>armes, munitions et explosifs</li>';
   html += '<li>drogues et stupéfiants</li>';
   html += '<li>médicaments sans autorisation</li>';
+  html += '<li>alcool et tabac</li>';
   html += '<li>produits contrefaits</li>';
   html += '<li>produits volés ou d\'origine douteuse</li>';
   html += '<li>tout autre produit dont la vente est interdite au Mali</li>';
@@ -23184,7 +23599,19 @@ function buildUserTestPanelText() {
   try { lastSync = localStorage.getItem("gems_last_sync_v2"); } catch (e) {}
   lines.push("Dernière synchronisation : " + (lastSync ? fmtDateTime(new Date(lastSync).getTime()) : "jamais / inconnue"));
   lines.push("Modifications en attente d'envoi : " + ((state.pendingSyncQueue || []).length));
+  var tp = decodeSessionToken(state.sessionToken);
+  var healthTxt = { ok: "valide", expiring: "bientôt périmée (renouvellement auto)", expired: "PÉRIMÉE", other_account: "appartient à un AUTRE compte", broken: "ABÎMÉE", missing: "ABSENTE", none: "pas de profil" }[sessionHealth()] || "?";
+  lines.push("État de la clé : " + healthTxt + (tp && tp.expiresAt ? " (expire le " + fmtDateTime(tp.expiresAt) + ")" : ""));
+  lines.push("Mot de passe sur ce compte : " + (state.profile && state.profile.hasPassword ? "oui" : "non"));
   lines.push("");
+  var pq = state.pendingSyncQueue || [];
+  if (pq.length) {
+    lines.push("--- En attente d'envoi (" + pq.length + ") ---");
+    pq.slice(0, 40).forEach(function(e) {
+      lines.push("• " + e.collection + " / " + e.id + " — depuis " + fmtDateTime(e.queuedAt || 0) + " — " + (e.attempts || 0) + " essai(s)" + (e.blocked ? " — ARRÊTÉ" : "") + " — raison : " + (e.lastError || "pas encore essayé"));
+    });
+    lines.push("");
+  }
 
   lines.push("--- Données en mémoire sur ce téléphone ---");
   lines.push("Comptes : " + state.accounts.length);
@@ -23219,7 +23646,7 @@ function buildUserTestPanelText() {
     lines.push("Aucune erreur capturée récemment.");
   } else {
     for (var i = 0; i < logs.length; i++) {
-      lines.push("[" + fmtDateTime(logs[i].at) + "] (" + logs[i].type + ") " + logs[i].message + (logs[i].detail ? " — " + logs[i].detail : ""));
+      lines.push(maskSecrets("[" + fmtDateTime(logs[i].at) + "] (" + logs[i].type + ") " + logs[i].message + (logs[i].detail ? " — " + logs[i].detail : "")));
     }
   }
   return lines.join("\n");
@@ -23255,7 +23682,8 @@ function renderUserTestPanel() {
   html += '<div class="section-title" style="margin-bottom:6px;"><i class="fa-solid fa-flask"></i> Test</div>';
   html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">Si on t\'a demandé de faire ce test, appuie sur "Copier tout" ci-dessous et envoie le résultat.</div>';
 
-  html += '<button class="btn-primary" style="width:100%;margin-bottom:14px;" data-action="copy-user-test-panel"><i class="fa-solid fa-copy"></i> Copier tout</button>';
+  html += '<button class="btn-primary" style="width:100%;margin-bottom:10px;" data-action="copy-user-test-panel"><i class="fa-solid fa-copy"></i> Copier tout</button>';
+  if ((state.pendingSyncQueue || []).length) html += '<button class="btn-secondary" style="width:100%;margin-bottom:14px;" data-action="retry-pending-now"><i class="fa-solid fa-paper-plane"></i> Renvoyer maintenant (' + state.pendingSyncQueue.length + ')</button>';
 
   var reportText = buildUserTestPanelText();
   html += '<div class="glass-card" style="padding:12px;background:var(--bg-body);font-family:monospace;font-size:10.5px;white-space:pre-wrap;word-break:break-word;max-height:50vh;overflow-y:auto;">' + esc(reportText) + '</div>';
@@ -27899,11 +28327,12 @@ function renderSellerProductsList() {
 
 
 // ---------- CONTRATS (version 2) : texte officiel, acceptation obligatoire ----------
-var CONTRACT_VERSION = "2026-10-v2";
-var CONTRACT_HTML = { vendeur: "<h3 class=\"ct-h3\">Contrat Vendeur</h3><p class=\"ct-p\">Ce contrat est entre <strong>Sounsouni</strong> (RCCM ML-BKO-01-2026-A-05755, Sotelco, face à Bougouba, Bamako) et <strong>vous, le vendeur</strong>. En cochant « J'accepte » dans l'application, vous acceptez ce contrat.</p><h4 class=\"ct-h4\">Ce que vous devez retenir</h4><ul class=\"ct-list\"><li>Sounsouni garde <strong>7 %</strong> du prix de chaque article vendu.</li><li>Vous êtes payé <strong>deux fois par semaine</strong> : le <strong>mardi</strong> et le <strong>vendredi après-midi</strong>.</li><li>Les <strong>frais de transfert</strong> de l'argent sont à votre charge.</li><li>Vos photos, vos prix et votre stock doivent être <strong>vrais et à jour</strong>.</li><li>Les <strong>produits interdits</strong> (liste à la fin) entraînent la fermeture de votre boutique.</li><li>Si vous voyez le numéro d'un client (réservations), il sert <strong>uniquement à la réservation</strong>.</li></ul><h4 class=\"ct-h4\">1. Ce que Sounsouni fait pour vous</h4><p class=\"ct-p\">Sounsouni montre vos articles aux acheteurs, reçoit les commandes, organise la livraison et vous verse l'argent de vos ventes. Sounsouni peut aussi traduire vos articles en anglais et en hindi, et les partager pour les faire connaître.</p><h4 class=\"ct-h4\">2. La commission de Sounsouni</h4><p class=\"ct-p\">Sounsouni garde <strong>7 %</strong> du prix de chaque article vendu et livré. Le reste est pour vous.</p><p class=\"ct-p\"><strong>Exemple</strong> : vous vendez une robe à <strong>10 000 FCFA</strong>. Sounsouni garde <strong>700 FCFA</strong>. Vous recevez <strong>9 300 FCFA</strong>, moins les frais de transfert.</p><p class=\"ct-p\">Le prix de la livraison n'est pas pour vous : il paie le livreur et le point de retrait.</p><h4 class=\"ct-h4\">3. Quand vous êtes payé</h4><p class=\"ct-p\">Vous êtes payé <strong>deux fois par semaine</strong>, selon le <strong>jour où le client a reçu l'article</strong> (pas le jour de la commande).</p><div class=\"ct-table-wrap\"><table class=\"ct-table\"><tr><th>Article livré le...</th><th>Vous êtes payé le...</th></tr><tr><td>mardi, mercredi, jeudi ou vendredi</td><td><strong>mardi</strong> de la semaine suivante</td></tr><tr><td>samedi, dimanche ou lundi</td><td><strong>vendredi après-midi</strong> suivant</td></tr></table></div><p class=\"ct-p\"><strong>Exemples</strong> :</p><ul class=\"ct-list\"><li>Votre article est livré le <strong>samedi 10 octobre</strong>. Vous êtes payé le <strong>vendredi 16 octobre</strong> après-midi.</li><li>Votre article est livré le <strong>lundi 12 octobre</strong>. Vous êtes payé aussi le <strong>vendredi 16 octobre</strong> après-midi.</li><li>Votre article est livré le <strong>mercredi 14 octobre</strong>. Vous êtes payé le <strong>mardi 20 octobre</strong>.</li><li>Le client a commandé le lundi, mais il a reçu l'article le mercredi : c'est le <strong>mercredi</strong> qui compte.</li></ul><p class=\"ct-p\">Vous recevez donc votre argent <strong>entre 4 et 7 jours</strong> après la livraison. Ce délai permet de régler une réclamation d'un client avant de payer.</p><p class=\"ct-p\"><strong>Les règles du paiement</strong> :</p><ul class=\"ct-list\"><li>L'argent est envoyé sur votre compte <strong>mobile money</strong>. Vous choisissez votre opérateur dans l'application : <strong>Orange Money</strong>, <strong>Moov Money</strong> ou <strong>Wave</strong>, et le numéro qui reçoit l'argent.</li><li>Pour chaque envoi, l'opérateur prend des <strong>frais de transfert</strong>. Ces frais sont <strong>à votre charge</strong> : ils sont retirés de votre paiement. Les frais changent selon l'opérateur choisi.</li><li>Si vous êtes payé le mardi <strong>et</strong> le vendredi de la même semaine, il y a deux envois, donc <strong>deux fois des frais</strong>.</li><li><strong>Il n'y a pas de montant minimum</strong> : même 500 FCFA sont versés.</li><li>Si le jour de paiement est un <strong>jour férié</strong>, vous êtes payé le jour ouvrable suivant.</li><li>Si un client fait une <strong>réclamation</strong> sur une vente, l'argent de cette vente attend la fin de la réclamation.</li></ul><p class=\"ct-p\"><strong>Exemple complet</strong> : cette semaine, vous avez vendu deux articles livrés le mercredi : une robe à <strong>10 000 FCFA</strong> et un sac à <strong>5 000 FCFA</strong>, soit <strong>15 000 FCFA</strong>.</p><ol class=\"ct-list\"><li>Sounsouni garde sa commission de 7 % : <strong>1 050 FCFA</strong>.</li><li>Il reste <strong>13 950 FCFA</strong>.</li><li>Vous avez choisi votre opérateur, qui prend par exemple <strong>150 FCFA</strong> de frais pour cet envoi.</li><li>Vous recevez <strong>13 800 FCFA</strong> le mardi.</li></ol><p class=\"ct-p\">Les vrais frais de chaque opérateur sont affichés dans l'application avant chaque paiement.</p><p class=\"ct-p\"><strong>Conseil important pour fixer vos prix</strong> : quand vous mettez un prix sur un article, pensez à <strong>tous vos frais</strong> : la commission de Sounsouni (7 %), les frais de transfert de votre opérateur, et vos propres frais (achat de la marchandise, emballage...). Votre prix doit couvrir tout cela et vous laisser un <strong>bénéfice</strong>.</p><h4 class=\"ct-h4\">4. La livraison et les refus</h4><p class=\"ct-p\">Le client paie à la livraison. Il peut <strong>refuser l'article</strong> au moment de la livraison.</p><ul class=\"ct-list\"><li>Si le client refuse, l'article vous revient. <strong>Sounsouni paie la livraison</strong>, pas vous.</li><li>Si le client refuse parce que l'article <strong>ne correspond pas</strong> (autre couleur, autre taille, défectueux, différent de la photo), ce refus est <strong>compté contre vous</strong>.</li><li>Si cela arrive souvent, Sounsouni vous <strong>avertit</strong>, puis peut <strong>suspendre votre boutique</strong>.</li></ul><p class=\"ct-p\"><strong>Exemple</strong> : un client commande une robe rouge sur votre photo. Le livreur lui apporte une robe bleue. Le client refuse. Sounsouni paie la livraison, mais ce refus compte contre vous.</p><h4 class=\"ct-h4\">5. Vos obligations</h4><ul class=\"ct-list\"><li><strong>Photos vraies</strong> : vous montrez l'article que vous vendez vraiment.</li><li><strong>Prix vrai</strong> : le prix affiché est le prix que vous acceptez.</li><li><strong>Stock à jour</strong> : vous ne vendez pas un article que vous n'avez plus.</li><li><strong>Commande prête vite</strong> : quand vous recevez une commande, vous la confirmez et la préparez rapidement.</li><li><strong>Articles légaux</strong> : vous ne vendez aucun produit interdit (voir la liste à la fin).</li><li><strong>Vos impôts</strong> : vous restez responsable de vos impôts et de votre activité de commerce.</li></ul><p class=\"ct-p\"><strong>Vendeurs à l'étranger</strong> : vous indiquez le <strong>poids et les dimensions vrais</strong> de chaque article, et la <strong>quantité minimum</strong> de commande. Ils servent à calculer le transport.</p><h4 class=\"ct-h4\">6. Les produits interdits</h4><p class=\"ct-p\">Vous ne vendez <strong>jamais</strong> un produit interdit par la loi du Mali, ni un produit de la <strong>liste à la fin de ce document</strong>.</p><p class=\"ct-p\">Si vous le faites : Sounsouni <strong>retire l'article</strong> tout de suite et peut <strong>fermer votre boutique</strong>. Si la loi le demande, Sounsouni peut informer les autorités.</p><h4 class=\"ct-h4\">7. Les clients et leurs informations</h4><p class=\"ct-p\">Pour les <strong>commandes</strong>, vous ne voyez <strong>pas</strong> le numéro ni l'adresse du client : seuls le livreur et le point de retrait les voient. Pour les <strong>réservations</strong> (restaurant, hôtel, service), vous voyez le <strong>nom et le numéro</strong> du client, pour pouvoir le joindre.</p><ul class=\"ct-list\"><li>Ces informations servent <strong>uniquement</strong> à cette réservation.</li><li>Vous ne les utilisez <strong>pas</strong> pour faire de la publicité, envoyer des messages, ou les donner à quelqu'un d'autre.</li></ul><p class=\"ct-p\"><strong>Exemple</strong> : après une vente, vous n'avez <strong>pas le droit</strong> d'ajouter le client dans un groupe WhatsApp de promotion.</p><h4 class=\"ct-h4\">8. Vérification et contrôle</h4><ul class=\"ct-list\"><li>Sounsouni peut vous demander une <strong>pièce d'identité</strong> pour vérifier votre boutique.</li><li>Les clients peuvent <strong>signaler</strong> un article. Sounsouni peut alors le cacher et le contrôler.</li><li>Sounsouni peut <strong>retirer un article</strong> ou <strong>suspendre une boutique</strong> qui ne respecte pas ce contrat.</li></ul><h4 class=\"ct-h4\">9. La publicité payante</h4><p class=\"ct-p\">Si vous payez pour mettre un article en avant (« boost »), le prix et la durée sont indiqués avant de payer. <strong>Une publicité commencée n'est pas remboursée.</strong></p><h4 class=\"ct-h4\">10. Changement du contrat</h4><p class=\"ct-p\">Sounsouni peut changer ce contrat. Vous serez prévenu <strong>au moins 15 jours avant</strong>, dans l'application. Pour continuer à vendre, vous devrez accepter la nouvelle version.</p><h4 class=\"ct-h4\">11. Fin du contrat</h4><ul class=\"ct-list\"><li>Vous pouvez <strong>arrêter</strong> quand vous voulez, en fermant votre boutique.</li><li>Sounsouni peut <strong>arrêter</strong> le contrat si vous ne le respectez pas.</li><li>Dans les deux cas, l'argent de vos ventes déjà livrées vous est <strong>versé au prochain jour de paiement</strong>.</li></ul><h4 class=\"ct-h4\">12. En cas de désaccord</h4><p class=\"ct-p\">Vous et Sounsouni essayez d'abord de <strong>trouver une solution ensemble</strong>. Si ce n'est pas possible, le désaccord est réglé par les <strong>tribunaux de Bamako</strong>, selon la loi du Mali.</p><h3 class=\"ct-h3\">Annexe : les produits interdits sur Sounsouni</h3><p class=\"ct-p\">Ces produits sont <strong>interdits</strong> sur Sounsouni, <strong>sans exception</strong>. Cette liste vaut pour les vendeurs et pour les points de retrait. Sounsouni peut la compléter : la nouvelle liste s'affiche dans l'application.</p><p class=\"ct-p\"><strong>La règle générale</strong> : tout produit <strong>interdit par la loi du Mali</strong> est interdit sur Sounsouni, même s'il n'est pas dans cette liste.</p><div class=\"ct-table-wrap\"><table class=\"ct-table\"><tr><th>Produits interdits</th><th>Exemples</th></tr><tr><td>Alcool</td><td>bière, vin, liqueur, toute boisson alcoolisée</td></tr><tr><td>Tabac</td><td>cigarettes, chicha, tabac à mâcher, cigarettes électroniques</td></tr><tr><td>Drogues</td><td>cannabis, stupéfiants, et le matériel pour les consommer</td></tr><tr><td>Médicaments</td><td>comprimés, sirops, injections : ils se vendent uniquement en pharmacie</td></tr><tr><td>Armes</td><td>armes à feu, munitions, explosifs, pétards, couteaux de combat</td></tr><tr><td>Contrefaçons</td><td>faux produits de marque, copies vendues comme originales</td></tr><tr><td>Objets volés</td><td>tout objet dont vous n'êtes pas le propriétaire légitime</td></tr><tr><td>Faux documents</td><td>fausses pièces d'identité, faux diplômes, fausse monnaie</td></tr><tr><td>Animaux protégés</td><td>ivoire, peaux, carapaces, animaux sauvages vivants ou morts</td></tr><tr><td>Objets anciens du patrimoine</td><td>objets archéologiques, statues et objets culturels anciens du Mali</td></tr><tr><td>Produits pour la peau dangereux</td><td>crèmes éclaircissantes au mercure ou à l'hydroquinone</td></tr><tr><td>Produits chimiques dangereux</td><td>poisons, produits toxiques, acides</td></tr><tr><td>Contenus pour adultes</td><td>pornographie, objets sexuels</td></tr><tr><td>Produits périmés</td><td>aliments ou cosmétiques dont la date est dépassée</td></tr></table></div><p class=\"ct-p\"><strong>Si vous avez un doute</strong> sur un produit, demandez à Sounsouni <strong>avant</strong> de le mettre en vente.</p><p class=\"ct-p\"><strong>Ce qui arrive si vous vendez un produit interdit</strong> : l'article est retiré tout de suite, et votre boutique peut être fermée. Si la loi le demande, Sounsouni peut informer les autorités.</p>", relais: "<h3 class=\"ct-h3\">Contrat Point de retrait</h3><p class=\"ct-p\">Ce contrat est entre <strong>Sounsouni</strong> (RCCM ML-BKO-01-2026-A-05755, Sotelco, face à Bougouba, Bamako) et <strong>vous, le point de retrait</strong> : une boutique qui garde les colis des clients jusqu'à ce qu'ils viennent les chercher. En cochant « J'accepte » dans l'application, vous acceptez ce contrat.</p><h4 class=\"ct-h4\">Ce que vous devez retenir</h4><ul class=\"ct-list\"><li>Vous gagnez <strong>20 % du prix de la livraison</strong> de chaque colis remis au client.</li><li>Vous êtes payé <strong>une fois par semaine, le mardi</strong>.</li><li>Les <strong>frais de transfert</strong> de l'argent sont <strong>payés par Sounsouni</strong>, pas par vous.</li><li>Vous gardez un colis <strong>5 jours</strong> au maximum.</li><li>Vous ne remettez <strong>jamais</strong> un colis sans le <strong>bon code</strong> : au client avec son code de retrait, au livreur avec son code de reprise.</li><li>Le numéro et le nom des clients servent <strong>uniquement à la remise du colis</strong>.</li></ul><h4 class=\"ct-h4\">1. Votre rôle</h4><p class=\"ct-p\">Le livreur dépose chez vous les colis des clients. Vous les gardez en sécurité. Le client vient chercher son colis, et vous le lui remettez.</p><h4 class=\"ct-h4\">2. Ce que vous gagnez</h4><p class=\"ct-p\">Pour chaque colis <strong>remis au client</strong>, vous gagnez <strong>20 % du prix de la livraison</strong>.</p><p class=\"ct-p\"><strong>Exemple</strong> : la livraison d'un colis coûte <strong>1 500 FCFA</strong>. Le client vient le chercher chez vous. Vous gagnez <strong>300 FCFA</strong>. Sounsouni paie les frais de transfert : vous recevez les 300 FCFA en entier.</p><p class=\"ct-p\">Si le client ne vient pas chercher son colis, vous ne gagnez rien sur ce colis.</p><h4 class=\"ct-h4\">3. Quand vous êtes payé</h4><p class=\"ct-p\">Vous êtes payé <strong>une fois par semaine, le mardi</strong>, pour tous les colis <strong>remis aux clients</strong> pendant la semaine précédente (du lundi au dimanche).</p><div class=\"ct-table-wrap\"><table class=\"ct-table\"><tr><th>Colis remis au client...</th><th>Vous êtes payé le...</th></tr><tr><td>du lundi 5 au dimanche 11 octobre</td><td><strong>mardi 13 octobre</strong></td></tr><tr><td>du lundi 12 au dimanche 18 octobre</td><td><strong>mardi 20 octobre</strong></td></tr></table></div><p class=\"ct-p\"><strong>Exemples</strong> :</p><ul class=\"ct-list\"><li>Vous remettez un colis le <strong>dimanche 11 octobre</strong>. Vous êtes payé le <strong>mardi 13 octobre</strong>.</li><li>Vous remettez un colis le <strong>lundi 12 octobre</strong>. Il compte pour la semaine suivante : vous êtes payé le <strong>mardi 20 octobre</strong>.</li></ul><p class=\"ct-p\"><strong>Les règles du paiement</strong> :</p><ul class=\"ct-list\"><li>L'argent est envoyé sur votre compte <strong>mobile money</strong>. Vous choisissez votre opérateur dans l'application : <strong>Orange Money</strong>, <strong>Moov Money</strong> ou <strong>Wave</strong>, et le numéro qui reçoit l'argent.</li><li>Les <strong>frais de transfert sont payés par Sounsouni</strong>. Vous recevez la <strong>totalité</strong> de ce que vous avez gagné.</li><li><strong>Il n'y a pas de montant minimum</strong> : même 500 FCFA sont versés.</li><li>Si le mardi est un <strong>jour férié</strong>, vous êtes payé le jour ouvrable suivant.</li></ul><p class=\"ct-p\"><strong>Exemple</strong> : cette semaine, vous avez remis 10 colis. Chaque livraison coûtait 1 500 FCFA. Vous avez gagné 10 × 300 = <strong>3 000 FCFA</strong>. Le mardi, vous recevez <strong>3 000 FCFA</strong>, sans frais retirés.</p><h4 class=\"ct-h4\">4. Recevoir un colis</h4><ul class=\"ct-list\"><li>Le livreur vous donne un <strong>code de dépôt</strong>. Vous l'entrez dans l'application pour confirmer que le colis est chez vous.</li><li>Vous vérifiez que le colis est <strong>fermé et en bon état</strong>. S'il est abîmé, vous le signalez <strong>tout de suite</strong> dans l'application, avant de l'accepter.</li><li>Vous pouvez <strong>refuser</strong> un colis qui vous semble dangereux ou suspect.</li></ul><h4 class=\"ct-h4\">5. Garder un colis : 5 jours au maximum</h4><ul class=\"ct-list\"><li>Vous gardez le colis <strong>5 jours</strong> au maximum.</li><li>Le client reçoit un <strong>rappel automatique</strong> au <strong>2e jour</strong> et au <strong>4e jour</strong>.</li><li>Si le client vous dit qu'il ne viendra pas, ou s'il n'est toujours pas venu, vous appuyez sur <strong>« Le client n'est pas venu »</strong> dans l'application. Le vendeur et le livreur sont prévenus tout de suite.</li><li>Après 5 jours, si vous n'avez rien fait, le retour se déclenche <strong>automatiquement</strong>.</li><li>Le colis <strong>retourne chez le vendeur</strong>. <strong>Sounsouni paie ce retour</strong>, pas vous. Vous ne gagnez rien sur un colis non récupéré.</li></ul><p class=\"ct-p\"><strong>Exemple</strong> : un colis arrive chez vous le <strong>lundi</strong>. Le client reçoit un rappel le <strong>mercredi</strong>, puis le <strong>vendredi</strong>. S'il n'est pas venu le <strong>samedi</strong>, le retour se déclenche, et un livreur viendra reprendre le colis.</p><h4 class=\"ct-h4\">6. Remettre un colis : toujours avec le bon code</h4><ul class=\"ct-list\"><li>Le client vous montre son <strong>code de retrait</strong> ou son <strong>QR code</strong>.</li><li>Vous vérifiez le code dans l'application <strong>avant</strong> de remettre le colis.</li><li><strong>Sans le bon code, vous ne remettez jamais le colis</strong>, même à quelqu'un qui dit être le client ou un membre de sa famille.</li></ul><p class=\"ct-p\"><strong>Exemple</strong> : une personne vient chercher un colis « pour son frère », mais elle n'a pas le code. Vous refusez poliment, et vous lui demandez de revenir avec le code.</p><p class=\"ct-p\"><strong>Rendre un colis au livreur (retour)</strong> : quand un colis doit retourner chez le vendeur, le livreur vous donne un <strong>code de reprise</strong>. Vous le saisissez dans l'application (ou vous scannez son QR code). C'est la preuve que le colis a quitté votre boutique. <strong>Sans le bon code de reprise, vous ne donnez pas le colis.</strong></p><h4 class=\"ct-h4\">7. Votre responsabilité</h4><p class=\"ct-p\">Pendant que le colis est chez vous, vous en prenez soin. S'il est <strong>perdu, volé ou abîmé</strong> chez vous par négligence, ou remis <strong>sans le bon code</strong>, vous remboursez sa <strong>valeur</strong>.</p><p class=\"ct-p\">Si un client vous paie sa commande au moment du retrait, vous gardez cet argent en sécurité et vous le remettez à Sounsouni comme l'application l'indique.</p><h4 class=\"ct-h4\">8. Vos horaires</h4><p class=\"ct-p\">Vous indiquez vos <strong>jours et heures d'ouverture</strong> dans l'application, et vous les respectez. Si vous fermez exceptionnellement, vous le signalez dans l'application.</p><h4 class=\"ct-h4\">9. Les clients et leurs informations</h4><p class=\"ct-p\">Vous voyez le <strong>nom</strong> et parfois le <strong>numéro</strong> du client. Ces informations servent <strong>uniquement</strong> à lui remettre son colis.</p><ul class=\"ct-list\"><li>Vous ne les utilisez <strong>pas</strong> pour faire de la publicité, envoyer des messages, ou les donner à quelqu'un d'autre.</li><li>Vous n'ouvrez <strong>jamais</strong> un colis.</li></ul><h4 class=\"ct-h4\">10. Contrôle</h4><p class=\"ct-p\">Sounsouni peut <strong>suspendre</strong> votre point de retrait si vous ne respectez pas ce contrat, par exemple si des colis sont souvent remis sans code, perdus, ou si vous êtes souvent fermé aux heures annoncées.</p><h4 class=\"ct-h4\">11. Changement du contrat</h4><p class=\"ct-p\">Sounsouni peut changer ce contrat. Vous serez prévenu <strong>au moins 15 jours avant</strong>, dans l'application. Pour continuer, vous devrez accepter la nouvelle version.</p><h4 class=\"ct-h4\">12. Fin du contrat</h4><ul class=\"ct-list\"><li>Vous pouvez <strong>arrêter</strong> quand vous voulez. Vous prévenez Sounsouni au moins <strong>7 jours avant</strong>, pour que les colis en cours soient récupérés.</li><li>Sounsouni peut <strong>arrêter</strong> le contrat si vous ne le respectez pas.</li><li>Dans les deux cas, ce que vous avez gagné vous est <strong>versé au prochain jour de paiement</strong>.</li></ul><h4 class=\"ct-h4\">13. En cas de désaccord</h4><p class=\"ct-p\">Vous et Sounsouni essayez d'abord de <strong>trouver une solution ensemble</strong>. Si ce n'est pas possible, le désaccord est réglé par les <strong>tribunaux de Bamako</strong>, selon la loi du Mali.</p><h3 class=\"ct-h3\">Annexe : les produits interdits sur Sounsouni</h3><p class=\"ct-p\">Ces produits sont <strong>interdits</strong> sur Sounsouni, <strong>sans exception</strong>. Cette liste vaut pour les vendeurs et pour les points de retrait. Sounsouni peut la compléter : la nouvelle liste s'affiche dans l'application.</p><p class=\"ct-p\"><strong>La règle générale</strong> : tout produit <strong>interdit par la loi du Mali</strong> est interdit sur Sounsouni, même s'il n'est pas dans cette liste.</p><div class=\"ct-table-wrap\"><table class=\"ct-table\"><tr><th>Produits interdits</th><th>Exemples</th></tr><tr><td>Alcool</td><td>bière, vin, liqueur, toute boisson alcoolisée</td></tr><tr><td>Tabac</td><td>cigarettes, chicha, tabac à mâcher, cigarettes électroniques</td></tr><tr><td>Drogues</td><td>cannabis, stupéfiants, et le matériel pour les consommer</td></tr><tr><td>Médicaments</td><td>comprimés, sirops, injections : ils se vendent uniquement en pharmacie</td></tr><tr><td>Armes</td><td>armes à feu, munitions, explosifs, pétards, couteaux de combat</td></tr><tr><td>Contrefaçons</td><td>faux produits de marque, copies vendues comme originales</td></tr><tr><td>Objets volés</td><td>tout objet dont vous n'êtes pas le propriétaire légitime</td></tr><tr><td>Faux documents</td><td>fausses pièces d'identité, faux diplômes, fausse monnaie</td></tr><tr><td>Animaux protégés</td><td>ivoire, peaux, carapaces, animaux sauvages vivants ou morts</td></tr><tr><td>Objets anciens du patrimoine</td><td>objets archéologiques, statues et objets culturels anciens du Mali</td></tr><tr><td>Produits pour la peau dangereux</td><td>crèmes éclaircissantes au mercure ou à l'hydroquinone</td></tr><tr><td>Produits chimiques dangereux</td><td>poisons, produits toxiques, acides</td></tr><tr><td>Contenus pour adultes</td><td>pornographie, objets sexuels</td></tr><tr><td>Produits périmés</td><td>aliments ou cosmétiques dont la date est dépassée</td></tr></table></div><p class=\"ct-p\"><strong>Si vous avez un doute</strong> sur un produit, demandez à Sounsouni <strong>avant</strong> de le mettre en vente.</p><p class=\"ct-p\"><strong>Ce qui arrive si vous vendez un produit interdit</strong> : l'article est retiré tout de suite, et votre boutique peut être fermée. Si la loi le demande, Sounsouni peut informer les autorités.</p>" };
+var CONTRACT_VERSION = "2026-10-v2"; // point de retrait (inchangé)
+var CONTRACT_VERSION_VENDEUR = "2026-10-v3"; // vendeurs : paiement chaque jour à 17 h
+var CONTRACT_HTML = { vendeur: "<h3 class=\"ct-h3\">Contrat Vendeur</h3><p class=\"ct-p\">Ce contrat est entre <strong>Sounsouni</strong> (RCCM ML-BKO-01-2026-A-05755, Sotelco, face à Bougouba, Bamako) et <strong>vous, le vendeur</strong>. En cochant « J'accepte » dans l'application, vous acceptez ce contrat.</p><h4 class=\"ct-h4\">Ce que vous devez retenir</h4><ul class=\"ct-list\"><li>Sounsouni garde <strong>7 %</strong> du prix de chaque article vendu.</li><li>Vous êtes payé <strong>chaque jour</strong>, vers <strong>17 h</strong>, pour les articles livrés ce jour-là.</li><li>Les <strong>frais de transfert</strong> de l'argent sont à votre charge.</li><li>Vos photos, vos prix et votre stock doivent être <strong>vrais et à jour</strong>.</li><li>Les <strong>produits interdits</strong> (liste à la fin) entraînent la fermeture de votre boutique.</li><li>Si vous voyez le numéro d'un client (réservations), il sert <strong>uniquement à la réservation</strong>.</li></ul><h4 class=\"ct-h4\">1. Ce que Sounsouni fait pour vous</h4><p class=\"ct-p\">Sounsouni montre vos articles aux acheteurs, reçoit les commandes, organise la livraison et vous verse l'argent de vos ventes. Sounsouni peut aussi traduire vos articles en anglais et en hindi, et les partager pour les faire connaître.</p><h4 class=\"ct-h4\">2. La commission de Sounsouni</h4><p class=\"ct-p\">Sounsouni garde <strong>7 %</strong> du prix de chaque article vendu et livré. Le reste est pour vous.</p><p class=\"ct-p\"><strong>Exemple</strong> : vous vendez une robe à <strong>10 000 FCFA</strong>. Sounsouni garde <strong>700 FCFA</strong>. Vous recevez <strong>9 300 FCFA</strong>, moins les frais de transfert.</p><p class=\"ct-p\">Le prix de la livraison n'est pas pour vous : il paie le livreur et le point de retrait.</p><h4 class=\"ct-h4\">3. Quand vous êtes payé</h4><p class=\"ct-p\">Vous êtes payé <strong>chaque jour</strong>, même le samedi et le dimanche, vers <strong>17 h</strong>. Ce qui compte, c'est le <strong>moment où le client a reçu l'article</strong> (pas le jour de la commande).</p><div class=\"ct-table-wrap\"><table class=\"ct-table\"><tr><th>Article livré...</th><th>Vous êtes payé...</th></tr><tr><td>avant 17 h</td><td>le <strong>même jour</strong>, vers 17 h</td></tr><tr><td>après 17 h</td><td>le <strong>lendemain</strong>, vers 17 h</td></tr></table></div><p class=\"ct-p\"><strong>Exemples</strong> :</p><ul class=\"ct-list\"><li>Votre article est livré le <strong>mercredi 14 octobre à 10 h</strong>. Vous êtes payé le <strong>mercredi 14 octobre vers 17 h</strong>.</li><li>Votre article est livré le <strong>mercredi 14 octobre à 19 h</strong>. Vous êtes payé le <strong>jeudi 15 octobre vers 17 h</strong>.</li><li>Votre article est livré le <strong>dimanche 18 octobre à 11 h</strong>. Vous êtes payé le <strong>dimanche 18 octobre vers 17 h</strong>.</li><li>Le client a commandé le lundi, mais il a reçu l'article le mercredi : c'est le <strong>mercredi</strong> qui compte.</li></ul><p class=\"ct-p\">Vous recevez donc votre argent <strong>au plus tard le lendemain</strong> de la livraison.</p><p class=\"ct-p\"><strong>Les règles du paiement</strong> :</p><ul class=\"ct-list\"><li>L'argent est envoyé sur votre compte <strong>mobile money</strong>. Vous choisissez votre opérateur dans l'application : <strong>Orange Money</strong>, <strong>Moov Money</strong> ou <strong>Wave</strong>, et le numéro qui reçoit l'argent.</li><li>Pour chaque envoi, l'opérateur prend des <strong>frais de transfert</strong>. Ces frais sont <strong>à votre charge</strong> : ils sont retirés de votre paiement. Les frais changent selon l'opérateur choisi.</li><li>Chaque jour où vous êtes payé, il y a <strong>un envoi</strong>, donc des frais pour cet envoi. Exemple : payé 3 jours dans la semaine = <strong>3 fois des frais</strong>.</li><li><strong>Il n'y a pas de montant minimum</strong> : même 500 FCFA sont versés.</li><li>Si le jour de paiement est un <strong>jour férié</strong>, vous êtes payé le jour ouvrable suivant.</li><li>Si un client fait une <strong>réclamation</strong> sur une vente, l'argent de cette vente attend la fin de la réclamation.</li></ul><p class=\"ct-p\"><strong>Exemple complet</strong> : vous avez vendu deux articles livrés le mercredi matin : une robe à <strong>10 000 FCFA</strong> et un sac à <strong>5 000 FCFA</strong>, soit <strong>15 000 FCFA</strong>.</p><ol class=\"ct-list\"><li>Sounsouni garde sa commission de 7 % : <strong>1 050 FCFA</strong>.</li><li>Il reste <strong>13 950 FCFA</strong>.</li><li>Vous avez choisi votre opérateur, qui prend par exemple <strong>150 FCFA</strong> de frais pour cet envoi.</li><li>Vous recevez <strong>13 800 FCFA</strong> le mercredi vers 17 h.</li></ol><p class=\"ct-p\">Les vrais frais de chaque opérateur sont affichés dans l'application avant chaque paiement.</p><p class=\"ct-p\"><strong>Conseil important pour fixer vos prix</strong> : quand vous mettez un prix sur un article, pensez à <strong>tous vos frais</strong> : la commission de Sounsouni (7 %), les frais de transfert de votre opérateur, et vos propres frais (achat de la marchandise, emballage...). Votre prix doit couvrir tout cela et vous laisser un <strong>bénéfice</strong>.</p><h4 class=\"ct-h4\">4. La livraison et les refus</h4><p class=\"ct-p\">Le client paie à la livraison. Il peut <strong>refuser l'article</strong> au moment de la livraison.</p><ul class=\"ct-list\"><li>Si le client refuse, l'article vous revient. <strong>Sounsouni paie la livraison</strong>, pas vous.</li><li>Si le client refuse parce que l'article <strong>ne correspond pas</strong> (autre couleur, autre taille, défectueux, différent de la photo), ce refus est <strong>compté contre vous</strong>.</li><li>Si cela arrive souvent, Sounsouni vous <strong>avertit</strong>, puis peut <strong>suspendre votre boutique</strong>.</li></ul><p class=\"ct-p\"><strong>Exemple</strong> : un client commande une robe rouge sur votre photo. Le livreur lui apporte une robe bleue. Le client refuse. Sounsouni paie la livraison, mais ce refus compte contre vous.</p><h4 class=\"ct-h4\">5. Vos obligations</h4><ul class=\"ct-list\"><li><strong>Photos vraies</strong> : vous montrez l'article que vous vendez vraiment.</li><li><strong>Prix vrai</strong> : le prix affiché est le prix que vous acceptez.</li><li><strong>Stock à jour</strong> : vous ne vendez pas un article que vous n'avez plus.</li><li><strong>Commande prête vite</strong> : quand vous recevez une commande, vous la confirmez et la préparez rapidement.</li><li><strong>Articles légaux</strong> : vous ne vendez aucun produit interdit (voir la liste à la fin).</li><li><strong>Vos impôts</strong> : vous restez responsable de vos impôts et de votre activité de commerce.</li></ul><p class=\"ct-p\"><strong>Vendeurs à l'étranger</strong> : vous indiquez le <strong>poids et les dimensions vrais</strong> de chaque article, et la <strong>quantité minimum</strong> de commande. Ils servent à calculer le transport.</p><h4 class=\"ct-h4\">6. Les produits interdits</h4><p class=\"ct-p\">Vous ne vendez <strong>jamais</strong> un produit interdit par la loi du Mali, ni un produit de la <strong>liste à la fin de ce document</strong>.</p><p class=\"ct-p\">Si vous le faites : Sounsouni <strong>retire l'article</strong> tout de suite et peut <strong>fermer votre boutique</strong>. Si la loi le demande, Sounsouni peut informer les autorités.</p><h4 class=\"ct-h4\">7. Les clients et leurs informations</h4><p class=\"ct-p\">Pour les <strong>commandes</strong>, vous ne voyez <strong>pas</strong> le numéro ni l'adresse du client : seuls le livreur et le point de retrait les voient. Pour les <strong>réservations</strong> (restaurant, hôtel, service), vous voyez le <strong>nom et le numéro</strong> du client, pour pouvoir le joindre.</p><ul class=\"ct-list\"><li>Ces informations servent <strong>uniquement</strong> à cette réservation.</li><li>Vous ne les utilisez <strong>pas</strong> pour faire de la publicité, envoyer des messages, ou les donner à quelqu'un d'autre.</li></ul><p class=\"ct-p\"><strong>Exemple</strong> : après une vente, vous n'avez <strong>pas le droit</strong> d'ajouter le client dans un groupe WhatsApp de promotion.</p><h4 class=\"ct-h4\">8. Vérification et contrôle</h4><ul class=\"ct-list\"><li>Sounsouni peut vous demander une <strong>pièce d'identité</strong> pour vérifier votre boutique.</li><li>Les clients peuvent <strong>signaler</strong> un article. Sounsouni peut alors le cacher et le contrôler.</li><li>Sounsouni peut <strong>retirer un article</strong> ou <strong>suspendre une boutique</strong> qui ne respecte pas ce contrat.</li></ul><h4 class=\"ct-h4\">9. La publicité payante</h4><p class=\"ct-p\">Si vous payez pour mettre un article en avant (« boost »), le prix et la durée sont indiqués avant de payer. <strong>Une publicité commencée n'est pas remboursée.</strong></p><h4 class=\"ct-h4\">10. Changement du contrat</h4><p class=\"ct-p\">Sounsouni peut changer ce contrat. Vous serez prévenu <strong>au moins 15 jours avant</strong>, dans l'application. Pour continuer à vendre, vous devrez accepter la nouvelle version.</p><h4 class=\"ct-h4\">11. Fin du contrat</h4><ul class=\"ct-list\"><li>Vous pouvez <strong>arrêter</strong> quand vous voulez, en fermant votre boutique.</li><li>Sounsouni peut <strong>arrêter</strong> le contrat si vous ne le respectez pas.</li><li>Dans les deux cas, l'argent de vos ventes déjà livrées vous est <strong>versé au prochain jour de paiement</strong>.</li></ul><h4 class=\"ct-h4\">12. En cas de désaccord</h4><p class=\"ct-p\">Vous et Sounsouni essayez d'abord de <strong>trouver une solution ensemble</strong>. Si ce n'est pas possible, le désaccord est réglé par les <strong>tribunaux de Bamako</strong>, selon la loi du Mali.</p><h3 class=\"ct-h3\">Annexe : les produits interdits sur Sounsouni</h3><p class=\"ct-p\">Ces produits sont <strong>interdits</strong> sur Sounsouni, <strong>sans exception</strong>. Cette liste vaut pour les vendeurs et pour les points de retrait. Sounsouni peut la compléter : la nouvelle liste s'affiche dans l'application.</p><p class=\"ct-p\"><strong>La règle générale</strong> : tout produit <strong>interdit par la loi du Mali</strong> est interdit sur Sounsouni, même s'il n'est pas dans cette liste.</p><div class=\"ct-table-wrap\"><table class=\"ct-table\"><tr><th>Produits interdits</th><th>Exemples</th></tr><tr><td>Alcool</td><td>bière, vin, liqueur, toute boisson alcoolisée</td></tr><tr><td>Tabac</td><td>cigarettes, chicha, tabac à mâcher, cigarettes électroniques</td></tr><tr><td>Drogues</td><td>cannabis, stupéfiants, et le matériel pour les consommer</td></tr><tr><td>Médicaments</td><td>comprimés, sirops, injections : ils se vendent uniquement en pharmacie</td></tr><tr><td>Armes</td><td>armes à feu, munitions, explosifs, pétards, couteaux de combat</td></tr><tr><td>Contrefaçons</td><td>faux produits de marque, copies vendues comme originales</td></tr><tr><td>Objets volés</td><td>tout objet dont vous n'êtes pas le propriétaire légitime</td></tr><tr><td>Faux documents</td><td>fausses pièces d'identité, faux diplômes, fausse monnaie</td></tr><tr><td>Animaux protégés</td><td>ivoire, peaux, carapaces, animaux sauvages vivants ou morts</td></tr><tr><td>Objets anciens du patrimoine</td><td>objets archéologiques, statues et objets culturels anciens du Mali</td></tr><tr><td>Produits pour la peau dangereux</td><td>crèmes éclaircissantes au mercure ou à l'hydroquinone</td></tr><tr><td>Produits chimiques dangereux</td><td>poisons, produits toxiques, acides</td></tr><tr><td>Contenus pour adultes</td><td>pornographie, objets sexuels</td></tr><tr><td>Produits périmés</td><td>aliments ou cosmétiques dont la date est dépassée</td></tr></table></div><p class=\"ct-p\"><strong>Si vous avez un doute</strong> sur un produit, demandez à Sounsouni <strong>avant</strong> de le mettre en vente.</p><p class=\"ct-p\"><strong>Ce qui arrive si vous vendez un produit interdit</strong> : l'article est retiré tout de suite, et votre boutique peut être fermée. Si la loi le demande, Sounsouni peut informer les autorités.</p>", relais: "<h3 class=\"ct-h3\">Contrat Point de retrait</h3><p class=\"ct-p\">Ce contrat est entre <strong>Sounsouni</strong> (RCCM ML-BKO-01-2026-A-05755, Sotelco, face à Bougouba, Bamako) et <strong>vous, le point de retrait</strong> : une boutique qui garde les colis des clients jusqu'à ce qu'ils viennent les chercher. En cochant « J'accepte » dans l'application, vous acceptez ce contrat.</p><h4 class=\"ct-h4\">Ce que vous devez retenir</h4><ul class=\"ct-list\"><li>Vous gagnez <strong>20 % du prix de la livraison</strong> de chaque colis remis au client.</li><li>Vous êtes payé <strong>une fois par semaine, le mardi</strong>.</li><li>Les <strong>frais de transfert</strong> de l'argent sont <strong>payés par Sounsouni</strong>, pas par vous.</li><li>Vous gardez un colis <strong>5 jours</strong> au maximum.</li><li>Vous ne remettez <strong>jamais</strong> un colis sans le <strong>bon code</strong> : au client avec son code de retrait, au livreur avec son code de reprise.</li><li>Le numéro et le nom des clients servent <strong>uniquement à la remise du colis</strong>.</li></ul><h4 class=\"ct-h4\">1. Votre rôle</h4><p class=\"ct-p\">Le livreur dépose chez vous les colis des clients. Vous les gardez en sécurité. Le client vient chercher son colis, et vous le lui remettez.</p><h4 class=\"ct-h4\">2. Ce que vous gagnez</h4><p class=\"ct-p\">Pour chaque colis <strong>remis au client</strong>, vous gagnez <strong>20 % du prix de la livraison</strong>.</p><p class=\"ct-p\"><strong>Exemple</strong> : la livraison d'un colis coûte <strong>1 500 FCFA</strong>. Le client vient le chercher chez vous. Vous gagnez <strong>300 FCFA</strong>. Sounsouni paie les frais de transfert : vous recevez les 300 FCFA en entier.</p><p class=\"ct-p\">Si le client ne vient pas chercher son colis, vous ne gagnez rien sur ce colis.</p><h4 class=\"ct-h4\">3. Quand vous êtes payé</h4><p class=\"ct-p\">Vous êtes payé <strong>une fois par semaine, le mardi</strong>, pour tous les colis <strong>remis aux clients</strong> pendant la semaine précédente (du lundi au dimanche).</p><div class=\"ct-table-wrap\"><table class=\"ct-table\"><tr><th>Colis remis au client...</th><th>Vous êtes payé le...</th></tr><tr><td>du lundi 5 au dimanche 11 octobre</td><td><strong>mardi 13 octobre</strong></td></tr><tr><td>du lundi 12 au dimanche 18 octobre</td><td><strong>mardi 20 octobre</strong></td></tr></table></div><p class=\"ct-p\"><strong>Exemples</strong> :</p><ul class=\"ct-list\"><li>Vous remettez un colis le <strong>dimanche 11 octobre</strong>. Vous êtes payé le <strong>mardi 13 octobre</strong>.</li><li>Vous remettez un colis le <strong>lundi 12 octobre</strong>. Il compte pour la semaine suivante : vous êtes payé le <strong>mardi 20 octobre</strong>.</li></ul><p class=\"ct-p\"><strong>Les règles du paiement</strong> :</p><ul class=\"ct-list\"><li>L'argent est envoyé sur votre compte <strong>mobile money</strong>. Vous choisissez votre opérateur dans l'application : <strong>Orange Money</strong>, <strong>Moov Money</strong> ou <strong>Wave</strong>, et le numéro qui reçoit l'argent.</li><li>Les <strong>frais de transfert sont payés par Sounsouni</strong>. Vous recevez la <strong>totalité</strong> de ce que vous avez gagné.</li><li><strong>Il n'y a pas de montant minimum</strong> : même 500 FCFA sont versés.</li><li>Si le mardi est un <strong>jour férié</strong>, vous êtes payé le jour ouvrable suivant.</li></ul><p class=\"ct-p\"><strong>Exemple</strong> : cette semaine, vous avez remis 10 colis. Chaque livraison coûtait 1 500 FCFA. Vous avez gagné 10 × 300 = <strong>3 000 FCFA</strong>. Le mardi, vous recevez <strong>3 000 FCFA</strong>, sans frais retirés.</p><h4 class=\"ct-h4\">4. Recevoir un colis</h4><ul class=\"ct-list\"><li>Le livreur vous donne un <strong>code de dépôt</strong>. Vous l'entrez dans l'application pour confirmer que le colis est chez vous.</li><li>Vous vérifiez que le colis est <strong>fermé et en bon état</strong>. S'il est abîmé, vous le signalez <strong>tout de suite</strong> dans l'application, avant de l'accepter.</li><li>Vous pouvez <strong>refuser</strong> un colis qui vous semble dangereux ou suspect.</li></ul><h4 class=\"ct-h4\">5. Garder un colis : 5 jours au maximum</h4><ul class=\"ct-list\"><li>Vous gardez le colis <strong>5 jours</strong> au maximum.</li><li>Le client reçoit un <strong>rappel automatique</strong> au <strong>2e jour</strong> et au <strong>4e jour</strong>.</li><li>Si le client vous dit qu'il ne viendra pas, ou s'il n'est toujours pas venu, vous appuyez sur <strong>« Le client n'est pas venu »</strong> dans l'application. Le vendeur et le livreur sont prévenus tout de suite.</li><li>Après 5 jours, si vous n'avez rien fait, le retour se déclenche <strong>automatiquement</strong>.</li><li>Le colis <strong>retourne chez le vendeur</strong>. <strong>Sounsouni paie ce retour</strong>, pas vous. Vous ne gagnez rien sur un colis non récupéré.</li></ul><p class=\"ct-p\"><strong>Exemple</strong> : un colis arrive chez vous le <strong>lundi</strong>. Le client reçoit un rappel le <strong>mercredi</strong>, puis le <strong>vendredi</strong>. S'il n'est pas venu le <strong>samedi</strong>, le retour se déclenche, et un livreur viendra reprendre le colis.</p><h4 class=\"ct-h4\">6. Remettre un colis : toujours avec le bon code</h4><ul class=\"ct-list\"><li>Le client vous montre son <strong>code de retrait</strong> ou son <strong>QR code</strong>.</li><li>Vous vérifiez le code dans l'application <strong>avant</strong> de remettre le colis.</li><li><strong>Sans le bon code, vous ne remettez jamais le colis</strong>, même à quelqu'un qui dit être le client ou un membre de sa famille.</li></ul><p class=\"ct-p\"><strong>Exemple</strong> : une personne vient chercher un colis « pour son frère », mais elle n'a pas le code. Vous refusez poliment, et vous lui demandez de revenir avec le code.</p><p class=\"ct-p\"><strong>Rendre un colis au livreur (retour)</strong> : quand un colis doit retourner chez le vendeur, le livreur vous donne un <strong>code de reprise</strong>. Vous le saisissez dans l'application (ou vous scannez son QR code). C'est la preuve que le colis a quitté votre boutique. <strong>Sans le bon code de reprise, vous ne donnez pas le colis.</strong></p><h4 class=\"ct-h4\">7. Votre responsabilité</h4><p class=\"ct-p\">Pendant que le colis est chez vous, vous en prenez soin. S'il est <strong>perdu, volé ou abîmé</strong> chez vous par négligence, ou remis <strong>sans le bon code</strong>, vous remboursez sa <strong>valeur</strong>.</p><p class=\"ct-p\">Si un client vous paie sa commande au moment du retrait, vous gardez cet argent en sécurité et vous le remettez à Sounsouni comme l'application l'indique.</p><h4 class=\"ct-h4\">8. Vos horaires</h4><p class=\"ct-p\">Vous indiquez vos <strong>jours et heures d'ouverture</strong> dans l'application, et vous les respectez. Si vous fermez exceptionnellement, vous le signalez dans l'application.</p><h4 class=\"ct-h4\">9. Les clients et leurs informations</h4><p class=\"ct-p\">Vous voyez le <strong>nom</strong> et parfois le <strong>numéro</strong> du client. Ces informations servent <strong>uniquement</strong> à lui remettre son colis.</p><ul class=\"ct-list\"><li>Vous ne les utilisez <strong>pas</strong> pour faire de la publicité, envoyer des messages, ou les donner à quelqu'un d'autre.</li><li>Vous n'ouvrez <strong>jamais</strong> un colis.</li></ul><h4 class=\"ct-h4\">10. Contrôle</h4><p class=\"ct-p\">Sounsouni peut <strong>suspendre</strong> votre point de retrait si vous ne respectez pas ce contrat, par exemple si des colis sont souvent remis sans code, perdus, ou si vous êtes souvent fermé aux heures annoncées.</p><h4 class=\"ct-h4\">11. Changement du contrat</h4><p class=\"ct-p\">Sounsouni peut changer ce contrat. Vous serez prévenu <strong>au moins 15 jours avant</strong>, dans l'application. Pour continuer, vous devrez accepter la nouvelle version.</p><h4 class=\"ct-h4\">12. Fin du contrat</h4><ul class=\"ct-list\"><li>Vous pouvez <strong>arrêter</strong> quand vous voulez. Vous prévenez Sounsouni au moins <strong>7 jours avant</strong>, pour que les colis en cours soient récupérés.</li><li>Sounsouni peut <strong>arrêter</strong> le contrat si vous ne le respectez pas.</li><li>Dans les deux cas, ce que vous avez gagné vous est <strong>versé au prochain jour de paiement</strong>.</li></ul><h4 class=\"ct-h4\">13. En cas de désaccord</h4><p class=\"ct-p\">Vous et Sounsouni essayez d'abord de <strong>trouver une solution ensemble</strong>. Si ce n'est pas possible, le désaccord est réglé par les <strong>tribunaux de Bamako</strong>, selon la loi du Mali.</p><h3 class=\"ct-h3\">Annexe : les produits interdits sur Sounsouni</h3><p class=\"ct-p\">Ces produits sont <strong>interdits</strong> sur Sounsouni, <strong>sans exception</strong>. Cette liste vaut pour les vendeurs et pour les points de retrait. Sounsouni peut la compléter : la nouvelle liste s'affiche dans l'application.</p><p class=\"ct-p\"><strong>La règle générale</strong> : tout produit <strong>interdit par la loi du Mali</strong> est interdit sur Sounsouni, même s'il n'est pas dans cette liste.</p><div class=\"ct-table-wrap\"><table class=\"ct-table\"><tr><th>Produits interdits</th><th>Exemples</th></tr><tr><td>Alcool</td><td>bière, vin, liqueur, toute boisson alcoolisée</td></tr><tr><td>Tabac</td><td>cigarettes, chicha, tabac à mâcher, cigarettes électroniques</td></tr><tr><td>Drogues</td><td>cannabis, stupéfiants, et le matériel pour les consommer</td></tr><tr><td>Médicaments</td><td>comprimés, sirops, injections : ils se vendent uniquement en pharmacie</td></tr><tr><td>Armes</td><td>armes à feu, munitions, explosifs, pétards, couteaux de combat</td></tr><tr><td>Contrefaçons</td><td>faux produits de marque, copies vendues comme originales</td></tr><tr><td>Objets volés</td><td>tout objet dont vous n'êtes pas le propriétaire légitime</td></tr><tr><td>Faux documents</td><td>fausses pièces d'identité, faux diplômes, fausse monnaie</td></tr><tr><td>Animaux protégés</td><td>ivoire, peaux, carapaces, animaux sauvages vivants ou morts</td></tr><tr><td>Objets anciens du patrimoine</td><td>objets archéologiques, statues et objets culturels anciens du Mali</td></tr><tr><td>Produits pour la peau dangereux</td><td>crèmes éclaircissantes au mercure ou à l'hydroquinone</td></tr><tr><td>Produits chimiques dangereux</td><td>poisons, produits toxiques, acides</td></tr><tr><td>Contenus pour adultes</td><td>pornographie, objets sexuels</td></tr><tr><td>Produits périmés</td><td>aliments ou cosmétiques dont la date est dépassée</td></tr></table></div><p class=\"ct-p\"><strong>Si vous avez un doute</strong> sur un produit, demandez à Sounsouni <strong>avant</strong> de le mettre en vente.</p><p class=\"ct-p\"><strong>Ce qui arrive si vous vendez un produit interdit</strong> : l'article est retiré tout de suite, et votre boutique peut être fermée. Si la loi le demande, Sounsouni peut informer les autorités.</p>" };
 function contractKindToAccept() {
   if (!state.profile || state.adminUnlocked) return null;
-  if (state.profile.role === "vendeur" && state.profile.contractVendeurVersion !== CONTRACT_VERSION) return "vendeur";
+  if (state.profile.role === "vendeur" && state.profile.sellerType !== "international" && state.profile.contractVendeurVersion !== CONTRACT_VERSION_VENDEUR) return "vendeur";
   if (state.profile.role === "point_vente" && state.profile.contractRelaisVersion !== CONTRACT_VERSION) return "relais";
   return null;
 }
@@ -27928,15 +28357,15 @@ function renderContractGate() {
   return html;
 }
 
-// ---------- VERSEMENTS (contrats : vendeurs mardi + vendredi, points de retrait mardi) ----------
-// Même calcul que le serveur (wallet-write) : article livré du mardi au
-// vendredi → payé le mardi suivant ; samedi, dimanche ou lundi → vendredi
-// suivant. Point de retrait : mardi suivant la semaine (lundi → dimanche).
+// ---------- VERSEMENTS (vendeurs : chaque jour à 17 h ; points de retrait : mardi) ----------
+// Même calcul que le serveur (wallet-write) : livré avant 17 h → payé le
+// jour même à 17 h ; après 17 h → le lendemain à 17 h. Point de retrait :
+// mardi suivant la semaine (lundi → dimanche).
 var PAYOUT_OPERATORS = [["orange", "Orange Money"], ["moov", "Moov Money"], ["wave", "Wave"]];
 function payoutDateFor(ts, kind) {
   var d = new Date(ts || 0), day = d.getUTCDay(), add;
   if (kind === "relais") add = (7 - ((day + 6) % 7)) + 1;
-  else add = (day >= 2 && day <= 5) ? (7 - day + 2) : (day === 6 ? 6 : (day === 0 ? 5 : 4));
+  else add = d.getUTCHours() < 17 ? 0 : 1; // vendeur : chaque jour à 17 h (heure de Bamako = UTC)
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + add)).toISOString().slice(0, 10);
 }
 function fmtPayoutDate(iso) {
@@ -28053,7 +28482,8 @@ function renderSellerOrders() {
     });
     html += '</div>';
   }
-  html += renderPayoutCard("seller");
+  // Vendeur international : payé par son agent de sourcing, pas par mobile money au Mali.
+  if (!isInternationalSeller(state.profile)) html += renderPayoutCard("seller");
   return html; })();
   if (myOrders.length === 0) return sellerTopHtml + '<div class="empty-state"><i class="fa-solid fa-inbox"></i><div class="title">' + t("seller_no_order") + '</div></div>';
   // Les plus récentes en premier — sans ce tri, l'ordre suivait juste
@@ -29053,7 +29483,7 @@ var ADMIN_MODULES_META = {
   reviews:            { icon: "fa-star",                 get name() { return t("admin_mod_reviews"); },      get sub() { return t("admin_mod_reviews_sub"); } },
   filature:           { icon: "fa-user-secret",           get name() { return t("admin_mod_filature"); },     get sub() { return t("admin_mod_filature_sub"); } },
   moderation:         { icon: "fa-shield-virus",           name: "Modération des articles", sub: "Articles signalés ou suspects, en attente de ta décision" },
-  versements:         { icon: "fa-money-bill-transfer",   name: "Versements", sub: "Paiements du mardi et du vendredi aux vendeurs et points de retrait" },
+  versements:         { icon: "fa-money-bill-transfer",   name: "Versements", sub: "Vendeurs : chaque jour à 17 h · Points de retrait : le mardi" },
   test:               { icon: "fa-bug",                    name: "Test", sub: "Journaux d'erreurs et diagnostics" }
 };
 
@@ -30438,8 +30868,8 @@ function renderAdminPayoutsCard() {
   (state.settings || []).forEach(function(x) { if (x.id === "payout_fees") cfg = x.config || {}; });
   var today = new Date().toISOString().slice(0, 10);
   var html = '<div style="padding:10px;margin-bottom:12px;border-radius:10px;background:var(--bg-body);">';
-  html += '<div style="font-size:12.5px;font-weight:700;margin-bottom:4px;"><i class="fa-solid fa-money-bill-transfer"></i> Versements du jour (mardi et vendredi)</div>';
-  html += '<div style="font-size:10.5px;color:var(--text-dim);margin-bottom:8px;">Vendeurs et parrains : mardi et vendredi (frais à leur charge). Points de retrait : mardi (frais payés par Sounsouni). Faites le transfert, puis appuyez sur « Payé » avec sa référence.</div>';
+  html += '<div style="font-size:12.5px;font-weight:700;margin-bottom:4px;"><i class="fa-solid fa-money-bill-transfer"></i> Versements du jour (vendeurs chaque jour à 17 h)</div>';
+  html += '<div style="font-size:10.5px;color:var(--text-dim);margin-bottom:8px;">Vendeurs et parrains : chaque jour à 17 h (frais à leur charge). Points de retrait : le mardi (frais payés par Sounsouni). Faites le transfert, puis appuyez sur « Payé » avec sa référence.</div>';
   html += '<div style="display:flex;gap:6px;margin-bottom:8px;"><input class="input" type="date" id="admin-payout-date" style="flex:1;min-width:0;" value="' + esc(pl.date || today) + '" /><button class="btn-primary" style="flex:0;padding:8px 12px;font-size:12px;" data-action="admin-load-payouts">Afficher</button></div>';
   if (pl.loading) html += '<div style="font-size:12px;">Chargement…</div>';
   else if (pl.error) html += '<div style="font-size:12px;color:var(--danger);">Erreur : ' + esc(pl.error) + '</div>';
@@ -34986,6 +35416,25 @@ root.addEventListener("click", function(e) {
       break;
     }
     case "set-onboard-role": state.onboardDraft.role = value; render(); break;
+    case "reconnect-with-password": {
+      var rpw = document.getElementById("reconnect-password");
+      var rpv = rpw ? rpw.value : "";
+      if (!rpv) break;
+      verifyAccountPassword(state.profile.id, rpv).then(function(okPw) {
+        state.reconnectError = !okPw;
+        if (okPw) { pushDebugLog("info", "Clé de session renouvelée", "par mot de passe"); afterSessionRestored(); showToast("✅"); }
+        render();
+      });
+      break;
+    }
+    case "reconnect-retry": { state.showReconnectSheet = false; render(); ensureFreshSession(true); break; }
+    case "reconnect-later": { state.showReconnectSheet = false; state.reconnectError = false; render(); break; }
+    case "retry-pending-now": {
+      (state.pendingSyncQueue || []).forEach(function(e) { e.blocked = false; });
+      ensureFreshSession(true).then(function() { flushPendingSyncQueue(true); setTimeout(render, 4000); });
+      showToast("⏳ Envoi en cours…");
+      break;
+    }
     case "onboard-continue-identity": {
       var d0 = state.onboardDraft;
       if (!d0.name || !d0.name.trim()) { showToast(t("toast_fullname_required")); break; }
@@ -35288,7 +35737,7 @@ root.addEventListener("click", function(e) {
     case "accept-prohibited-goods-consent": {
       var pgBox = document.getElementById("prohibited-goods-checkbox");
       if (!pgBox || !pgBox.checked) {
-        showToast("Cochez la case d'engagement pour continuer.");
+        showToast(state.language === "fr" ? "Cochez la case d'engagement pour continuer." : (state.language === "hi" ? "आगे बढ़ने के लिए बॉक्स पर टिक करें।" : "Tick the commitment box to continue."));
         break;
       }
       state.onboardDraft.prohibitedGoodsConsent = true;
@@ -36144,7 +36593,7 @@ root.addEventListener("click", function(e) {
       if (!fd.phone || !fd.phone.trim()) { showToast(t("toast_enter_phone2")); break; }
       if (!fd.birthDate) { showToast(t("toast_enter_birthdate")); break; }
       if (!fd.recoveryCode || !fd.recoveryCode.trim()) { showToast(t("toast_enter_secret_code")); break; }
-      findAccountForRecovery({ mode: "phone", name: fd.name, phone: fd.phone.replace(/\D/g, ""), countryCode: fd.countryCode, birthDate: fd.birthDate }).then(function(findRes) {
+      findAccountForRecovery({ mode: "phone", name: fd.name, phone: stripTrunkZero(fd.countryCode, fd.phone), countryCode: fd.countryCode, birthDate: fd.birthDate }).then(function(findRes) {
         if (!findRes.success || !findRes.found) {
           showToast("❌ Aucune correspondance trouvée. Vérifiez chaque champ, ou utilisez \"J'ai perdu le code\".");
           return;
@@ -39879,7 +40328,7 @@ root.addEventListener("click", function(e) {
       var chk = document.getElementById("contract-accept-check");
       if (!chk || !chk.checked) { showToast("Cochez d'abord « J'ai lu le contrat et je l'accepte »."); break; }
       if (value === "relais") { state.profile.contractRelaisVersion = CONTRACT_VERSION; state.profile.contractRelaisAcceptedAt = Date.now(); }
-      else { state.profile.contractVendeurVersion = CONTRACT_VERSION; state.profile.contractVendeurAcceptedAt = Date.now(); }
+      else { state.profile.contractVendeurVersion = CONTRACT_VERSION_VENDEUR; state.profile.contractVendeurAcceptedAt = Date.now(); }
       persistProfileToAccounts();
       showToast("✅ Contrat accepté. Merci !");
       render();
@@ -41444,6 +41893,8 @@ function trySplashFinish() {
     bootStep("colis en point de retrait", checkStalePickupOrders);
     bootStep("retour de paiement", checkPaymentReturn);
     bootStep("affichage", render);
+    bootStep("nettoyage du journal", function() { (state.debugLog || []).forEach(function(l) { l.message = maskSecrets(l.message); l.detail = maskSecrets(l.detail); }); });
+    bootStep("clé de session", function() { setTimeout(function() { ensureFreshSession(); }, 4000); setInterval(function() { ensureFreshSession(); }, 30 * 60 * 1000); });
   }
 }
 
