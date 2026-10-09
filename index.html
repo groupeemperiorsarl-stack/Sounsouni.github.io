@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-04-c";
+    window.SOUNSOUNI_VERSION = "2026-10-05-a";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -28018,6 +28018,11 @@ function renderPayoutCard(kind) {
 
 function renderSellerOrders() {
   var myOrders = [];
+  // Mes comptes liés (même numéro : compte acheteur + boutique...) — comme
+  // pour les notifications, sinon une commande adressée à la boutique restait
+  // invisible quand un autre de mes comptes était ouvert.
+  var mySellerIds = getLinkedAccountIds();
+  if (state.profile && mySellerIds.indexOf(state.profile.id) === -1) mySellerIds.push(state.profile.id);
   for (var i = 0; i < state.orders.length; i++) {
     var o = state.orders[i];
     // "sellerIds" est disponible IMMÉDIATEMENT (métadonnée publique de la
@@ -28025,9 +28030,9 @@ function renderSellerOrders() {
     // après (voir fetchMyOrderDetails). Filtrer sur items ici faisait
     // apparaître une commande toute neuve comme "invisible" pour le
     // vendeur, le temps que son contenu arrive.
-    if (Array.isArray(o.sellerIds) && o.sellerIds.indexOf(state.profile.id) !== -1) {
+    if (Array.isArray(o.sellerIds) && o.sellerIds.some(function(sid) { return mySellerIds.indexOf(sid) !== -1; })) {
       myOrders.push(o);
-    } else if (Array.isArray(o.items) && o.items.some(function(it) { return it.sellerId === state.profile.id; })) {
+    } else if (Array.isArray(o.items) && o.items.some(function(it) { return mySellerIds.indexOf(it.sellerId) !== -1; })) {
       // Repli pour d'éventuelles commandes qui n'auraient pas sellerIds
       // (ne devrait plus arriver après la migration, gardé par sécurité).
       myOrders.push(o);
@@ -28036,7 +28041,7 @@ function renderSellerOrders() {
   // Retours à recevoir et carte « Mon argent » : affichés même sans commande en cours
   var sellerTopHtml = (function() { var html = '';
   // Retours en route vers le vendeur : il confirme la réception (fin de la chaîne)
-  var myRetours = (state.orders || []).filter(function(o) { return o.returnStatus === "repris_par_livreur" && state.profile && Array.isArray(o.sellerIds) && o.sellerIds.indexOf(state.profile.id) !== -1; });
+  var myRetours = (state.orders || []).filter(function(o) { return o.returnStatus === "repris_par_livreur" && state.profile && Array.isArray(o.sellerIds) && o.sellerIds.some(function(sid) { return mySellerIds.indexOf(sid) !== -1; }); });
   if (myRetours.length) {
     html += '<div class="glass-card" style="padding:12px;margin-bottom:12px;border-left:3px solid var(--accent);">';
     html += '<div style="font-weight:800;font-size:13.5px;margin-bottom:6px;"><i class="fa-solid fa-rotate-left"></i> ' + t("seller_returns_title") + ' (' + myRetours.length + ')</div>';
