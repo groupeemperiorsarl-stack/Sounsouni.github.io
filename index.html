@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-09-f";
+    window.SOUNSOUNI_VERSION = "2026-10-10-c";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -5079,7 +5079,7 @@ const SHARED_KEYS = [
 // "secure-write", qui vérifie l'identité et applique les règles (chacun ne
 // modifie que ce qu'il a le droit de modifier). Tant que la fonction n'est
 // pas déployée, repli sur l'écriture directe.
-var SECURE_WRITE_COLLECTIONS = ["accounts", "products", "settings", "nationalAdmins", "sourcingAgentWhitelist", "group2GlobalWhitelist", "apiPartners", "webhookPartners", "dashboardPartners", "platformCommissions", "vipAds"];
+var SECURE_WRITE_COLLECTIONS = ["accounts", "products", "boosts", "settings", "nationalAdmins", "sourcingAgentWhitelist", "group2GlobalWhitelist", "apiPartners", "webhookPartners", "dashboardPartners", "platformCommissions", "vipAds"];
 // Lit la réponse d'une fonction serveur. Si ce n'est pas du JSON (fonction
 // plantée, limite atteinte...), on garde le vrai code HTTP et le début du
 // texte, au lieu d'un simple "network_error" qui ne dit rien.
@@ -5620,7 +5620,7 @@ function runBackgroundResync() {
   var PAGE_SIZE = 900;
 
   function fetchAllResyncPages(offset, accumulated) {
-    var pageQuery = sb.from("app_data").select("*").not("collection", "in", "(products,orders,notifications,conversations)").range(offset, offset + PAGE_SIZE - 1);
+    var pageQuery = sb.from("app_data").select("*").not("collection", "in", "(products,orders,notifications,conversations,visitIds,visitStats)").range(offset, offset + PAGE_SIZE - 1);
     if (!needsFullSync) pageQuery = pageQuery.gt("updated_at", lastSyncAt);
     return pageQuery.then(function(res) {
       if (res.error) return res;
@@ -6999,7 +6999,7 @@ function saveEmployeePermissions(perms) {
 // s'exécute, au même endroit pour tout l'Admin — pas de contournement
 // possible depuis un écran oublié.
 var ADMIN_RESTRICTED_ACTIONS = [
-  "admin-edit-product", "admin-delete-product", "admin-force-order-status", "admin-delete-order",
+  "admin-edit-product", "admin-delete-product", "admin-force-order-status", "admin-delete-order", "admin-shop-unavailable",
   "admin-delete-review", "toggle-account-banned", "toggle-account-verified", "dismiss-refusal-alert",
   "reset-brand-image", "reset-section-style", "reset-section-style-title", "toggle-brand-image-enabled", "toggle-section-style-visible",
   "toggle-section-style-bold", "set-brand-image-field", "set-section-style-field", "save-market-display-config",
@@ -7581,90 +7581,79 @@ function applyBoostOrdering(products) {
 // ciblé/public large — tout réglable en Admin (getAlgorithmConfig).
 function sortMarketWithAlgorithm(products) {
   var cfg = getAlgorithmConfig();
-  var boosted = [], normal = [];
-  for (var i = 0; i < products.length; i++) {
-    if (isProductBoosted(products[i])) boosted.push(products[i]); else normal.push(products[i]);
-  }
-  var scores = computeRelevanceScores(state.profile);
-  // Départage les articles à score égal par un ordre différent à chaque
-  // nouvelle visite du marché (voir la graine _marketVisitSeed dans
-  // render()) — sans ça, tous les articles à 0 point (la grande majorité,
-  // faute d'historique) gardaient toujours le même ordre d'insertion en
-  // base, donc les mêmes articles en tête à chaque ouverture.
+  var seed = window._marketVisitSeed || 0;
+  // Petit nombre pseudo-aléatoire stable pour CETTE visite (même ordre tant
+  // qu'on ne quitte pas le marché, nouvel ordre à la visite suivante).
   function visitJitter(id) {
-    var s = id + "|" + (window._marketVisitSeed || 0);
-    var h = 0;
-    for (var vi = 0; vi < s.length; vi++) h = (h * 31 + s.charCodeAt(vi)) | 0;
+    // Mélange solide (FNV-1a + brassage) : deux identifiants proches
+    // (P070 / P080) donnent des ordres vraiment différents à chaque visite.
+    var str = id + "|" + seed, h = 2166136261;
+    for (var vi = 0; vi < str.length; vi++) { h ^= str.charCodeAt(vi); h = Math.imul(h, 16777619); }
+    h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995); h ^= h >>> 15;
     return h >>> 0;
   }
-  var normalIds = normal.map(function(p) { return p.id; });
-  normalIds.sort(function(a, b) {
-    var sa = scores[a] || 0, sb = scores[b] || 0;
-    if (sa !== sb) return sb - sa;
-    return visitJitter(a) - visitJitter(b);
+  // Un boost d'ARTICLE = 1 place sponsorisée. Un boost de BOUTIQUE = 1 place
+  // aussi, avec un article différent de la boutique à chaque visite. Avant,
+  // une boutique boostée de 60 articles prenait la moitié du haut du marché
+  // (toujours les mêmes 10 articles), et écrasait les articles boostés seuls.
+  var productBoostIds = {}, shopBoostSellers = {};
+  (state.boosts || []).forEach(function(b) {
+    if (!isBoostActive(b)) return;
+    if (b.targetType === "product") productBoostIds[b.targetId] = true;
+    else if (b.targetType === "shop") shopBoostSellers[b.sellerId] = true;
   });
-  normalIds = interleaveDiscovery(normalIds, normalIds.slice(), cfg.marketDiscoveryRatio);
-
-  var normalSorted = [];
-  // Table de correspondance id -> produit, construite une fois (au lieu de
-  // reparcourir toute la liste "normal" pour chaque produit — une double
-  // boucle qui devenait coûteuse avec un grand catalogue, alors que ce tri
-  // par défaut s'exécute à CHAQUE défilement/interaction du marché).
-  var normalById = {};
-  for (var nbi = 0; nbi < normal.length; nbi++) normalById[normal[nbi].id] = normal[nbi];
-  for (var j2 = 0; j2 < normalIds.length; j2++) {
-    normalSorted.push(normalById[normalIds[j2]]);
+  var inStock = [], outOfStock = [];
+  for (var i = 0; i < products.length; i++) {
+    if (products[i].stock != null && Number(products[i].stock) <= 0) outOfStock.push(products[i]); else inStock.push(products[i]);
   }
-
-  if (boosted.length === 0) return normalSorted;
-  if (normalSorted.length === 0) return boosted;
-
-  // Ciblé = un minimum de pertinence pour ce profil précis ; large = ouvert
-  // à tout le monde, y compris les nouveaux venus sans historique — pour
-  // que le vendeur qui boost puisse aussi se faire découvrir, pas
-  // seulement retrouver les gens qui le connaissent déjà.
-  var targetedBoosted = boosted.filter(function(p) { return (scores[p.id] || 0) >= 3; });
-  var boostRotation = 0;
-  // Même souci que le mélange "découverte" ci-dessus : sans mise en cache,
-  // ce choix aléatoire (ciblé ou large) était retiré à chaque redessin de
-  // l'écran, donc à chaque clic — un article sponsorisé pouvait apparaître
-  // puis disparaître d'un rendu à l'autre sans raison pour l'utilisateur.
-  var boostCacheKey = boosted.map(function(p) { return p.id; }).sort().join(",") + "|" + targetedBoosted.length;
-  function pickBoostedItem() {
-    var slotIdx = boostRotation++;
-    var cacheSlotKey = boostCacheKey + "#" + slotIdx;
-    if (!window._boostPoolChoiceCache) window._boostPoolChoiceCache = {};
-    var useTargeted;
-    if (cacheSlotKey in window._boostPoolChoiceCache) {
-      useTargeted = window._boostPoolChoiceCache[cacheSlotKey];
-    } else {
-      useTargeted = targetedBoosted.length > 0 && Math.random() >= cfg.boostBroadRatio;
-      window._boostPoolChoiceCache[cacheSlotKey] = useTargeted;
+  var slots = [], usedInSlot = {};
+  inStock.forEach(function(p) { if (productBoostIds[p.id]) { slots.push(p); usedInSlot[p.id] = true; } });
+  Object.keys(shopBoostSellers).forEach(function(sid) {
+    var pool = inStock.filter(function(p) { return p.sellerId === sid && !usedInSlot[p.id]; });
+    if (!pool.length) return;
+    pool.sort(function(x, y) { return visitJitter(x.id) - visitJitter(y.id); });
+    slots.push(pool[0]); usedInSlot[pool[0].id] = true;
+  });
+  slots.sort(function(x, y) { return visitJitter(x.id) - visitJitter(y.id); });
+  var scores = computeRelevanceScores(state.profile);
+  var normal = inStock.filter(function(p) { return !usedInSlot[p.id]; });
+  // Un peu de hasard ajouté à chaque visite (0 à 4 points) : un article un
+  // peu moins bien noté passe parfois devant — chaque article a sa chance,
+  // sans que l'ordre change pendant qu'on fait défiler.
+  var eff = {};
+  normal.forEach(function(p) { eff[p.id] = (scores[p.id] || 0) + (visitJitter(p.id) % 1000) / 250; });
+  normal.sort(function(x, y) { return eff[y.id] - eff[x.id]; });
+  var normalIds = interleaveDiscovery(normal.map(function(p) { return p.id; }), normal.map(function(p) { return p.id; }), cfg.marketDiscoveryRatio);
+  var byId = {};
+  normal.forEach(function(p) { byId[p.id] = p; });
+  var ordered = normalIds.map(function(id) { return byId[id]; }).filter(Boolean);
+  // Diversité : jamais plus de 2 articles de la même boutique d'affilée —
+  // une boutique qui a beaucoup d'articles ne peut plus remplir tout l'écran.
+  var spread = [], waiting = ordered.slice();
+  while (waiting.length) {
+    var pick = 0;
+    for (var w = 0; w < waiting.length; w++) {
+      var n1 = spread[spread.length - 1], n2 = spread[spread.length - 2];
+      if (!(n1 && n2 && n1.sellerId === waiting[w].sellerId && n2.sellerId === waiting[w].sellerId)) { pick = w; break; }
     }
-    var pool = useTargeted ? targetedBoosted : boosted;
-    return pool[slotIdx % pool.length];
+    spread.push(waiting.splice(pick, 1)[0]);
   }
-
-  // Chaque produit actuellement boosté DOIT apparaître au moins une fois
-  // à chaque ouverture du marché — avant ce correctif, le tirage
-  // cyclique (pickBoostedItem) pouvait, selon le nombre de sponsors
-  // actifs à un instant donné, en ignorer certains complètement sans
-  // que personne ne s'en aperçoive. Les articles ciblés (pertinents
-  // pour ce profil) passent en premier, mais aucun n'est jamais exclu.
-  var orderedBoosted = targetedBoosted.concat(boosted.filter(function(p) { return targetedBoosted.indexOf(p) === -1; }));
-  var boostedToShow = orderedBoosted.length;
-  var result = normalSorted.slice();
-  // Espacement régulier, mais qui se resserre automatiquement s'il y a
-  // beaucoup de sponsors actifs à caser — sans ça, avec un catalogue
-  // court et beaucoup de sponsors, certains se seraient encore
-  // retrouvés au-delà de la fin de la liste.
-  var spacing = Math.max(1, Math.min(cfg.boostInjectionRate, Math.floor(result.length / (boostedToShow + 1)) || 1));
-  var insertPos = spacing;
-  for (var bi = 0; bi < boostedToShow; bi++) {
-    result.splice(Math.min(insertPos, result.length), 0, orderedBoosted[bi]);
-    insertPos += spacing + 1;
+  // Places sponsorisées réparties régulièrement (toutes présentes à chaque visite).
+  var result = spread;
+  if (slots.length) {
+    var spacing = Math.max(1, Math.min(cfg.boostInjectionRate, Math.floor(result.length / (slots.length + 1)) || 1));
+    var pos = Math.min(2, result.length);
+    for (var bi = 0; bi < slots.length; bi++) {
+      var at = Math.min(pos, result.length);
+      // évite de coller 3 articles de la même boutique
+      var sameAt = function(k) { return result[k] && result[k].sellerId === slots[bi].sellerId; };
+      while (at < result.length && ((sameAt(at - 1) && sameAt(at - 2)) || (sameAt(at - 1) && sameAt(at)) || (sameAt(at) && sameAt(at + 1)))) at++;
+      result.splice(at, 0, slots[bi]);
+      pos = at + spacing + 1;
+    }
   }
-  return result;
+  // Les articles en rupture de stock restent visibles, mais en bas.
+  return result.concat(outOfStock);
 }
 
 // Identifiant partagé pour les notifications/messages livreur — l'accès
@@ -10273,6 +10262,9 @@ const TRANSLATIONS = {
     seller_returns_title: "Retours en route vers vous",
     seller_return_received_btn: "J'ai reçu le retour",
     livreur_shop_ready: "prête",
+    livreur_shop_ready_pickup: "prête à récupérer",
+    livreur_shop_not_ready: "pas encore prête",
+    livreur_shop_unavailable: "indisponible (articles retirés)",
     livreur_to_collect: "À encaisser auprès du client",
     livreur_shop_preparing: "en préparation",
     livreur_contact_after_pickup: "Le numéro et la position du client s'afficheront dès que vous prenez la commande en charge.",
@@ -12036,6 +12028,9 @@ const TRANSLATIONS = {
     seller_returns_title: "Returns on the way to you",
     seller_return_received_btn: "I received the return",
     livreur_shop_ready: "ready",
+    livreur_shop_ready_pickup: "ready for pickup",
+    livreur_shop_not_ready: "not ready yet",
+    livreur_shop_unavailable: "unavailable (items removed)",
     livreur_to_collect: "To collect from the customer",
     livreur_shop_preparing: "being prepared",
     livreur_contact_after_pickup: "The customer's number and location will appear as soon as you take charge of the order.",
@@ -13799,6 +13794,9 @@ const TRANSLATIONS = {
     seller_returns_title: "आपकी ओर आ रही वापसी",
     seller_return_received_btn: "मुझे वापसी मिल गई",
     livreur_shop_ready: "तैयार",
+    livreur_shop_ready_pickup: "लेने के लिए तैयार",
+    livreur_shop_not_ready: "अभी तैयार नहीं",
+    livreur_shop_unavailable: "उपलब्ध नहीं (सामान हटाया गया)",
     livreur_to_collect: "ग्राहक से लेना है",
     livreur_shop_preparing: "तैयार हो रहा है",
     livreur_contact_after_pickup: "ऑर्डर लेते ही ग्राहक का नंबर और स्थान दिखाई देगा।",
@@ -15598,6 +15596,7 @@ function registerAccount() {
       state.sessionToken = res.sessionToken;
       save();
       render();
+      setTimeout(trackVisit, 1500);
     });
   }
   console.log("Après save()");
@@ -15984,6 +15983,7 @@ function loginAccount(accountId) {
   fetchMyOrderContacts();
   fetchMyOrderDetails();
   callAdminAccessOperation({ operation: "record_login" });
+  setTimeout(trackVisit, 1500);
   render();
 }
 
@@ -17340,11 +17340,14 @@ function sellerConfirmReady(orderId) {
   render();
 }
 
-function sellerRefuseItems(orderId, reason) {
+// sellerIdForAdmin : l'administration retire la part d'UNE boutique précise
+// (boutique injoignable ou qui ne peut pas fournir), sans annuler les autres.
+function sellerRefuseItems(orderId, reason, sellerIdForAdmin) {
   var order = null;
   for (var i = 0; i < state.orders.length; i++) { if (state.orders[i].id === orderId) { order = state.orders[i]; break; } }
-  if (!order || !state.profile) return;
-  var myId = state.profile.id;
+  if (!order || (!state.profile && !sellerIdForAdmin)) return;
+  var myId = sellerIdForAdmin || state.profile.id;
+  var byAdmin = !!sellerIdForAdmin;
   var terminalStatuses = ["Livrée", "Annulée", "Non livrable", "Refusée au retrait"];
   if (terminalStatuses.indexOf(order.status) !== -1) {
     showToast(t("toast_order_cannot_be_modified"));
@@ -17426,14 +17429,14 @@ function sellerRefuseItems(orderId, reason) {
   for (var bai2 = 0; bai2 < state.accounts.length; bai2++) {
     if (state.accounts[bai2].id === order.buyerId) {
       state.accounts[bai2].hasNewBuyerStatusAlert = true;
-      if (state.profile.id === order.buyerId) state.profile.hasNewBuyerStatusAlert = true;
+      if (state.profile && state.profile.id === order.buyerId) state.profile.hasNewBuyerStatusAlert = true;
       saveDoc("accounts", state.accounts[bai2]);
       break;
     }
   }
   save();
-  secureOrderSaveDoc(order);
-  createDispute(orderId, "produit_endommage", "Le vendeur " + (myShopName || "") + " a signalé que sa part de la commande ne peut pas être livrée : " + reason, true);
+  secureOrderSaveDoc(order, byAdmin);
+  if (!byAdmin) createDispute(orderId, "produit_endommage", "Le vendeur " + (myShopName || "") + " a signalé que sa part de la commande ne peut pas être livrée : " + reason, true);
   state.showNonLivrableModal = false;
   state.nonLivrableOrderId = null;
   state.nonLivrableReason = "";
@@ -18320,8 +18323,9 @@ function getWallet(phone) {
 // Même principe que secureWalletSaveDoc, pour les commandes — voir
 // migration 05. Un seul point d'entrée, réutilisé partout où une
 // commande est créée ou modifiée (il y en avait 18, dispersés).
-function secureOrderSaveDoc(order) {
+function secureOrderSaveDoc(order, asAdmin) {
   if (!FIREBASE_ENABLED) return;
+  var useAdminKey = !!(asAdmin && state.adminSessionToken);
   // Les 5 champs sensibles (GPS exact, repère, téléphones) ne partent
   // jamais dans "orders" — collection largement synchronisée avec tout
   // le monde. On envoie une COPIE nettoyée au serveur ; la copie locale
@@ -18342,11 +18346,15 @@ function secureOrderSaveDoc(order) {
   // serveur) la met en file d'attente, via le .then/.catch ci-dessous.
   return fetch(supabaseConfig.url + "/functions/v1/order-write", {
     method: "POST",
-    headers: authHeaders(),
+    headers: authHeaders(null, useAdminKey),
     body: JSON.stringify({ docId: cleaned.id, data: cleaned, referralCode: currentReferralCode() })
   })
     .then(readServerJson)
     .then(function(res) {
+      if (res.success && typeof res.newTotal === "number") {
+        var nt = (state.orders || []).find(function(x) { return x.id === cleaned.id; });
+        if (nt) { nt.total = res.newTotal; save(); renderOrDefer(); }
+      }
       if (!res.success) {
         console.error("Erreur order-write :", res.error);
         try { pushDebugLog("error", "Commande pas encore acceptée par le serveur", cleaned.id + " — " + res.error + (res.detail ? " (" + res.detail + ")" : "")); } catch (e) {}
@@ -20850,15 +20858,7 @@ function filteredProducts(skipValueFilters) {
     // Même principe : un seul passage sur TOUTES les commandes (au lieu
     // d'un passage par produit) pour construire le compteur de ventes.
     var salesCache = {};
-    for (var poi = 0; poi < state.orders.length; poi++) {
-      var pord = state.orders[poi];
-      if (pord.status === "Annulée") continue;
-      for (var pii = 0; pii < pord.items.length; pii++) {
-        var pit = pord.items[pii];
-        salesCache[pit.productId] = (salesCache[pit.productId] || 0) + pit.qty;
-      }
-    }
-    for (var sci = 0; sci < result.length; sci++) { if (!salesCache[result[sci].id]) salesCache[result[sci].id] = 0; }
+    for (var sci = 0; sci < result.length; sci++) salesCache[result[sci].id] = getProductSalesCount(result[sci].id);
     result.sort(function(a, b) { return salesCache[b.id] - salesCache[a.id]; });
   } else if (f.sortBy === "newest") {
     result.sort(function(a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
@@ -20912,6 +20912,18 @@ function computeRelevanceScores(profile) {
   var viewedRaw = profile.behavior ? profile.behavior.views || [] : [];
   var viewedIds = viewedRaw.map(function(v) { return typeof v === "string" ? v : v.productId; });
   var searches = profile.behavior ? profile.behavior.searches || [] : [];
+  // Ventes par article : calculées une seule fois (pas une fois par article).
+  var salesMapLocal = null;
+  function salesOf(pid) {
+    if (orderStatsActive()) return productSalesFromStats(pid, 0);
+    if (!salesMapLocal) {
+      salesMapLocal = {};
+      (state.orders || []).forEach(function(o) { if (o.status === "Annulée") return; (o.items || []).forEach(function(it) { salesMapLocal[it.productId] = (salesMapLocal[it.productId] || 0) + (Number(it.qty) || 0); }); });
+    }
+    return salesMapLocal[pid] || 0;
+  }
+  var searchWords = [];
+  searches.slice(-20).forEach(function(sq) { String(sq && sq.term != null ? sq.term : sq).toLowerCase().split(/\s+/).forEach(function(w) { if (w.length >= 3 && searchWords.indexOf(w) === -1) searchWords.push(w); }); });
 
   var catPurchases = {};
   for (var m = 0; m < state.orders.length; m++) {
@@ -20938,10 +20950,19 @@ function computeRelevanceScores(profile) {
   for (var k = 0; k < state.products.length; k++) {
     var p = state.products[k];
     var score = 0;
-    if (purchased.indexOf(p.id) !== -1) score += 10;
+    // Déjà acheté : petit bonus seulement (avant +10 : le client revoyait en
+    // tête ce qu'il avait déjà acheté, au lieu de découvrir autre chose).
+    if (purchased.indexOf(p.id) !== -1) score += 2;
     if (viewedIds.indexOf(p.id) !== -1) score += 3;
-    var searchTerms = searches.join(" ").toLowerCase();
-    if (searchTerms && (p.name.toLowerCase().indexOf(searchTerms) !== -1 || p.category.toLowerCase().indexOf(searchTerms) !== -1)) score += 2;
+    // Recherches : chaque mot cherché compte (avant, toutes les recherches
+    // étaient collées en une seule phrase, qui ne correspondait jamais).
+    var pName = String(p.name || "").toLowerCase(), pCat = String(p.category || "").toLowerCase();
+    for (var sti = 0; sti < searchWords.length; sti++) {
+      if (pName.indexOf(searchWords[sti]) !== -1 || pCat.indexOf(searchWords[sti]) !== -1) { score += 2; break; }
+    }
+    // Articles qui se vendent vraiment (statistiques du serveur), plafonné
+    // pour ne pas enfermer le marché sur quelques articles.
+    score += Math.min(4, salesOf(p.id));
     if (p.category === topCat) score += 5;
 
     for (var h = 0; h < HOLIDAYS.length; h++) {
@@ -25608,6 +25629,34 @@ function renderAdminProductsListModal() {
   return html;
 }
 
+// Administration : qui appeler pour cette commande — le client, chaque
+// boutique (avec l'état de sa part), le livreur. Une boutique injoignable
+// ou qui ne peut pas fournir peut être retirée : ses articles sortent du
+// montant, le client est prévenu, les autres boutiques continuent.
+function renderAdminOrderContacts(o) {
+  var tel = function(p) { return p ? ' — <a href="tel:' + esc(p) + '" style="color:var(--accent);font-weight:700;">' + esc(p) + '</a>' : ' — <span style="color:var(--text-dim);">numéro inconnu</span>'; };
+  var buyer = (state.accounts || []).find(function(a) { return a.id === o.buyerId; });
+  var html = '<div style="background:var(--bg-body);border-radius:10px;padding:8px 10px;margin:8px 0;">';
+  html += '<div style="font-size:11.5px;font-weight:700;color:var(--text-dim);margin-bottom:4px;"><i class="fa-solid fa-address-book"></i> ' + t("livreur_contacts") + '</div>';
+  html += '<div style="font-size:12px;margin-bottom:4px;"><i class="fa-solid fa-user"></i> ' + esc(o.buyerName || "") + tel(o.contactPhone || o.buyerPhone || (buyer && buyer.phone)) + '</div>';
+  var ids = [];
+  (o.items || []).forEach(function(x) { if (x && x.sellerId && ids.indexOf(x.sellerId) === -1) ids.push(x.sellerId); });
+  Object.keys(o.vendorStatuses || {}).forEach(function(k) { if (ids.indexOf(k) === -1) ids.push(k); });
+  (o.sellerIds || []).forEach(function(k) { if (ids.indexOf(k) === -1) ids.push(k); });
+  var closed = ["Livrée", "Annulée", "Non livrable", "Refusée au retrait"].indexOf(o.status) !== -1;
+  ids.forEach(function(sid) {
+    var acc = (state.accounts || []).find(function(a) { return a.id === sid; }) || {};
+    var it = (o.items || []).find(function(x) { return x && x.sellerId === sid; }) || {};
+    var st = (o.vendorStatuses || {})[sid] || (o.status === "Nouvelle" ? "Nouvelle" : "Prête");
+    var badge = st === "Prête" ? '<span style="color:var(--success);font-weight:700;">✓ ' + t("livreur_shop_ready") + '</span>' : (st === "Refusée" || st === "Annulée" ? '<span style="color:var(--danger);font-weight:700;">✗ indisponible</span>' : '<span style="color:var(--text-dim);">⏳ ' + t("livreur_shop_preparing") + '</span>');
+    html += '<div style="font-size:12px;margin-top:2px;"><i class="fa-solid fa-store"></i> ' + esc(acc.shopName || it.sellerName || acc.name || "?") + tel(acc.shopPhone || acc.phone) + ' ' + badge + '</div>';
+    if (acc.shopAddress) html += '<div style="font-size:11px;color:var(--text-dim);margin:0 0 2px 20px;"><i class="fa-solid fa-location-dot"></i> ' + esc(acc.shopAddress) + (acc.shopLat && acc.shopLng ? ' · <a href="https://www.google.com/maps?q=' + acc.shopLat + ',' + acc.shopLng + '" target="_blank" style="color:var(--accent);font-weight:700;">' + t("livreur_map_short") + '</a>' : '') + '</div>';
+    if (!closed && st !== "Refusée" && st !== "Annulée") html += '<button class="link-btn" style="color:var(--danger);font-size:11px;margin:0 0 4px 20px;" data-action="admin-shop-unavailable" data-order="' + o.id + '" data-value="' + sid + '"><i class="fa-solid fa-store-slash"></i> Boutique indisponible — retirer ses articles</button>';
+  });
+  if (o.livreurName) html += '<div style="font-size:12px;margin-top:4px;"><i class="fa-solid fa-truck-fast"></i> ' + esc(o.livreurName) + ' (livreur)' + tel(o.livreurPhone) + '</div>';
+  html += '</div>';
+  return html;
+}
 function renderAdminOrdersListModal() {
   var filterKey = state.adminOrdersListFilter || "all";
   var orders = state.orders.filter(inAdminScope).sort(function(a, b) { return b.createdAt - a.createdAt; });
@@ -25645,6 +25694,7 @@ function renderAdminOrdersListModal() {
       else if (o.paymentStatus === "failed") html += '<div style="font-size:11px;color:var(--danger);margin-bottom:6px;"><i class="fa-solid fa-circle-xmark"></i> ' + t("aol_payment_failed") + '</div>';
       html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">' + fmtDateTime(o.createdAt) + '</div>';
       html += '<button class="link-btn" style="font-size:11.5px;margin-bottom:10px;" data-action="open-account-from-order" data-value="' + o.buyerId + '"><i class="fa-solid fa-user"></i> ' + esc(o.buyerName) + t("aol_view_account") + '</button>';
+      html += renderAdminOrderContacts(o);
       html += renderOrderStatusHistory(o);
       for (var it = 0; it < o.items.length; it++) {
         var item = o.items[it];
@@ -28801,9 +28851,10 @@ function livreurPendingShopsLine(p) {
     var acc = (state.accounts || []).find(function(a) { return a.id === k; });
     var name = (shop && shop.shopName) || (it && it.sellerName) || (acc && (acc.shopName || acc.name)) || "?";
     var st = vs[k];
-    return esc(name) + ' ' + (st === "Prête" ? '<span style="color:var(--success);">✓</span>' : (st === "Refusée" || st === "Annulée" ? '<span style="color:var(--danger);">✗</span>' : '⏳'));
+    var ph = (shop && shop.phone) || (acc && (acc.shopPhone || acc.phone)) || "";
+    return '<div>' + esc(name) + ' ' + (st === "Prête" ? '<span style="color:var(--success);font-weight:700;">✓ ' + t("livreur_shop_ready_pickup") + '</span>' : (st === "Refusée" || st === "Annulée" ? '<span style="color:var(--danger);font-weight:700;">✗ ' + t("livreur_shop_unavailable") + '</span>' : '<span style="font-weight:700;">⏳ ' + t("livreur_shop_not_ready") + '</span>')) + (ph ? ' — <a href="tel:' + esc(ph) + '" style="color:var(--accent);font-weight:700;">' + esc(ph) + '</a>' : '') + '</div>';
   });
-  return '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">' + parts.join(' · ') + '</div>';
+  return '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">' + parts.join('') + '</div>';
 }
 function renderLivreur() {
   var pending = [];
@@ -28984,7 +29035,7 @@ function renderLivreur() {
         if (svShop) svAcc = Object.assign({}, svAcc || {}, { shopName: svShop.shopName || (svAcc && svAcc.shopName), shopPhone: svShop.phone || (svAcc && (svAcc.shopPhone || svAcc.phone)), shopAddress: svShop.shopAddress || (svAcc && svAcc.shopAddress), shopLat: svShop.shopLat != null ? svShop.shopLat : (svAcc && svAcc.shopLat), shopLng: svShop.shopLng != null ? svShop.shopLng : (svAcc && svAcc.shopLng) });
         var svPhone = svAcc ? (svAcc.shopPhone || svAcc.phone) : null;
         var svVs = o2.vendorStatuses && o2.vendorStatuses[svItem.sellerId];
-        var svBadge = shopRows.length > 1 && svVs ? (svVs === "Prête" ? ' <span style="color:var(--success);font-weight:700;">✓ ' + t("livreur_shop_ready") + '</span>' : (svVs === "Nouvelle" ? ' <span style="color:var(--text-dim);">⏳ ' + t("livreur_shop_preparing") + '</span>' : '')) : '';
+        var svBadge = shopRows.length > 1 && svVs ? (svVs === "Prête" ? ' <span style="color:var(--success);font-weight:700;">✓ ' + t("livreur_shop_ready_pickup") + '</span>' : (svVs === "Nouvelle" ? ' <span style="font-weight:700;">⏳ ' + t("livreur_shop_not_ready") + '</span>' : ((svVs === "Refusée" || svVs === "Annulée") ? ' <span style="color:var(--danger);font-weight:700;">✗ ' + t("livreur_shop_unavailable") + '</span>' : ''))) : '';
         html += '<div style="font-size:12px;"><i class="fa-solid fa-store"></i> ' + esc(svItem.sellerName || (svAcc ? svAcc.shopName : '')) + ' ' + t("livreur_seller_label") + (svPhone ? ' — <a href="tel:' + esc(svPhone) + '" style="color:var(--accent);font-weight:700;">' + esc(svPhone) + '</a>' : '') + svBadge + '</div>';
         if (svAcc && svAcc.shopAddress) {
           html += '<div style="font-size:11px;color:var(--text-dim);margin:0 0 4px 20px;"><i class="fa-solid fa-location-dot"></i> ' + esc(svAcc.shopAddress) + (svAcc.shopLat && svAcc.shopLng ? ' · <a href="https://www.google.com/maps?q=' + svAcc.shopLat + ',' + svAcc.shopLng + '" target="_blank" style="color:var(--accent);font-weight:700;">' + t("livreur_map_short") + '</a>' : '') + '</div>';
@@ -30205,7 +30256,7 @@ function renderAdminVipAds() {
   });
   html += '</div>';
   html += '<label class="field-label">Comportement (s\'il y a plusieurs pubs actives)</label>';
-  html += '<div style="display:flex;gap:6px;">';
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
   html += '<button class="chip ' + (vcfg.scrollMode === 'rotate' ? 'active' : '') + '" data-action="set-vip-config" data-key="scrollMode" data-value="rotate">Rotation (une à la fois)</button>';
   html += '<button class="chip ' + (vcfg.scrollMode === 'scroll' ? 'active' : '') + '" data-action="set-vip-config" data-key="scrollMode" data-value="scroll">Défilement continu</button>';
   html += '</div>';
@@ -30253,8 +30304,8 @@ function renderAdminVipAds() {
   html += '<label class="field-label">Lien (optionnel)</label>';
   html += '<input class="input" placeholder="https://…" value="' + esc(d.link) + '" data-bind="vipAdDraft.link" />';
   html += '<div style="display:flex;gap:10px;">';
-  html += '<div style="flex:1;"><label class="field-label">Début</label><input class="input" type="date" value="' + esc(d.startDate) + '" data-bind="vipAdDraft.startDate" /></div>';
-  html += '<div style="flex:1;"><label class="field-label">Fin</label><input class="input" type="date" value="' + esc(d.endDate) + '" data-bind="vipAdDraft.endDate" /></div>';
+  html += '<div style="flex:1;min-width:0;"><label class="field-label">Début</label><input class="input" type="date" style="min-width:0;width:100%;" value="' + esc(d.startDate) + '" data-bind="vipAdDraft.startDate" /></div>';
+  html += '<div style="flex:1;min-width:0;"><label class="field-label">Fin</label><input class="input" type="date" style="min-width:0;width:100%;" value="' + esc(d.endDate) + '" data-bind="vipAdDraft.endDate" /></div>';
   html += '</div>';
   html += '<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12.5px;cursor:pointer;"><input type="checkbox" data-action="toggle-vipad-draft-active" ' + (d.active ? 'checked' : '') + ' /> Active</label>';
   html += '<div style="display:flex;gap:8px;margin-top:14px;">';
@@ -31557,6 +31608,7 @@ function renderAdminTarifs() {
 
 function renderAdminDashboard(stats) {
   var html = '';
+  html += renderVisitStatsCard();
   if (!state.adminCountryScope) {
     var scopedCountries = {};
     for (var sci = 0; sci < state.orders.length; sci++) { scopedCountries[state.orders[sci].country || "Mali"] = true; }
@@ -31682,7 +31734,7 @@ function renderAdminDashboard(stats) {
   html += '<div class="section-head" style="display:flex;align-items:baseline;justify-content:space-between;margin:20px 0 12px;"><h2 style="font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--mc-dim);font-weight:700;margin:0;">' + t("ad_modules_title") + '</h2></div>';
   html += renderAdminTileGrid(tileList);
 
-  html += '<script>setTimeout(function(){var ctx=document.getElementById("adminChart");if(!ctx)return;var chartData=' + JSON.stringify(stats.chartData) + ';var labels=' + JSON.stringify(stats.chartLabels) + ';new Chart(ctx,{type:"line",data:{labels:labels,datasets:[{label:"Ventes (FCFA)",data:chartData,borderColor:getComputedStyle(document.body).getPropertyValue("--accent").trim()||"#ff7a1a",backgroundColor:"rgba(255,122,26,0.1)",fill:true,tension:0.3}]},options:{responsive:true,plugins:{legend:{labels:{color:getComputedStyle(document.body).getPropertyValue("--text-secondary")}}},scales:{y:{beginAtZero:true,ticks:{color:getComputedStyle(document.body).getPropertyValue("--text-dim")}},x:{ticks:{color:getComputedStyle(document.body).getPropertyValue("--text-dim"),maxTicksLimit:10}}}}});},100);<\/script>';
+  html += '<script>setTimeout(function(){var ctx=document.getElementById("adminChart");if(!ctx||typeof Chart==="undefined")return;var chartData=' + JSON.stringify(stats.chartData) + ';var labels=' + JSON.stringify(stats.chartLabels) + ';new Chart(ctx,{type:"line",data:{labels:labels,datasets:[{label:"Ventes (FCFA)",data:chartData,borderColor:getComputedStyle(document.body).getPropertyValue("--accent").trim()||"#ff7a1a",backgroundColor:"rgba(255,122,26,0.1)",fill:true,tension:0.3}]},options:{responsive:true,plugins:{legend:{labels:{color:getComputedStyle(document.body).getPropertyValue("--text-secondary")}}},scales:{y:{beginAtZero:true,ticks:{color:getComputedStyle(document.body).getPropertyValue("--text-dim")}},x:{ticks:{color:getComputedStyle(document.body).getPropertyValue("--text-dim"),maxTicksLimit:10}}}}});},100);<\/script>';
   return html;
 }
 
@@ -38489,6 +38541,16 @@ root.addEventListener("click", function(e) {
       render();
       break;
     }
+    case "refresh-visit-stats": loadVisitStats(true); break;
+    case "admin-shop-unavailable": {
+      var asuOrder = btn.dataset.order;
+      var asuReason = prompt("Pourquoi cette boutique ne peut pas fournir ? (le client verra ce motif)", "Boutique injoignable / article indisponible");
+      if (asuReason === null) break;
+      if (!asuReason.trim()) { showToast(t("toast_explain_why_not_deliverable")); break; }
+      if (!confirm("Retirer les articles de cette boutique de la commande ? Le client sera prévenu, les autres boutiques continuent.")) break;
+      sellerRefuseItems(asuOrder, asuReason, value);
+      break;
+    }
     case "admin-force-order-status": {
       var statusSelect = document.getElementById('admin-order-status-select');
       var newStatus = statusSelect ? statusSelect.value : null;
@@ -38497,7 +38559,7 @@ root.addEventListener("click", function(e) {
       if (orderToChange && newStatus) {
         logOrderStatusChange(orderToChange, newStatus, "Modifié manuellement par l'administration");
         save();
-        secureOrderSaveDoc(orderToChange);
+        secureOrderSaveDoc(orderToChange, true);
         showToast(t("toast_status_updated"));
         render();
       }
@@ -41791,44 +41853,103 @@ var STALE_WARNING_INTERVAL_DAYS = 4; // un rappel tous les 3-5 jours environ
 var STALE_CHECK_KEY = "gems_last_stale_check_v1";
 var STALE_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000; // au plus deux fois par jour et par appareil, peu importe le nombre de visiteurs
 
+// ---------- COMPTEUR DE VISITEURS (anonyme) ----------
+// 1 appareil = 1 visiteur par jour. Un numéro tiré au hasard est gardé sur
+// l'appareil (aucun nom, aucun numéro de téléphone). On note seulement :
+// connecté ou non, et d'où vient la visite (Google, Facebook, WhatsApp,
+// lien d'article partagé, parrainage, direct). Le comptage est fait par le
+// serveur (secure-write) : personne ne peut gonfler les chiffres.
+function visitSource() {
+  try {
+    var qs = location.search || "";
+    if (/[?&]product=/.test(qs)) return "lien_article";
+    if (/[?&]ref=/.test(qs)) return "parrainage";
+    var r = String(document.referrer || "").toLowerCase();
+    if (!r || r.indexOf(location.host) !== -1) return "direct";
+    if (r.indexOf("google.") !== -1) return "google";
+    if (r.indexOf("facebook.") !== -1 || r.indexOf("fb.") !== -1 || r.indexOf("instagram.") !== -1) return "facebook";
+    if (r.indexOf("whatsapp") !== -1 || r.indexOf("wa.me") !== -1) return "whatsapp";
+    if (r.indexOf("tiktok") !== -1) return "tiktok";
+    return "autre_site";
+  } catch (e) { return "direct"; }
+}
+var _visitSourceAtArrival = visitSource();
+function trackVisit() {
+  if (!FIREBASE_ENABLED || navigator.webdriver) return;
+  var day = new Date().toISOString().slice(0, 10), member = !!state.profile;
+  var vid = null, done = null;
+  try {
+    vid = localStorage.getItem("sns_visitor_id");
+    if (!vid) { vid = (Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2)).replace(/[^a-z0-9]/g, "").slice(0, 24); localStorage.setItem("sns_visitor_id", vid); }
+    done = localStorage.getItem("sns_visit_day");
+  } catch (e) { return; }
+  // Déjà compté aujourd'hui (et déjà compté comme inscrit s'il l'est) : rien à faire.
+  if (done === day + "|1" || (done === day + "|0" && !member)) return;
+  fetch(supabaseConfig.url + "/functions/v1/secure-write", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey }, body: JSON.stringify({ operation: "track_visit", vid: vid, member: member, src: _visitSourceAtArrival }) })
+    .then(readServerJson)
+    .then(function(res) { if (res && res.success) { try { localStorage.setItem("sns_visit_day", day + "|" + (member ? 1 : 0)); } catch (e) {} } })
+    .catch(function() {});
+}
+
+// Carte « Visiteurs du site » (Admin > Tableau de bord)
+function loadVisitStats(force) {
+  if (!FIREBASE_ENABLED) return;
+  if (!force && window._visitStatsAt && Date.now() - window._visitStatsAt < 5 * 60 * 1000) return;
+  window._visitStatsAt = Date.now();
+  var since = new Date(Date.now() - 29 * 864e5).toISOString().slice(0, 10);
+  sb.from("app_data").select("data").eq("collection", "visitStats").gte("id", since).then(function(res) {
+    if (res.error || !res.data) return;
+    state.visitStats = res.data.map(function(r) { return r.data; }).filter(Boolean);
+    renderOrDefer();
+  });
+}
+function renderVisitStatsCard() {
+  loadVisitStats(false);
+  var rows = state.visitStats || [];
+  var today = new Date().toISOString().slice(0, 10);
+  function sum(days) {
+    var since = new Date(Date.now() - (days - 1) * 864e5).toISOString().slice(0, 10);
+    var r = { v: 0, g: 0, m: 0, src: {} };
+    rows.forEach(function(d) { if (!d || d.id < since) return; r.v += d.visitors || 0; r.g += d.guests || 0; r.m += d.members || 0; Object.keys(d.sources || {}).forEach(function(k) { r.src[k] = (r.src[k] || 0) + d.sources[k]; }); });
+    var t0 = Date.now() - days * 864e5;
+    r.acc = (state.accounts || []).filter(function(a) { var c = typeof a.createdAt === "number" ? a.createdAt : Date.parse(a.createdAt || ""); return c && c >= t0; }).length;
+    return r;
+  }
+  var d1 = sum(1), d7 = sum(7), d30 = sum(30);
+  var labels = { google: "Google", facebook: "Facebook / Instagram", whatsapp: "WhatsApp", tiktok: "TikTok", lien_article: "Lien d'article partagé", parrainage: "Lien de parrainage", autre_site: "Autre site", direct: "Direct / application" };
+  var html = '<div class="glass-card" style="padding:14px;margin-bottom:14px;">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;"><div style="font-weight:800;font-size:13.5px;"><i class="fa-solid fa-users"></i> Visiteurs du site</div><button class="link-btn" style="font-size:11.5px;" data-action="refresh-visit-stats"><i class="fa-solid fa-rotate"></i></button></div>';
+  html += '<div style="font-size:10.5px;color:var(--text-dim);margin:2px 0 10px;">1 visiteur = 1 téléphone ou ordinateur par jour (anonyme).</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;text-align:center;">';
+  [["Aujourd'hui", d1], ["7 jours", d7], ["30 jours", d30]].forEach(function(c) {
+    html += '<div style="background:var(--bg-body);border-radius:10px;padding:8px 4px;min-width:0;"><div style="font-size:10.5px;color:var(--text-dim);">' + c[0] + '</div><div style="font-weight:800;font-size:17px;">' + c[1].v + '</div><div style="font-size:10px;color:var(--text-dim);line-height:1.3;">' + c[1].g + ' non connectés<br>' + c[1].acc + ' inscriptions</div></div>';
+  });
+  html += '</div>';
+  if (d30.g > 0) html += '<div style="font-size:11.5px;margin-top:8px;">Sur 30 jours : <strong>' + Math.round(100 * d30.acc / Math.max(1, d30.g)) + ' %</strong> des visiteurs non connectés ont créé un compte.</div>';
+  var srcKeys = Object.keys(d30.src).sort(function(a, b) { return d30.src[b] - d30.src[a]; });
+  if (srcKeys.length) {
+    html += '<div style="font-size:11px;font-weight:700;color:var(--text-dim);margin-top:10px;">D\'où viennent-ils ? (30 jours)</div>';
+    srcKeys.forEach(function(k) { var pc = Math.round(100 * d30.src[k] / Math.max(1, d30.v)); html += '<div style="display:flex;justify-content:space-between;gap:8px;font-size:11.5px;padding:2px 0;"><span>' + (labels[k] || k) + '</span><span style="font-weight:700;">' + d30.src[k] + ' (' + pc + ' %)</span></div>'; });
+  } else if (!rows.length) {
+    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:8px;">Pas encore de visite comptée — les chiffres apparaissent dès les premières visites après la mise à jour.</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
 function maybeRunGlobalStaleProductCheck() {
-  var last = localStorage.getItem(STALE_CHECK_KEY);
+  // Le travail est fait par le serveur (secure-write) : lui seul a le droit
+  // de supprimer l'article d'un autre vendeur et d'enregistrer le rappel.
+  // Ce téléphone ne fait que le lui demander (au plus deux fois par jour).
+  var last = null;
+  try { last = localStorage.getItem(STALE_CHECK_KEY); } catch (e) {}
   if (last && (Date.now() - parseInt(last, 10)) < STALE_CHECK_INTERVAL_MS) return;
-  localStorage.setItem(STALE_CHECK_KEY, String(Date.now()));
-  var now = Date.now();
-  var warnThreshold = now - STALE_WARNING_START_DAYS * 24 * 60 * 60 * 1000;
-  var deleteThreshold = now - STALE_DELETE_DAYS * 24 * 60 * 60 * 1000;
-  sb.from("app_data").select("*").eq("collection", "products")
-    .eq("data->>sellerType", "particulier")
-    .lt("data->>createdAt", String(warnThreshold))
-    .then(function(res) {
-      if (res.error || !res.data) { console.error("Échec de la vérification globale des articles anciens :", res.error); return; }
-      var touchedLocalIds = {};
-      res.data.forEach(function(row) {
-        var p = row.data;
-        var age = p.createdAt || 0;
-        if (age < deleteThreshold) {
-          deleteRemoteDoc("products", p.id);
-          addNotification("whatsapp", "🗑️ Votre article \"" + p.name + "\" a été supprimé automatiquement après 3 mois sans actualisation.", p.sellerId, "seller-products");
-          touchedLocalIds[p.id] = "delete";
-        } else {
-          var lastWarned = p.staleWarningLastSentAt || 0;
-          if (now - lastWarned > STALE_WARNING_INTERVAL_DAYS * 24 * 60 * 60 * 1000) {
-            var deleteDate = new Date(age + STALE_DELETE_DAYS * 24 * 60 * 60 * 1000);
-            addNotification("whatsapp", "⏳ Votre article \"" + p.name + "\" n'a pas été actualisé depuis longtemps. Il sera supprimé automatiquement le " + deleteDate.toLocaleDateString("fr-FR") + " si vous ne l'actualisez pas avant (bouton \"Toujours disponible ? Actualiser\" dans Mes produits).", p.sellerId, "seller-products");
-            p.staleWarningLastSentAt = now;
-            saveDoc("products", p);
-          }
-        }
-      });
-      // Répercute localement, au cas où certains de ces articles étaient
-      // déjà chargés dans CETTE session précise.
-      if (Object.keys(touchedLocalIds).length > 0) {
-        state.products = state.products.filter(function(pp) { return touchedLocalIds[pp.id] !== "delete"; });
-        save();
-        if (_splashFinished) render();
-      }
-    });
+  try { localStorage.setItem(STALE_CHECK_KEY, String(Date.now())); } catch (e) {}
+  if (!FIREBASE_ENABLED) return;
+  fetch(supabaseConfig.url + "/functions/v1/secure-write", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey }, body: JSON.stringify({ operation: "stale_products_sweep" }) })
+    .then(readServerJson)
+    .then(function(res) { if (res && res.deleted) pushDebugLog("info", "Articles anciens", "supprimés : " + res.deleted + " · rappels : " + (res.warned || 0)); })
+    .catch(function() {});
 }
 
 function ensureRelevantOldProductsLoaded() {
@@ -41978,6 +42099,7 @@ function trySplashFinish() {
     bootStep("colis en point de retrait", checkStalePickupOrders);
     bootStep("retour de paiement", checkPaymentReturn);
     bootStep("affichage", render);
+    bootStep("compteur de visiteurs", function() { setTimeout(trackVisit, 3000); });
     bootStep("nettoyage du journal", function() { (state.debugLog || []).forEach(function(l) { l.message = maskSecrets(l.message); l.detail = maskSecrets(l.detail); }); });
     bootStep("clé de session", function() { setTimeout(function() { ensureFreshSession(); }, 4000); setInterval(function() { ensureFreshSession(); }, 30 * 60 * 1000); });
   }
@@ -42063,7 +42185,7 @@ function bootAppWithLocalData() {
 
     var PAGE_SIZE = 900;
     function fetchAllSyncPages(offset, accumulated) {
-      var pageQuery = sb.from("app_data").select("*").not("collection", "in", "(products,orders,notifications,conversations)").range(offset, offset + PAGE_SIZE - 1);
+      var pageQuery = sb.from("app_data").select("*").not("collection", "in", "(products,orders,notifications,conversations,visitIds,visitStats)").range(offset, offset + PAGE_SIZE - 1);
       if (!needsFullSync) pageQuery = pageQuery.gt("updated_at", lastSyncAt);
       return pageQuery.then(function(res) {
         if (res.error) return res;
