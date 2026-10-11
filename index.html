@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-11-e";
+    window.SOUNSOUNI_VERSION = "2026-10-11-f";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -11238,8 +11238,8 @@ const TRANSLATIONS = {
     ligdi_om_dial: "Composer #144#77#",
     ligdi_om_step2: "2. Appuyez sur « Payer », puis tapez ce code sur la page Orange Money qui s'ouvre.",
     ligdi_om_pay: "Payer avec Orange Money",
-    ligdi_moov_text: "Vous allez sur la page sécurisée LigdiCash pour payer avec Moov Money.",
-    ligdi_moov_pay: "Continuer avec Moov Money",
+    ligdi_moov_text: "Appuyez sur « Payer » : Moov Money vous demandera de confirmer avec votre code secret.",
+    ligdi_moov_pay: "Payer avec Moov Money",
     ligdi_later: "Payer plus tard",
     ligdi_later_toast: "Vous pourrez payer plus tard depuis « Achats ».",
     ligdi_bad_phone: "Numéro Orange Money invalide : tapez les 8 chiffres.",
@@ -11247,6 +11247,14 @@ const TRANSLATIONS = {
     ligdi_wait_om_text: "Après avoir confirmé chez Orange, revenez ici : nous vérifions votre paiement automatiquement.",
     ligdi_open_om: "Ouvrir la page Orange Money",
     ligdi_paid_check: "J'ai payé — vérifier",
+    ligdi_moov_number: "Votre numéro Moov Money",
+    ligdi_bad_phone_moov: "Numéro Moov Money invalide : tapez les 8 chiffres.",
+    ligdi_wait_moov_title: "Validez sur la page Moov Money",
+    ligdi_open_moov: "Ouvrir la page Moov Money",
+    ligdi_wait_push_title: "Validez sur votre téléphone",
+    ligdi_wait_push_moov: "Un message Moov Money va s'afficher sur votre téléphone : tapez votre code secret pour confirmer. Restez sur Sounsouni, nous vérifions automatiquement.",
+    ligdi_wait_push_om: "Un message Orange Money va s'afficher sur votre téléphone : tapez votre code secret pour confirmer. Restez sur Sounsouni, nous vérifions automatiquement.",
+    ligdi_secured_by: "Paiement sécurisé par",
     guide_buy_13_text: "Gardez votre code secret : donnez-le seulement quand vous avez le colis en main.",
     guide_buy_13_title: "13. C'est commandé !",
     guide_buy_12_text: "Moins cher : récupérez votre colis dans une boutique de votre quartier.",
@@ -13151,8 +13159,8 @@ const TRANSLATIONS = {
     ligdi_om_dial: "Dial #144#77#",
     ligdi_om_step2: "2. Tap “Pay”, then type this code on the Orange Money page that opens.",
     ligdi_om_pay: "Pay with Orange Money",
-    ligdi_moov_text: "You will go to the secure LigdiCash page to pay with Moov Money.",
-    ligdi_moov_pay: "Continue with Moov Money",
+    ligdi_moov_text: "Tap “Pay”: Moov Money will ask you to confirm with your secret code.",
+    ligdi_moov_pay: "Pay with Moov Money",
     ligdi_later: "Pay later",
     ligdi_later_toast: "You can pay later from “Purchases”.",
     ligdi_bad_phone: "Invalid Orange Money number: type the 8 digits.",
@@ -13160,6 +13168,14 @@ const TRANSLATIONS = {
     ligdi_wait_om_text: "After confirming with Orange, come back here: we check your payment automatically.",
     ligdi_open_om: "Open the Orange Money page",
     ligdi_paid_check: "I have paid — check",
+    ligdi_moov_number: "Your Moov Money number",
+    ligdi_bad_phone_moov: "Invalid Moov Money number: type the 8 digits.",
+    ligdi_wait_moov_title: "Confirm on the Moov Money page",
+    ligdi_open_moov: "Open the Moov Money page",
+    ligdi_wait_push_title: "Confirm on your phone",
+    ligdi_wait_push_moov: "A Moov Money message will appear on your phone: type your secret code to confirm. Stay on Sounsouni, we check automatically.",
+    ligdi_wait_push_om: "An Orange Money message will appear on your phone: type your secret code to confirm. Stay on Sounsouni, we check automatically.",
+    ligdi_secured_by: "Payment secured by",
     guide_buy_13_text: "Keep your secret code: give it only once the parcel is in your hands.",
     guide_buy_13_title: "13. Order placed!",
     guide_buy_12_text: "Cheaper: collect your parcel at a shop in your neighbourhood.",
@@ -15064,8 +15080,8 @@ const TRANSLATIONS = {
     ligdi_om_dial: "#144#77# डायल करें",
     ligdi_om_step2: "2. «भुगतान करें» दबाएँ, फिर खुलने वाले Orange Money पेज पर यह कोड लिखें।",
     ligdi_om_pay: "Orange Money से भुगतान करें",
-    ligdi_moov_text: "Moov Money से भुगतान के लिए आप LigdiCash के सुरक्षित पेज पर जाएँगे।",
-    ligdi_moov_pay: "Moov Money के साथ आगे बढ़ें",
+    ligdi_moov_text: "«भुगतान करें» दबाएँ: Moov Money आपसे गुप्त कोड से पुष्टि करने को कहेगा।",
+    ligdi_moov_pay: "Moov Money से भुगतान करें",
     ligdi_later: "बाद में भुगतान करें",
     ligdi_later_toast: "आप «ख़रीदारी» से बाद में भुगतान कर सकते हैं।",
     ligdi_bad_phone: "Orange Money नंबर ग़लत है: 8 अंक लिखें।",
@@ -15073,6 +15089,14 @@ const TRANSLATIONS = {
     ligdi_wait_om_text: "Orange पर पुष्टि करने के बाद यहाँ लौटें: हम आपका भुगतान अपने आप जाँचते हैं।",
     ligdi_open_om: "Orange Money पेज खोलें",
     ligdi_paid_check: "मैंने भुगतान कर दिया — जाँचें",
+    ligdi_moov_number: "आपका Moov Money नंबर",
+    ligdi_bad_phone_moov: "Moov Money नंबर ग़लत है: 8 अंक लिखें।",
+    ligdi_wait_moov_title: "Moov Money पेज पर पुष्टि करें",
+    ligdi_open_moov: "Moov Money पेज खोलें",
+    ligdi_wait_push_title: "अपने फ़ोन पर पुष्टि करें",
+    ligdi_wait_push_moov: "आपके फ़ोन पर Moov Money संदेश आएगा: पुष्टि के लिए अपना गुप्त कोड लिखें। Sounsouni पर रहें, हम अपने आप जाँचते हैं।",
+    ligdi_wait_push_om: "आपके फ़ोन पर Orange Money संदेश आएगा: पुष्टि के लिए अपना गुप्त कोड लिखें। Sounsouni पर रहें, हम अपने आप जाँचते हैं।",
+    ligdi_secured_by: "भुगतान सुरक्षित:",
     guide_buy_13_text: "अपना गुप्त कोड संभालें: पार्सल हाथ में आने पर ही दें।",
     guide_buy_13_title: "13. ऑर्डर हो गया!",
     guide_buy_12_text: "सस्ता: अपने मोहल्ले की दुकान से पार्सल लें।",
@@ -19606,13 +19630,11 @@ function startLigdicashPayment(ref) {
 function ligdiChooseGo() {
   var c = state.ligdiChoose; if (!c) return;
   var ref = { kind: c.ref.kind, orderId: c.ref.orderId, boostId: c.ref.boostId };
-  if (c.op === "orange") {
-    var el = document.getElementById("ligdi-phone");
-    var ph = String((el && el.value) || c.phone || "").replace(/\D/g, "");
-    if (ph.length === 11 && ph.indexOf("223") === 0) ph = ph.slice(3);
-    if (!/^[5-9]\d{7}$/.test(ph)) { showToast("❌ " + t("ligdi_bad_phone")); return; }
-    ref.operator = "orange"; ref.phone = ph;
-  }
+  var el = document.getElementById("ligdi-phone");
+  var ph = String((el && el.value) || c.phone || "").replace(/\D/g, "");
+  if (ph.length === 11 && ph.indexOf("223") === 0) ph = ph.slice(3);
+  if (!/^[5-9]\d{7}$/.test(ph)) { showToast("❌ " + t(c.op === "moov" ? "ligdi_bad_phone_moov" : "ligdi_bad_phone")); return; }
+  ref.operator = c.op === "moov" ? "moov" : "orange"; ref.phone = ph;
   state.ligdiChoose = null;
   ligdiCreateAndOpen(ref, 0);
 }
@@ -19629,7 +19651,9 @@ function ligdiCreateAndOpen(ref, attempt) {
     var refId = ref.kind === "boost" ? ref.boostId : ref.orderId;
     ligdiSavePending({ txn: res.transactionId, kind: ref.kind, refId: refId, at: Date.now() });
     render();
-    if (res.mode === "orange_direct") openOrangeDirect(res.paymentUrl, res.transactionId, ref.kind, refId);
+    var md = String(res.mode || "");
+    if (/_push$/.test(md)) { state.ligdiWaiting = { txn: res.transactionId, url: "", op: ref.operator, push: true, kind: ref.kind, refId: refId, opened: true, started: Date.now(), tries: 0 }; render(); ligdiWaitTick(res.transactionId); }
+    else if (/_direct$/.test(md)) openOrangeDirect(res.paymentUrl, res.transactionId, ref.kind, refId, ref.operator);
     else openLigdicashPage(res.paymentUrl, res.returnPrefix || "https://sounsouni.pro/?ligdicash=retour", res.transactionId);
   });
 }
@@ -19637,14 +19661,14 @@ function ligdiCreateAndOpen(ref, attempt) {
 // Sounsouni (doc LigdiCash : « le callback fait foi »). On ouvre la page
 // Orange à côté et Sounsouni affiche « Tapez votre code… » en vérifiant le
 // paiement tout seul (toutes les 5 s, puis toutes les 20 s, 10 min au plus).
-function openOrangeDirect(url, txn, kind, refId) {
+function openOrangeDirect(url, txn, kind, refId, op) {
   var IAB = nativeInAppBrowser();
   if (IAB) { openLigdicashPage(url, "https://sounsouni.pro/?ligdicash=retour", txn); return; }
   var opened = false;
   var isNative = false; try { isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch (e) {}
   if (isNative) { opened = true; setTimeout(function() { window.location.href = url; }, 50); }
   else { try { opened = !!window.open(url, "_blank", "noopener"); } catch (e) {} }
-  state.ligdiWaiting = { txn: txn, url: url, kind: kind, refId: refId, opened: opened, started: Date.now(), tries: 0 };
+  state.ligdiWaiting = { txn: txn, url: url, op: op || "orange", kind: kind, refId: refId, opened: opened, started: Date.now(), tries: 0 };
   render();
   ligdiWaitTick(txn);
 }
@@ -19677,33 +19701,41 @@ function renderLigdiChoose() {
   var html = '<div class="modal-overlay" style="z-index:9996;"><div class="modal-sheet" style="padding:20px 16px;">';
   html += '<div style="font-weight:800;font-size:17px;text-align:center;margin-bottom:12px;">' + t("ligdi_choose_title") + (c.amount ? ' <span style="color:var(--accent);">' + Number(c.amount).toLocaleString("fr-FR") + ' FCFA</span>' : '') + '</div>';
   html += '<div style="display:flex;gap:8px;margin-bottom:14px;">' + tab("orange", "Orange Money", "#ff7900") + tab("moov", "Moov Money", "#0066b3") + '</div>';
+  html += '<label class="field-label" style="margin-top:0;">' + t(c.op === "moov" ? "ligdi_moov_number" : "ligdi_om_number") + '</label>';
+  html += '<input class="input" id="ligdi-phone" type="tel" inputmode="numeric" maxlength="14" autocomplete="tel" placeholder="Ex : ' + (c.op === "moov" ? '66' : '76') + ' 12 34 56" data-bind="ligdiChoose.phone" value="' + esc(c.phone || "") + '" style="margin-bottom:12px;font-size:16px;letter-spacing:1px;" />';
   if (c.op === "orange") {
-    html += '<label class="field-label" style="margin-top:0;">' + t("ligdi_om_number") + '</label>';
-    html += '<input class="input" id="ligdi-phone" type="tel" inputmode="numeric" maxlength="14" autocomplete="tel" placeholder="Ex : 76 12 34 56" data-bind="ligdiChoose.phone" value="' + esc(c.phone || "") + '" style="margin-bottom:12px;font-size:16px;letter-spacing:1px;" />';
     html += '<div style="background:var(--bg-body);border-radius:12px;padding:12px;margin-bottom:14px;font-size:12.5px;line-height:1.5;">';
     html += '<div style="font-weight:700;margin-bottom:8px;">' + t("ligdi_om_step1") + '</div>';
     html += '<a href="tel:%23144%2377%23" class="btn-secondary" style="display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;margin-bottom:10px;"><i class="fa-solid fa-phone"></i> ' + t("ligdi_om_dial") + '</a>';
     html += '<div>' + t("ligdi_om_step2") + '</div></div>';
     html += '<button class="btn-primary" style="width:100%;margin-bottom:8px;background:#ff7900;border-color:#ff7900;" data-action="ligdi-go"><i class="fa-solid fa-lock"></i> ' + t("ligdi_om_pay") + '</button>';
   } else {
-    html += '<div style="font-size:12.5px;color:var(--text-dim);line-height:1.5;margin-bottom:14px;">' + t("ligdi_moov_text") + '</div>';
+    html += '<div style="background:var(--bg-body);border-radius:12px;padding:12px;margin-bottom:14px;font-size:12.5px;line-height:1.5;">' + t("ligdi_moov_text") + '</div>';
     html += '<button class="btn-primary" style="width:100%;margin-bottom:8px;background:#0066b3;border-color:#0066b3;" data-action="ligdi-go"><i class="fa-solid fa-lock"></i> ' + t("ligdi_moov_pay") + '</button>';
   }
   html += '<button class="link-btn" style="width:100%;" data-action="ligdi-choose-close">' + t("ligdi_later") + '</button>';
-  html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:10px;text-align:center;"><i class="fa-solid fa-lock"></i> ' + t("ligdi_secured") + '</div>';
+  html += ligdiBrandLine();
   html += '</div></div>';
   return html;
+}
+// Logo officiel LigdiCash (fourni par LigdiCash — contrat art. 5.2) : il
+// s'affiche dès que le fichier img/ligdicash-logo.png est mis sur le site ;
+// en attendant, seule la mention texte apparaît.
+function ligdiBrandLine() {
+  return '<div style="font-size:10.5px;color:var(--text-dim);margin-top:10px;text-align:center;line-height:20px;"><i class="fa-solid fa-lock"></i> ' + t("ligdi_secured_by") + ' <img src="img/ligdicash-logo.png" alt="LigdiCash" style="height:18px;width:auto;vertical-align:middle;" onerror="this.outerHTML=\'<b>LigdiCash</b>\'"></div>';
 }
 function renderLigdiWaiting() {
   var w = state.ligdiWaiting; if (!w) return "";
   var html = '<div class="modal-overlay" style="z-index:9996;"><div class="modal-sheet" style="text-align:center;padding:24px 18px;">';
-  html += '<div style="font-size:40px;color:#ff7900;margin-bottom:8px;"><i class="fa-solid fa-mobile-screen-button"></i></div>';
-  html += '<div style="font-weight:800;font-size:16px;margin-bottom:6px;">' + t("ligdi_wait_om_title") + '</div>';
-  html += '<div style="font-size:12.5px;color:var(--text-dim);line-height:1.5;margin-bottom:14px;">' + t("ligdi_wait_om_text") + '</div>';
+  var mv = w.op === "moov";
+  html += '<div style="font-size:40px;color:' + (mv ? '#0066b3' : '#ff7900') + ';margin-bottom:8px;"><i class="fa-solid fa-mobile-screen-button"></i></div>';
+  html += '<div style="font-weight:800;font-size:16px;margin-bottom:6px;">' + t(w.push ? "ligdi_wait_push_title" : (mv ? "ligdi_wait_moov_title" : "ligdi_wait_om_title")) + '</div>';
+  html += '<div style="font-size:12.5px;color:var(--text-dim);line-height:1.5;margin-bottom:14px;">' + (w.push ? t(mv ? "ligdi_wait_push_moov" : "ligdi_wait_push_om") : t("ligdi_wait_om_text")) + '</div>';
   html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;"><i class="fa-solid fa-spinner fa-spin"></i> ' + t("ligdi_checking") + '</div>';
-  html += '<a href="' + esc(w.url) + '" target="_blank" rel="noopener" class="' + (w.opened ? 'btn-secondary' : 'btn-primary') + '" style="display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;margin-bottom:8px;"><i class="fa-solid fa-arrow-up-right-from-square"></i> ' + t("ligdi_open_om") + '</a>';
+  if (w.url) html += '<a href="' + esc(w.url) + '" target="_blank" rel="noopener" class="' + (w.opened ? 'btn-secondary' : 'btn-primary') + '" style="display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;margin-bottom:8px;"><i class="fa-solid fa-arrow-up-right-from-square"></i> ' + t(mv ? "ligdi_open_moov" : "ligdi_open_om") + '</a>';
   html += '<button class="btn-secondary" style="width:100%;margin-bottom:8px;" data-action="ligdi-wait-check"><i class="fa-solid fa-rotate"></i> ' + t("ligdi_paid_check") + '</button>';
   html += '<button class="link-btn" style="width:100%;" data-action="ligdi-wait-close">' + t("ligdi_later") + '</button>';
+  html += ligdiBrandLine();
   html += '</div></div>';
   return html;
 }
@@ -19817,7 +19849,7 @@ function renderLigdiResultModal() {
   if (r.status === "cancelled" && r.kind !== "boost") html += '<button class="btn-primary" style="width:100%;margin-bottom:8px;" data-action="ligdi-pay-again" data-value="' + esc(r.refId || "") + '"><i class="fa-solid fa-mobile-screen"></i> ' + t("ligdi_pay_now") + '</button>';
   if (r.status === "pending" || r.status === "unknown") html += '<button class="btn-primary" style="width:100%;margin-bottom:8px;" data-action="ligdi-recheck" data-value="' + esc(r.txn || "") + '"><i class="fa-solid fa-rotate"></i> ' + t("ligdi_recheck") + '</button>';
   html += '<button class="' + (r.status === "pending" || r.status === "unknown" || r.status === "cancelled" ? 'link-btn' : 'btn-primary') + '" style="width:100%;" data-action="ligdi-result-close">' + (r.kind === "boost" ? t("ligdi_btn_ok") : t("ligdi_btn_orders")) + '</button>';
-  html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:12px;"><i class="fa-solid fa-lock"></i> ' + t("ligdi_secured") + '</div>';
+  html += ligdiBrandLine();
   html += '</div></div>';
   return html;
 }
@@ -28368,7 +28400,7 @@ function renderCheckout() {
   html += paymentOption("portefeuille", t("co_wallet_balance") + money(buyerWalletBalance) + ")", "fa-wallet", buyerWalletBalance >= checkoutGrandTotal, buyerWalletBalance < checkoutGrandTotal ? t("co_insufficient_balance") : null);
   if (ligdicashEnabled(countryForCity(state.checkoutForm.city) || "Mali")) {
     html += paymentOption("ligdicash", t("ligdi_option"), "fa-mobile-screen", true);
-    html += '<div style="font-size:10.5px;color:var(--text-dim);margin:-2px 0 8px 6px;"><i class="fa-solid fa-lock"></i> ' + t("ligdi_secured") + '</div>';
+    html += '<div style="margin:-8px 0 8px 0;">' + ligdiBrandLine() + '</div>';
   } else {
     html += paymentOption("orange_money", "Orange Money", "fa-mobile-screen");
     html += paymentOption("moov_money", "Moov Money", "fa-mobile-screen");
