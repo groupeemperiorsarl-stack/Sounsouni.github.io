@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-11-f";
+    window.SOUNSOUNI_VERSION = "2026-10-11-g";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -11255,6 +11255,8 @@ const TRANSLATIONS = {
     ligdi_wait_push_moov: "Un message Moov Money va s'afficher sur votre téléphone : tapez votre code secret pour confirmer. Restez sur Sounsouni, nous vérifions automatiquement.",
     ligdi_wait_push_om: "Un message Orange Money va s'afficher sur votre téléphone : tapez votre code secret pour confirmer. Restez sur Sounsouni, nous vérifions automatiquement.",
     ligdi_secured_by: "Paiement sécurisé par",
+    ligdi_is_orange_number: "Ce numéro est un numéro Orange Money : la page Orange Money s'ouvre.",
+    ligdi_is_moov_number: "Ce numéro est un numéro Moov Money : la page Moov Money s'ouvre.",
     guide_buy_13_text: "Gardez votre code secret : donnez-le seulement quand vous avez le colis en main.",
     guide_buy_13_title: "13. C'est commandé !",
     guide_buy_12_text: "Moins cher : récupérez votre colis dans une boutique de votre quartier.",
@@ -13176,6 +13178,8 @@ const TRANSLATIONS = {
     ligdi_wait_push_moov: "A Moov Money message will appear on your phone: type your secret code to confirm. Stay on Sounsouni, we check automatically.",
     ligdi_wait_push_om: "An Orange Money message will appear on your phone: type your secret code to confirm. Stay on Sounsouni, we check automatically.",
     ligdi_secured_by: "Payment secured by",
+    ligdi_is_orange_number: "This is an Orange Money number: the Orange Money page opens.",
+    ligdi_is_moov_number: "This is a Moov Money number: the Moov Money page opens.",
     guide_buy_13_text: "Keep your secret code: give it only once the parcel is in your hands.",
     guide_buy_13_title: "13. Order placed!",
     guide_buy_12_text: "Cheaper: collect your parcel at a shop in your neighbourhood.",
@@ -15097,6 +15101,8 @@ const TRANSLATIONS = {
     ligdi_wait_push_moov: "आपके फ़ोन पर Moov Money संदेश आएगा: पुष्टि के लिए अपना गुप्त कोड लिखें। Sounsouni पर रहें, हम अपने आप जाँचते हैं।",
     ligdi_wait_push_om: "आपके फ़ोन पर Orange Money संदेश आएगा: पुष्टि के लिए अपना गुप्त कोड लिखें। Sounsouni पर रहें, हम अपने आप जाँचते हैं।",
     ligdi_secured_by: "भुगतान सुरक्षित:",
+    ligdi_is_orange_number: "यह Orange Money नंबर है: Orange Money पेज खुल रहा है।",
+    ligdi_is_moov_number: "यह Moov Money नंबर है: Moov Money पेज खुल रहा है।",
     guide_buy_13_text: "अपना गुप्त कोड संभालें: पार्सल हाथ में आने पर ही दें।",
     guide_buy_13_title: "13. ऑर्डर हो गया!",
     guide_buy_12_text: "सस्ता: अपने मोहल्ले की दुकान से पार्सल लें।",
@@ -19652,6 +19658,10 @@ function ligdiCreateAndOpen(ref, attempt) {
     ligdiSavePending({ txn: res.transactionId, kind: ref.kind, refId: refId, at: Date.now() });
     render();
     var md = String(res.mode || "");
+    // LigdiCash choisit l'opérateur d'après le numéro : un numéro Orange tapé
+    // dans l'onglet Moov ouvre Orange (et inversement) — on le dit au client.
+    var realOp = /orange-money/i.test(String(res.paymentUrl || "")) ? "orange" : (/moov/i.test(String(res.paymentUrl || "")) ? "moov" : ref.operator);
+    if (ref.operator && realOp && realOp !== ref.operator && /_direct$/.test(md)) { showToast(t(realOp === "orange" ? "ligdi_is_orange_number" : "ligdi_is_moov_number")); ref.operator = realOp; }
     if (/_push$/.test(md)) { state.ligdiWaiting = { txn: res.transactionId, url: "", op: ref.operator, push: true, kind: ref.kind, refId: refId, opened: true, started: Date.now(), tries: 0 }; render(); ligdiWaitTick(res.transactionId); }
     else if (/_direct$/.test(md)) openOrangeDirect(res.paymentUrl, res.transactionId, ref.kind, refId, ref.operator);
     else openLigdicashPage(res.paymentUrl, res.returnPrefix || "https://sounsouni.pro/?ligdicash=retour", res.transactionId);
@@ -31366,7 +31376,7 @@ function renderAdminBoosts() {
   var modes = [
     { key: "auto", label: "Automatique (mode test)", desc: "Activation immédiate, sans vérification — le boost est gratuit tant que ce mode est actif." },
     { key: "manual", label: "Manuel", desc: "Vous confirmez vous-même chaque paiement reçu, ci-dessous." },
-    { key: "api", label: "API Orange/Moov Money", desc: "Activation automatique réelle — nécessite un compte marchand configuré (à venir)." }
+    { key: "api", label: "Orange Money / Moov Money (LigdiCash)", desc: "Le vendeur paie son boost par Orange Money ou Moov Money ; le boost s'active tout seul dès que le paiement est confirmé." }
   ];
   for (var m = 0; m < modes.length; m++) {
     var md = modes[m];
