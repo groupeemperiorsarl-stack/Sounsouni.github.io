@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-11-h";
+    window.SOUNSOUNI_VERSION = "2026-10-11-i";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -5752,6 +5752,13 @@ const CATEGORIES = [
   { name: "Bureautique & Fournitures", icon: "📎", sizeType: "none" },
   { name: "Art & Artisanat local", icon: "🎨", sizeType: "none" },
   { name: "Santé & Bien-être", icon: "💊", sizeType: "none" },
+  // Produits NUMÉRIQUES : pas de stock ni de livraison — le client reçoit
+  // le fichier ou le lien juste après son paiement (voir digital-access).
+  { name: "E-books & Livres numériques", icon: "📚", sizeType: "none", digital: true },
+  { name: "Formations & Cours en ligne", icon: "🎓", sizeType: "none", digital: true },
+  { name: "Logiciels & Applications", icon: "💾", sizeType: "none", digital: true },
+  { name: "Musique, Vidéos & Créations", icon: "🎵", sizeType: "none", digital: true },
+  { name: "Documents & Modèles", icon: "📄", sizeType: "none", digital: true },
   { name: "Autre", icon: "📦", sizeType: "none" },
 ];
 
@@ -7834,7 +7841,7 @@ var CATEGORY_NAME_TO_KEY = {
   "Bricolage & Outillage": "cat_bricolage", "Automobile & Moto": "cat_automobile",
   "Sport & Loisirs": "cat_sport", "Jouets & Jeux": "cat_jouets",
   "Bébé & Puériculture": "cat_bebe", "Bureautique & Fournitures": "cat_bureautique",
-  "Art & Artisanat local": "cat_art", "Santé & Bien-être": "cat_sante", "Autre": "cat_autre"
+  "Art & Artisanat local": "cat_art", "Santé & Bien-être": "cat_sante", "E-books & Livres numériques": "cat_ebook", "Formations & Cours en ligne": "cat_formation", "Logiciels & Applications": "cat_logiciel", "Musique, Vidéos & Créations": "cat_media", "Documents & Modèles": "cat_docs", "Autre": "cat_autre"
 };
 function translateCategory(name) {
   var key = CATEGORY_NAME_TO_KEY[name];
@@ -9886,6 +9893,18 @@ function categoryByName(name) {
   return CATEGORIES[CATEGORIES.length - 1];
 }
 
+function isDigitalCategory(name) {
+  for (var i = 0; i < CATEGORIES.length; i++) if (CATEGORIES[i].name === name) return !!CATEGORIES[i].digital;
+  return false;
+}
+function isDigitalProduct(p) { return !!(p && (p.isDigital || isDigitalCategory(p.category))); }
+var DIGITAL_FIELDS_BY_CAT = {
+  "E-books & Livres numériques": ["digitalAuthor", "digitalLanguage", "digitalLength", "digitalFormat"],
+  "Formations & Cours en ligne": ["digitalAuthor", "digitalLanguage", "digitalLength", "digitalLevel"],
+  "Logiciels & Applications": ["digitalAuthor", "digitalPlatform", "digitalVersion", "digitalLicense"],
+  "Musique, Vidéos & Créations": ["digitalAuthor", "digitalLength", "digitalFormat"],
+  "Documents & Modèles": ["digitalAuthor", "digitalLanguage", "digitalFormat", "digitalLength"]
+};
 function sizeTypeForCategory(name) {
   var cat = categoryByName(name);
   return cat.sizeType || "none";
@@ -11466,6 +11485,79 @@ const TRANSLATIONS = {
     cat_art: "Art & Artisanat local",
     cat_sante: "Santé & Bien-être",
     cat_autre: "Autre",
+    cat_ebook: "E-books & Livres numériques",
+    cat_formation: "Formations & Cours en ligne",
+    cat_logiciel: "Logiciels & Applications",
+    cat_media: "Musique, Vidéos & Créations",
+    cat_docs: "Documents & Modèles",
+    sfield_digitalAuthor: "Auteur / Créateur",
+    sfield_digitalLanguage: "Langue",
+    sfield_digitalLength: "Taille / Durée",
+    sfield_digitalFormat: "Format",
+    sfield_digitalLevel: "Niveau",
+    sfield_digitalPlatform: "Plateforme",
+    sfield_digitalVersion: "Version",
+    sfield_digitalLicense: "Licence",
+    ph_digitalAuthor: "Ex : Aminata Diallo",
+    ph_digitalLanguage: "Ex : Français, Bambara",
+    ph_digitalLength: "Ex : 120 pages, 6 h de vidéo",
+    ph_digitalFormat: "Ex : PDF, EPUB, MP4",
+    ph_digitalLevel: "Ex : Débutant",
+    ph_digitalPlatform: "Ex : Android, Windows",
+    ph_digitalVersion: "Ex : 2.1",
+    ph_digitalLicense: "Ex : 1 appareil, à vie",
+    dig_pub_info: "Produit numérique : pas de stock ni de livraison. Le client reçoit le fichier ou le lien juste après son paiement (Orange Money, Moov Money ou portefeuille).",
+    dig_pub_how: "Comment le client reçoit-il votre produit ?",
+    dig_pub_kind_file: "Fichier à télécharger",
+    dig_pub_kind_link: "Lien d'accès (cours en ligne…)",
+    dig_pub_file: "Votre fichier (PDF, EPUB, ZIP, MP3, MP4…)",
+    dig_pub_choose: "Choisir le fichier",
+    dig_pub_replace: "Remplacer le fichier",
+    dig_pub_uploading: "Envoi du fichier en cours… ne fermez pas l'application.",
+    dig_pub_uploaded: "Fichier envoyé. Il reste privé jusqu'à l'achat.",
+    dig_pub_file_hint: "100 Mo au maximum. Le fichier reste privé : seul l'acheteur qui a payé peut le télécharger.",
+    dig_pub_link: "Lien d'accès",
+    dig_pub_link_hint: "Ce lien reste caché : seul l'acheteur qui a payé le reçoit (YouTube non répertorié, Google Drive, Zoom, Telegram…).",
+    dig_err_too_big: "Fichier trop lourd (100 Mo au maximum).",
+    dig_err_type: "Ce type de fichier n'est pas accepté.",
+    dig_err_upload: "L'envoi du fichier n'a pas marché. Vérifiez votre connexion et réessayez.",
+    dig_err_link: "Le lien doit commencer par https://",
+    dig_err_need_file: "Ajoutez d'abord le fichier que le client va recevoir.",
+    dig_err_wait_upload: "Patientez, le fichier est encore en cours d'envoi.",
+    dig_err_secret: "Le fichier ou le lien n'a pas pu être enregistré. Ouvrez « Modifier » sur le produit et enregistrez à nouveau.",
+    dig_own_product: "C'est votre propre produit.",
+    dig_buy_btn: "Acheter",
+    dig_buy_info_file: "Après le paiement, vous téléchargez le fichier tout de suite, depuis cette fenêtre ou depuis « Mes achats ». Pas de livraison.",
+    dig_buy_info_link: "Après le paiement, vous recevez tout de suite le lien d'accès, ici et dans « Mes achats ». Pas de livraison.",
+    dig_buy_wallet: "Payer avec mon portefeuille",
+    dig_buy_wallet_low: "Solde insuffisant : rechargez votre portefeuille ou payez par Orange / Moov Money.",
+    dig_pd_info_file: "Produit numérique : vous le téléchargez juste après le paiement. Pas de livraison, pas d'attente.",
+    dig_pd_info_link: "Accès en ligne : vous recevez le lien juste après le paiement. Pas de livraison.",
+    dig_download: "Télécharger",
+    dig_open_link: "Ouvrir mon accès",
+    dig_get_now: "Télécharger maintenant",
+    dig_preparing: "Préparation de votre accès…",
+    dig_ready_file_title: "Votre fichier est prêt",
+    dig_ready_link_title: "Votre accès est prêt",
+    dig_ready_file_hint: "Le lien de téléchargement marche pendant 1 heure. Vous pourrez toujours en redemander un depuis « Mes achats ».",
+    dig_ready_link_hint: "Retrouvez ce lien à tout moment dans « Mes achats ».",
+    dig_err_not_paid: "Le paiement n'est pas encore confirmé. Réessayez dans un instant.",
+    dig_err_no_content: "Le vendeur n'a pas encore ajouté le fichier. Contactez-le depuis la fiche du produit.",
+    dig_err_cancelled: "Cette commande est annulée.",
+    dig_err_access: "Accès impossible pour le moment. Réessayez.",
+    dig_order_label: "Produit numérique",
+    dig_no_delivery: "Livraison : aucune (numérique)",
+    dig_notif_after_pay: "Dès que le paiement est confirmé, votre achat numérique est disponible dans « Mes achats ».",
+    bk_my_title: "Mes réservations",
+    bk_paid: "Payée en ligne — le prestataire est prévenu.",
+    bk_confirmed_pay: "Le prestataire a confirmé votre réservation. Vous pouvez la payer maintenant (ou sur place si vous préférez).",
+    bk_pay_btn: "Payer",
+    bk_waiting_seller: "En attente de la confirmation du prestataire.",
+    bk_seller_paid: "Payée en ligne par le client — le montant (après commission) est ajouté à vos gains.",
+    bk_seller_wait_pay: "Le client peut maintenant payer en ligne (ou sur place).",
+    bk_notif_confirmed: "Votre réservation est confirmée. Vous pouvez la payer dans « Mes achats » :",
+    ligdi_ok_booking: "Merci ! Votre réservation est payée, le prestataire est prévenu.",
+    ligdi_fail_booking: "Le paiement n'a pas été effectué : votre réservation n'est pas encore payée.",
     repere_placeholder: "Ex : face à la mosquée",
     repere_continue_empty: "Continuer sans remplir",
     shop_save_new_position: "Enregistrer la nouvelle position",
@@ -13397,6 +13489,79 @@ const TRANSLATIONS = {
     cat_art: "Local Art & Crafts",
     cat_sante: "Health & Wellness",
     cat_autre: "Other",
+    cat_ebook: "E-books & Digital books",
+    cat_formation: "Online training & Courses",
+    cat_logiciel: "Software & Apps",
+    cat_media: "Music, Videos & Creations",
+    cat_docs: "Documents & Templates",
+    sfield_digitalAuthor: "Author / Creator",
+    sfield_digitalLanguage: "Language",
+    sfield_digitalLength: "Size / Length",
+    sfield_digitalFormat: "Format",
+    sfield_digitalLevel: "Level",
+    sfield_digitalPlatform: "Platform",
+    sfield_digitalVersion: "Version",
+    sfield_digitalLicense: "License",
+    ph_digitalAuthor: "E.g. Aminata Diallo",
+    ph_digitalLanguage: "E.g. French, English",
+    ph_digitalLength: "E.g. 120 pages, 6 h of video",
+    ph_digitalFormat: "E.g. PDF, EPUB, MP4",
+    ph_digitalLevel: "E.g. Beginner",
+    ph_digitalPlatform: "E.g. Android, Windows",
+    ph_digitalVersion: "E.g. 2.1",
+    ph_digitalLicense: "E.g. 1 device, lifetime",
+    dig_pub_info: "Digital product: no stock, no delivery. The customer gets the file or the link right after paying (Orange Money, Moov Money or wallet).",
+    dig_pub_how: "How does the customer receive your product?",
+    dig_pub_kind_file: "File to download",
+    dig_pub_kind_link: "Access link (online course…)",
+    dig_pub_file: "Your file (PDF, EPUB, ZIP, MP3, MP4…)",
+    dig_pub_choose: "Choose the file",
+    dig_pub_replace: "Replace the file",
+    dig_pub_uploading: "Uploading the file… do not close the app.",
+    dig_pub_uploaded: "File uploaded. It stays private until someone buys it.",
+    dig_pub_file_hint: "100 MB maximum. The file stays private: only a buyer who has paid can download it.",
+    dig_pub_link: "Access link",
+    dig_pub_link_hint: "This link stays hidden: only a buyer who has paid receives it (unlisted YouTube, Google Drive, Zoom, Telegram…).",
+    dig_err_too_big: "File too large (100 MB maximum).",
+    dig_err_type: "This file type is not accepted.",
+    dig_err_upload: "The upload failed. Check your connection and try again.",
+    dig_err_link: "The link must start with https://",
+    dig_err_need_file: "First add the file the customer will receive.",
+    dig_err_wait_upload: "Please wait, the file is still uploading.",
+    dig_err_secret: "The file or link could not be saved. Open “Edit” on the product and save again.",
+    dig_own_product: "This is your own product.",
+    dig_buy_btn: "Buy",
+    dig_buy_info_file: "After paying, you download the file right away, from this window or from “Purchases”. No delivery.",
+    dig_buy_info_link: "After paying, you get the access link right away, here and in “Purchases”. No delivery.",
+    dig_buy_wallet: "Pay with my wallet",
+    dig_buy_wallet_low: "Balance too low: top up your wallet or pay with Orange / Moov Money.",
+    dig_pd_info_file: "Digital product: you download it right after paying. No delivery, no waiting.",
+    dig_pd_info_link: "Online access: you get the link right after paying. No delivery.",
+    dig_download: "Download",
+    dig_open_link: "Open my access",
+    dig_get_now: "Download now",
+    dig_preparing: "Preparing your access…",
+    dig_ready_file_title: "Your file is ready",
+    dig_ready_link_title: "Your access is ready",
+    dig_ready_file_hint: "The download link works for 1 hour. You can always ask for a new one from “Purchases”.",
+    dig_ready_link_hint: "Find this link any time in “Purchases”.",
+    dig_err_not_paid: "The payment is not confirmed yet. Try again in a moment.",
+    dig_err_no_content: "The seller has not added the file yet. Contact them from the product page.",
+    dig_err_cancelled: "This order is cancelled.",
+    dig_err_access: "Access not possible right now. Try again.",
+    dig_order_label: "Digital product",
+    dig_no_delivery: "Delivery: none (digital)",
+    dig_notif_after_pay: "As soon as the payment is confirmed, your digital purchase is available in “Purchases”.",
+    bk_my_title: "My bookings",
+    bk_paid: "Paid online — the provider has been told.",
+    bk_confirmed_pay: "The provider confirmed your booking. You can pay now (or on site if you prefer).",
+    bk_pay_btn: "Pay",
+    bk_waiting_seller: "Waiting for the provider to confirm.",
+    bk_seller_paid: "Paid online by the customer — the amount (after commission) is added to your earnings.",
+    bk_seller_wait_pay: "The customer can now pay online (or on site).",
+    bk_notif_confirmed: "Your booking is confirmed. You can pay it in “Purchases”:",
+    ligdi_ok_booking: "Thank you! Your booking is paid, the provider has been told.",
+    ligdi_fail_booking: "The payment was not made: your booking is not paid yet.",
     repere_placeholder: "e.g. facing the mosque",
     repere_continue_empty: "Continue without filling",
     shop_save_new_position: "Save the new location",
@@ -15328,6 +15493,79 @@ const TRANSLATIONS = {
     cat_art: "स्थानीय कला एवं शिल्प",
     cat_sante: "स्वास्थ्य एवं तंदुरुस्ती",
     cat_autre: "अन्य",
+    cat_ebook: "ई-बुक और डिजिटल किताबें",
+    cat_formation: "ऑनलाइन प्रशिक्षण और कोर्स",
+    cat_logiciel: "सॉफ़्टवेयर और ऐप",
+    cat_media: "संगीत, वीडियो और रचनाएँ",
+    cat_docs: "दस्तावेज़ और टेम्पलेट",
+    sfield_digitalAuthor: "लेखक / निर्माता",
+    sfield_digitalLanguage: "भाषा",
+    sfield_digitalLength: "आकार / अवधि",
+    sfield_digitalFormat: "फ़ॉर्मेट",
+    sfield_digitalLevel: "स्तर",
+    sfield_digitalPlatform: "प्लेटफ़ॉर्म",
+    sfield_digitalVersion: "संस्करण",
+    sfield_digitalLicense: "लाइसेंस",
+    ph_digitalAuthor: "जैसे: अमिनाता दियालो",
+    ph_digitalLanguage: "जैसे: फ़्रेंच, हिंदी",
+    ph_digitalLength: "जैसे: 120 पेज, 6 घंटे का वीडियो",
+    ph_digitalFormat: "जैसे: PDF, EPUB, MP4",
+    ph_digitalLevel: "जैसे: शुरुआती",
+    ph_digitalPlatform: "जैसे: Android, Windows",
+    ph_digitalVersion: "जैसे: 2.1",
+    ph_digitalLicense: "जैसे: 1 डिवाइस, आजीवन",
+    dig_pub_info: "डिजिटल उत्पाद: न स्टॉक, न डिलीवरी। भुगतान के तुरंत बाद ग्राहक को फ़ाइल या लिंक मिलता है (Orange Money, Moov Money या वॉलेट)।",
+    dig_pub_how: "ग्राहक को आपका उत्पाद कैसे मिलेगा?",
+    dig_pub_kind_file: "डाउनलोड करने के लिए फ़ाइल",
+    dig_pub_kind_link: "एक्सेस लिंक (ऑनलाइन कोर्स…)",
+    dig_pub_file: "आपकी फ़ाइल (PDF, EPUB, ZIP, MP3, MP4…)",
+    dig_pub_choose: "फ़ाइल चुनें",
+    dig_pub_replace: "फ़ाइल बदलें",
+    dig_pub_uploading: "फ़ाइल भेजी जा रही है… ऐप बंद न करें।",
+    dig_pub_uploaded: "फ़ाइल भेज दी गई। ख़रीद तक यह निजी रहती है।",
+    dig_pub_file_hint: "अधिकतम 100 MB। फ़ाइल निजी रहती है: केवल भुगतान करने वाला ख़रीदार इसे डाउनलोड कर सकता है।",
+    dig_pub_link: "एक्सेस लिंक",
+    dig_pub_link_hint: "यह लिंक छिपा रहता है: केवल भुगतान करने वाले ख़रीदार को मिलता है (YouTube, Google Drive, Zoom, Telegram…)।",
+    dig_err_too_big: "फ़ाइल बहुत बड़ी है (अधिकतम 100 MB)।",
+    dig_err_type: "यह फ़ाइल प्रकार स्वीकार नहीं है।",
+    dig_err_upload: "फ़ाइल नहीं भेजी जा सकी। कनेक्शन जाँचें और फिर कोशिश करें।",
+    dig_err_link: "लिंक https:// से शुरू होना चाहिए",
+    dig_err_need_file: "पहले वह फ़ाइल जोड़ें जो ग्राहक को मिलेगी।",
+    dig_err_wait_upload: "रुकिए, फ़ाइल अभी भेजी जा रही है।",
+    dig_err_secret: "फ़ाइल या लिंक सहेजा नहीं जा सका। उत्पाद पर «बदलें» खोलकर फिर सहेजें।",
+    dig_own_product: "यह आपका अपना उत्पाद है।",
+    dig_buy_btn: "ख़रीदें",
+    dig_buy_info_file: "भुगतान के बाद आप तुरंत फ़ाइल डाउनलोड करते हैं, यहाँ से या «ख़रीदारी» से। कोई डिलीवरी नहीं।",
+    dig_buy_info_link: "भुगतान के बाद आपको तुरंत एक्सेस लिंक मिलता है, यहाँ और «ख़रीदारी» में। कोई डिलीवरी नहीं।",
+    dig_buy_wallet: "मेरे वॉलेट से भुगतान करें",
+    dig_buy_wallet_low: "शेष राशि कम है: वॉलेट रिचार्ज करें या Orange / Moov Money से भुगतान करें।",
+    dig_pd_info_file: "डिजिटल उत्पाद: भुगतान के तुरंत बाद डाउनलोड करें। न डिलीवरी, न इंतज़ार।",
+    dig_pd_info_link: "ऑनलाइन एक्सेस: भुगतान के तुरंत बाद लिंक मिलता है। कोई डिलीवरी नहीं।",
+    dig_download: "डाउनलोड करें",
+    dig_open_link: "मेरा एक्सेस खोलें",
+    dig_get_now: "अभी डाउनलोड करें",
+    dig_preparing: "आपका एक्सेस तैयार हो रहा है…",
+    dig_ready_file_title: "आपकी फ़ाइल तैयार है",
+    dig_ready_link_title: "आपका एक्सेस तैयार है",
+    dig_ready_file_hint: "डाउनलोड लिंक 1 घंटे तक काम करता है। आप «ख़रीदारी» से नया लिंक माँग सकते हैं।",
+    dig_ready_link_hint: "यह लिंक कभी भी «ख़रीदारी» में पाएँ।",
+    dig_err_not_paid: "भुगतान की अभी पुष्टि नहीं हुई। थोड़ी देर में फिर कोशिश करें।",
+    dig_err_no_content: "विक्रेता ने अभी फ़ाइल नहीं जोड़ी है। उत्पाद पेज से संपर्क करें।",
+    dig_err_cancelled: "यह ऑर्डर रद्द है।",
+    dig_err_access: "अभी एक्सेस संभव नहीं है। फिर कोशिश करें।",
+    dig_order_label: "डिजिटल उत्पाद",
+    dig_no_delivery: "डिलीवरी: कोई नहीं (डिजिटल)",
+    dig_notif_after_pay: "भुगतान की पुष्टि होते ही आपकी डिजिटल ख़रीद «ख़रीदारी» में उपलब्ध होगी।",
+    bk_my_title: "मेरी बुकिंग",
+    bk_paid: "ऑनलाइन भुगतान हो गया — सेवा प्रदाता को सूचना दी गई।",
+    bk_confirmed_pay: "सेवा प्रदाता ने आपकी बुकिंग की पुष्टि की। अभी भुगतान करें (या चाहें तो वहीं जाकर)।",
+    bk_pay_btn: "भुगतान करें",
+    bk_waiting_seller: "सेवा प्रदाता की पुष्टि का इंतज़ार।",
+    bk_seller_paid: "ग्राहक ने ऑनलाइन भुगतान किया — रक़म (कमीशन के बाद) आपकी कमाई में जुड़ गई।",
+    bk_seller_wait_pay: "ग्राहक अब ऑनलाइन (या वहीं) भुगतान कर सकता है।",
+    bk_notif_confirmed: "आपकी बुकिंग की पुष्टि हो गई। «ख़रीदारी» में भुगतान करें:",
+    ligdi_ok_booking: "धन्यवाद! आपकी बुकिंग का भुगतान हो गया, सेवा प्रदाता को सूचना दी गई।",
+    ligdi_fail_booking: "भुगतान नहीं हुआ: आपकी बुकिंग का अभी भुगतान नहीं हुआ है।",
     repere_placeholder: "उदा: मस्जिद के सामने",
     repere_continue_empty: "बिना भरे जारी रखें",
     shop_save_new_position: "नई स्थिति सहेजें",
@@ -17000,6 +17238,7 @@ function blockedByMissingInternationalLogistics(product) {
 }
 
 function addToCart(productId, qty, color, size) {
+  if (isDigitalProduct(findProductById(productId))) { openDigitalBuy(productId); return; }
   var product = null;
   for (var i = 0; i < state.products.length; i++) {
     if (state.products[i].id === productId) {
@@ -17141,7 +17380,130 @@ function cartCount() {
   return count;
 }
 
+// ---------- PRODUITS NUMÉRIQUES : ACHAT ET ACCÈS ----------
+function findProductById(id) { for (var i = 0; i < state.products.length; i++) if (state.products[i].id === id) return state.products[i]; return null; }
+// Commande payée dont l'accès peut être demandé (le serveur revérifie tout).
+function digitalPaidOrderFor(productId) {
+  if (!state.profile) return null;
+  var list = (state.orders || []).filter(function(o) {
+    return o && o.buyerId === state.profile.id && o.status !== "Annulée" && (o.items || []).some(function(it) { return it.productId === productId; }) &&
+      ((o.payment === "ligdicash" && o.paymentStatus === "paid") || (o.payment === "portefeuille" && o.paymentStatus === "paid"));
+  });
+  list.sort(function(a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+  return list[0] || null;
+}
+function openDigitalBuy(productId) {
+  var p = findProductById(productId);
+  if (!p) { showToast(t("toast_product_no_longer_exists")); return; }
+  if (state.profile && p.sellerId === state.profile.id) { showToast(t("dig_own_product")); return; }
+  var already = digitalPaidOrderFor(productId);
+  if (already) { digitalOpen(already.id, productId); return; }
+  state.detailProductId = null;
+  state.digitalBuy = { productId: productId };
+  try { fetchMyWalletState(); } catch (e) {}
+  render();
+}
+function createDigitalOrder(p, payment, paid) {
+  var price = getTieredPrice(p, 1);
+  var now = Date.now();
+  var vs = {}; vs[p.sellerId] = "Nouvelle";
+  return {
+    id: uid(), buyerId: state.profile.id, buyerName: state.profile.name, buyerPhone: state.profile.phone,
+    items: [{ productId: p.id, name: p.name, price: price, qty: 1, color: null, size: null, sellerId: p.sellerId, sellerPhone: p.sellerPhone, sellerName: p.shopName || p.sellerName, refused: false }],
+    subtotal: price, deliveryFee: 0, total: price, payment: payment, paymentStatus: paid ? "paid" : "pending_payment",
+    status: "Nouvelle", statusHistory: [{ status: "Nouvelle", at: now }], vendorStatuses: vs, sellerIds: [p.sellerId],
+    createdAt: now, isDigital: true, deliveryMode: "numerique", city: "", zone: "", country: p.country || "Mali"
+  };
+}
+function digitalBuyWith(method) {
+  var db0 = state.digitalBuy; if (!db0) return;
+  var p = findProductById(db0.productId); if (!p) { state.digitalBuy = null; render(); return; }
+  var price = getTieredPrice(p, 1);
+  state.digitalBuy = null;
+  state.quickBuyItem = true; // ne pas vider le panier
+  if (method === "ligdicash") {
+    if (!ligdiAmountOk(price)) { state.quickBuyItem = null; render(); return; }
+    finalizeOrder(createDigitalOrder(p, "ligdicash", false), { awaitingPayment: true });
+    return;
+  }
+  // Portefeuille : débit réel vérifié par le serveur, puis accès immédiat.
+  var order = createDigitalOrder(p, "portefeuille", true);
+  state.digitalBuying = true; render();
+  callWalletOperation({ operation: "debit", amount: price, reason: "achat_boutique", meta: { orderId: order.id, accountName: "Commande #" + order.id.slice(-5).toUpperCase() } }).then(function(res) {
+    state.digitalBuying = false;
+    if (!res || !res.success) { state.quickBuyItem = null; render(); showToast(t("toast_wallet_insufficient_order")); return; }
+    fetchMyWalletState();
+    finalizeOrder(order, { simulated: false });
+    Promise.resolve(window.__lastOrderSaved).then(function() { setTimeout(function() { digitalOpen(order.id, p.id); }, 1200); });
+  });
+}
+// Demande au serveur l'accès (lien de téléchargement privé valable 1 h, ou
+// lien de la formation) puis l'ouvre.
+function digitalOpen(orderId, productId, attempt) {
+  attempt = attempt || 0;
+  if (!FIREBASE_ENABLED) { showToast(t("toast_payment_unavailable_offline")); return; }
+  if (attempt === 0) { state.digitalOpening = true; render(); }
+  callLigdiFunction("digital-access", { operation: "get_access", orderId: orderId, productId: productId }).then(function(res) {
+    if (res && !res.success && (res.error === "forbidden" || res.error === "not_paid") && attempt < 3) { setTimeout(function() { digitalOpen(orderId, productId, attempt + 1); }, [1500, 3000, 6000][attempt]); return; }
+    state.digitalOpening = false;
+    if (!res || !res.success) {
+      render();
+      var em = { not_paid: "dig_err_not_paid", no_content: "dig_err_no_content", order_cancelled: "dig_err_cancelled", forbidden: "dig_err_not_paid", not_in_order: "dig_err_not_paid" };
+      showToast("❌ " + t(em[res && res.error] || "dig_err_access"));
+      return;
+    }
+    var o = (state.orders || []).find(function(x) { return x.id === orderId; });
+    if (o && o.isDigital && o.status !== "Livrée") {
+      o.status = "Livrée"; o.deliveredAt = o.deliveredAt || Date.now();
+      o.statusHistory = (o.statusHistory || []).concat([{ status: "Livrée", at: o.deliveredAt }]);
+      save();
+    }
+    if (o && o.isDigital) { try { settleOrderPayouts(o); } catch (e) {} }
+    state.digitalReady = { url: res.url, kind: res.kind, fileName: res.fileName || "" };
+    render();
+    var isNative = false; try { isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch (e) {}
+    var w = null;
+    if (!isNative) { try { w = window.open(res.url, "_blank", "noopener"); } catch (e) {} }
+    else { setTimeout(function() { window.location.href = res.url; }, 60); w = true; }
+    state.digitalReady.opened = !!w;
+    render();
+  });
+}
+function renderDigitalBuyModal() {
+  var b = state.digitalBuy; if (!b) return "";
+  var p = findProductById(b.productId); if (!p) return "";
+  var price = getTieredPrice(p, 1);
+  var wal = state.profile ? getWallet(state.profile.phone) : { balance: 0 };
+  var html = '<div class="modal-overlay" style="z-index:9995;"><div class="modal-sheet" style="padding:20px 16px;">';
+  html += '<div style="font-size:36px;text-align:center;">' + ((categoryByName(p.category) || {}).icon || "📥") + '</div>';
+  html += '<div style="font-weight:800;font-size:16px;text-align:center;margin:4px 0;word-break:break-word;">' + esc(productDisplayName(p)) + '</div>';
+  html += '<div style="font-weight:800;font-size:20px;text-align:center;color:var(--accent);margin-bottom:10px;">' + money(price, p.country) + '</div>';
+  html += '<div style="font-size:12px;color:var(--text-dim);background:var(--bg-body);border-radius:10px;padding:9px 11px;margin-bottom:14px;line-height:1.5;"><i class="fa-solid fa-cloud-arrow-down"></i> ' + t(p.digitalKind === "link" ? "dig_buy_info_link" : "dig_buy_info_file") + '</div>';
+  if (ligdicashEnabled(p.country || "Mali")) html += '<button class="btn-primary" style="width:100%;margin-bottom:8px;background:#ff7900;border-color:#ff7900;" data-action="digital-buy-with" data-value="ligdicash"><i class="fa-solid fa-mobile-screen"></i> ' + t("ligdi_option") + '</button>';
+  var enough = Number(wal.balance || 0) >= price;
+  html += '<button class="btn-secondary" style="width:100%;margin-bottom:8px;" data-action="digital-buy-with" data-value="portefeuille" ' + (enough ? '' : 'disabled') + '><i class="fa-solid fa-wallet"></i> ' + t("dig_buy_wallet") + ' (' + money(wal.balance || 0) + ')</button>';
+  if (!enough) html += '<div style="font-size:11px;color:var(--text-dim);text-align:center;margin:-2px 0 8px;">' + t("dig_buy_wallet_low") + '</div>';
+  html += '<button class="link-btn" style="width:100%;" data-action="digital-buy-close">' + t("cancel_generic") + '</button>';
+  html += ligdiBrandLine();
+  html += '</div></div>';
+  return html;
+}
+function renderDigitalReadyModal() {
+  var r = state.digitalReady;
+  if (state.digitalOpening || state.digitalBuying) return '<div class="modal-overlay" style="z-index:9997;"><div class="modal-sheet" style="text-align:center;padding:30px 20px;"><div style="font-size:30px;color:var(--accent);margin-bottom:10px;"><i class="fa-solid fa-spinner fa-spin"></i></div><div style="font-weight:800;font-size:15px;">' + t("dig_preparing") + '</div></div></div>';
+  if (!r) return "";
+  var html = '<div class="modal-overlay" style="z-index:9997;"><div class="modal-sheet" style="text-align:center;padding:24px 18px;">';
+  html += '<div style="font-size:44px;color:var(--success);margin-bottom:8px;"><i class="fa-solid ' + (r.kind === "link" ? 'fa-circle-play' : 'fa-file-arrow-down') + '"></i></div>';
+  html += '<div style="font-weight:800;font-size:16px;margin-bottom:6px;">' + t(r.kind === "link" ? "dig_ready_link_title" : "dig_ready_file_title") + '</div>';
+  if (r.fileName) html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;word-break:break-all;">' + esc(r.fileName) + '</div>';
+  html += '<a href="' + esc(r.url) + '" target="_blank" rel="noopener" class="btn-primary" style="display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;margin-bottom:8px;"><i class="fa-solid ' + (r.kind === "link" ? 'fa-arrow-up-right-from-square' : 'fa-download') + '"></i> ' + t(r.kind === "link" ? "dig_open_link" : "dig_download") + '</a>';
+  html += '<div style="font-size:10.5px;color:var(--text-dim);margin-bottom:10px;">' + t(r.kind === "link" ? "dig_ready_link_hint" : "dig_ready_file_hint") + '</div>';
+  html += '<button class="link-btn" style="width:100%;" data-action="digital-ready-close">' + t("ligdi_btn_ok") + '</button>';
+  html += '</div></div>';
+  return html;
+}
 function buyNow(productId, qty, color, size) {
+  if (isDigitalProduct(findProductById(productId))) { openDigitalBuy(productId); return; }
   var product = null;
   for (var i = 0; i < state.products.length; i++) {
     if (state.products[i].id === productId) {
@@ -17649,7 +18011,9 @@ function finalizeOrder(order, opts) {
   var awaitingPayment = !!(opts && opts.awaitingPayment);
   var paymentLabel = awaitingPayment ? "mobile money (en attente)" : (opts && opts.simulated) ? (order.payment === "orange_money" ? "Orange Money" : "Moov Money") + " (simulation)" : "à la livraison";
   addNotification("whatsapp", "Confirmation : commande #" + order.id.slice(-5).toUpperCase() + " (" + orderMoney(order.total, order) + ") enregistrée. Paiement : " + paymentLabel, order.buyerId, "orders");
-  if (order.isInternational) {
+  if (order.isDigital) {
+    addNotification("sms", "📥 " + t("dig_notif_after_pay"), order.buyerId, "orders");
+  } else if (order.isInternational) {
     addNotification("sms", "🌍 Votre commande groupée internationale est enregistrée — en attente de vérification du paiement par notre agent sourcing.", order.buyerId, "orders");
   } else if (order.deliveryMode === "relais") {
     addNotification("sms", "📦 Votre commande sera déposée chez " + order.relaisShopName + ".", order.buyerId, "orders");
@@ -17710,6 +18074,7 @@ function finalizeOrder(order, opts) {
     buyerLng: order.buyerLng != null ? order.buyerLng : null
   } : null;
   var orderSaved = secureOrderSaveDoc(order);
+  window.__lastOrderSaved = orderSaved;
   if (awaitingPayment) {
     Promise.resolve(orderSaved).then(function(okSaved) {
       if (okSaved === false) { showToast(t("ligdi_saved_offline")); return; }
@@ -19653,6 +20018,7 @@ function startLigdicashPayment(ref) {
   if (!FIREBASE_ENABLED) { showToast(t("toast_payment_unavailable_offline")); return; }
   var amt = 0;
   if (ref.kind === "wallet") amt = Number(ref.amount) || 0;
+  else if (ref.kind === "booking") { var bkk = (state.bookings || []).find(function(x) { return x.id === ref.bookingId; }); var bsp = bkk ? findProductById(bkk.productId) : null; amt = bsp && bsp.price != null ? Number(bsp.price) : (bkk ? Number(bkk.price) || 0 : 0); }
   else if (ref.kind === "boost") { var bb = (state.boosts || []).find(function(x) { return x.id === ref.boostId; }); amt = bb ? Number(bb.price) || 0 : 0; }
   else { var oo = (state.orders || []).find(function(x) { return x.id === ref.orderId; }); amt = oo ? Number(oo.total) || 0 : 0; }
   state.ligdiChoose = { ref: ref, amount: amt, op: "orange", phone: ligdiMyPhone8() };
@@ -19660,7 +20026,7 @@ function startLigdicashPayment(ref) {
 }
 function ligdiChooseGo() {
   var c = state.ligdiChoose; if (!c) return;
-  var ref = { kind: c.ref.kind, orderId: c.ref.orderId, boostId: c.ref.boostId, amount: c.ref.amount };
+  var ref = { kind: c.ref.kind, orderId: c.ref.orderId, boostId: c.ref.boostId, bookingId: c.ref.bookingId, amount: c.ref.amount };
   var el = document.getElementById("ligdi-phone");
   var ph = String((el && el.value) || c.phone || "").replace(/\D/g, "");
   if (ph.length === 11 && ph.indexOf("223") === 0) ph = ph.slice(3);
@@ -19679,7 +20045,7 @@ function ligdiCreateAndOpen(ref, attempt) {
       if (res.error === "session_required") noteSessionRejected();
       showToast("❌ " + ligdiErrorText(res.error)); render(); return;
     }
-    var refId = ref.kind === "boost" ? ref.boostId : ref.kind === "wallet" ? "wallet" : ref.orderId;
+    var refId = ref.kind === "boost" ? ref.boostId : ref.kind === "wallet" ? "wallet" : ref.kind === "booking" ? ref.bookingId : ref.orderId;
     ligdiSavePending({ txn: res.transactionId, kind: ref.kind, refId: refId, at: Date.now() });
     render();
     var md = String(res.mode || "");
@@ -19830,13 +20196,14 @@ function checkLigdicashPayment(txn, showResult, cancelled) {
 function applyLigdiResultLocally(r) {
   var now = Date.now();
   if (r.kind === "wallet") { if (r.status === "completed") { try { fetchMyWalletState(); } catch (e) {} } return; }
+  if (r.kind === "booking") { var bkl = (state.bookings || []).find(function(x) { return x.id === r.refId; }); if (bkl && r.status === "completed") { bkl.paymentStatus = "paid"; bkl.paidAt = bkl.paidAt || now; save(); } return; }
   if (r.kind === "boost") {
     var b = (state.boosts || []).find(function(x) { return x.id === r.refId; });
     if (b && r.status === "completed") { b.status = "actif"; b.activatedAt = b.activatedAt || now; b.expiresAt = b.expiresAt || (now + (b.days || 1) * 86400000); }
     if (b && r.status === "notcompleted") b.status = "refuse";
   } else {
     var o = (state.orders || []).find(function(x) { return x.id === r.refId; });
-    if (o && r.status === "completed") { o.paymentStatus = "paid"; o.paidAt = o.paidAt || now; }
+    if (o && r.status === "completed") { o.paymentStatus = "paid"; o.paidAt = o.paidAt || now; if (o.isDigital) { o.status = "Livrée"; o.deliveredAt = o.deliveredAt || now; try { settleOrderPayouts(o); } catch (e) {} } }
     if (o && r.status === "notcompleted") { o.paymentStatus = "failed"; o.status = "Annulée"; }
   }
   save();
@@ -19871,11 +20238,11 @@ function maybeRunLigdiSweep() {
 }
 function renderLigdiResultModal() {
   var r = state.ligdiResult; if (!r) return "";
-  var wk = r.kind === "wallet";
-  var map = { completed: ["fa-circle-check", "var(--success)", t("ligdi_ok_title"), wk ? t("ligdi_ok_wallet") : r.kind === "boost" ? t("ligdi_ok_boost") : t("ligdi_ok_order")],
-    notcompleted: ["fa-circle-xmark", "var(--danger)", t("ligdi_fail_title"), wk ? t("ligdi_fail_wallet") : r.kind === "boost" ? t("ligdi_fail_boost") : t("ligdi_fail_order")],
+  var wk = r.kind === "wallet", bkr = r.kind === "booking";
+  var map = { completed: ["fa-circle-check", "var(--success)", t("ligdi_ok_title"), wk ? t("ligdi_ok_wallet") : bkr ? t("ligdi_ok_booking") : r.kind === "boost" ? t("ligdi_ok_boost") : t("ligdi_ok_order")],
+    notcompleted: ["fa-circle-xmark", "var(--danger)", t("ligdi_fail_title"), wk ? t("ligdi_fail_wallet") : bkr ? t("ligdi_fail_booking") : r.kind === "boost" ? t("ligdi_fail_boost") : t("ligdi_fail_order")],
     pending: ["fa-hourglass-half", "var(--accent)", t("ligdi_wait_title"), t("ligdi_wait_text")],
-    cancelled: ["fa-circle-pause", "var(--accent)", t("ligdi_cancel_title"), wk ? t("ligdi_fail_wallet") : r.kind === "boost" ? t("ligdi_cancel_boost") : t("ligdi_cancel_order")],
+    cancelled: ["fa-circle-pause", "var(--accent)", t("ligdi_cancel_title"), wk ? t("ligdi_fail_wallet") : bkr ? t("ligdi_fail_booking") : r.kind === "boost" ? t("ligdi_cancel_boost") : t("ligdi_cancel_order")],
     amount_mismatch: ["fa-triangle-exclamation", "var(--danger)", t("ligdi_mismatch_title"), t("ligdi_mismatch_text")],
     unknown: ["fa-wifi", "var(--text-dim)", t("ligdi_wait_title"), t("ligdi_unknown_text")] };
   var v = map[r.status] || map.unknown;
@@ -19883,6 +20250,8 @@ function renderLigdiResultModal() {
   html += '<div style="font-size:46px;color:' + v[1] + ';margin-bottom:10px;"><i class="fa-solid ' + v[0] + '"></i></div>';
   html += '<div style="font-weight:800;font-size:17px;margin-bottom:6px;">' + v[2] + '</div>';
   html += '<div style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:18px;">' + v[3] + (r.refId && r.kind === "order" ? ' <b>#' + esc(String(r.refId).slice(-5).toUpperCase()) + '</b>' : '') + '</div>';
+  var rdo = r.kind === "order" && r.status === "completed" ? (state.orders || []).find(function(x) { return x.id === r.refId; }) : null;
+  if (rdo && rdo.isDigital && rdo.items && rdo.items[0]) html += '<button class="btn-primary" style="width:100%;margin-bottom:8px;" data-action="ligdi-digital-open" data-order="' + esc(rdo.id) + '" data-value="' + esc(rdo.items[0].productId) + '"><i class="fa-solid fa-download"></i> ' + t("dig_get_now") + '</button>';
   if (r.status === "cancelled" && r.kind === "order") html += '<button class="btn-primary" style="width:100%;margin-bottom:8px;" data-action="ligdi-pay-again" data-value="' + esc(r.refId || "") + '"><i class="fa-solid fa-mobile-screen"></i> ' + t("ligdi_pay_now") + '</button>';
   if (r.status === "pending" || r.status === "unknown") html += '<button class="btn-primary" style="width:100%;margin-bottom:8px;" data-action="ligdi-recheck" data-value="' + esc(r.txn || "") + '"><i class="fa-solid fa-rotate"></i> ' + t("ligdi_recheck") + '</button>';
   html += '<button class="' + (r.status === "pending" || r.status === "unknown" || r.status === "cancelled" ? 'link-btn' : 'btn-primary') + '" style="width:100%;" data-action="ligdi-result-close">' + (r.kind !== "order" ? t("ligdi_btn_ok") : t("ligdi_btn_orders")) + '</button>';
@@ -23256,6 +23625,8 @@ function buildHTML() {
   if (state.showWallet) html += renderWalletModal();
   if (state.showWalletTransfer) html += renderWalletTransferModal();
   if (state.walletTopup) html += renderWalletTopupModal();
+  if (state.digitalBuy) html += renderDigitalBuyModal();
+  if (state.digitalOpening || state.digitalBuying || state.digitalReady) html += renderDigitalReadyModal();
   if (state.showCagnottesList) html += renderCagnottesListModal();
   if (state.showCreateCagnotte) html += renderCreateCagnotteModal();
   if (state.cagnotteDetailId) html += renderCagnotteDetailModal();
@@ -26387,6 +26758,8 @@ function runGatedPurchaseAction(kind, data) {
       persistProfileToAccounts();
       state.activeTour = { tourKey: "acheter", index: 0, single: false };
     }
+  } else if (kind === "buyDigital") {
+    openDigitalBuy(data.productId);
   } else if (kind === "buyNow") {
     buyNow(data.productId, data.qty, data.color, data.size);
     if (state.profile && !state.profile.seenDirectGuide) {
@@ -28650,6 +29023,34 @@ function renderPayment() {
 }
 
 // ---------- RENDER ORDERS ----------
+// Réservations de services (soins, santé, hôtel…) du client : il paie en
+// ligne une fois que le prestataire a confirmé le rendez-vous.
+function renderBuyerBookings() {
+  if (!state.profile) return "";
+  var mine = (state.bookings || []).filter(function(b) { return b && b.buyerId === state.profile.id && b.status !== "Terminée"; });
+  if (!mine.length) return "";
+  mine.sort(function(a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+  var canPay = ligdicashEnabled("Mali");
+  var html = '<div class="section-title" style="font-size:14px;margin:4px 0 8px;"><i class="fa-solid fa-calendar-check"></i> ' + t("bk_my_title") + '</div>';
+  for (var i = 0; i < mine.length; i++) {
+    var b = mine[i];
+    var sp = findProductById(b.productId);
+    var price = sp && sp.price != null ? sp.price : b.price;
+    html += '<div class="card-row" style="flex-direction:column;align-items:stretch;">';
+    html += '<div style="display:flex;justify-content:space-between;gap:8px;font-size:12.5px;margin-bottom:6px;"><span style="font-weight:700;min-width:0;word-break:break-word;">' + esc(b.productName || "") + '</span><span class="status-pill" style="flex-shrink:0;"><i class="fa-solid ' + (BOOKING_STATUS_ICONS[b.status] || 'fa-circle') + '"></i> ' + translateStatus(b.status) + '</span></div>';
+    html += '<div style="font-size:12px;color:var(--text-dim);">' + esc(b.sellerName || "") + ' · <b style="color:var(--text-primary);">' + money(price) + '</b></div>';
+    if (b.paymentStatus === "paid") {
+      html += '<div style="margin-top:8px;font-size:11.5px;color:var(--success);"><i class="fa-solid fa-circle-check"></i> ' + t("bk_paid") + '</div>';
+    } else if (b.status === "Confirmée" && canPay) {
+      html += '<div style="margin-top:8px;font-size:11.5px;line-height:1.45;">' + t("bk_confirmed_pay") + '</div>';
+      html += '<button class="btn-primary" style="width:100%;margin-top:8px;padding:10px 8px;font-size:13px;" data-action="pay-booking" data-value="' + esc(b.id) + '"><i class="fa-solid fa-mobile-screen"></i> ' + t("bk_pay_btn") + ' — ' + money(price) + '</button>';
+    } else if (b.status === "Nouvelle" || b.status === "Contactée") {
+      html += '<div style="margin-top:8px;font-size:11.5px;color:var(--text-dim);"><i class="fa-solid fa-hourglass-half"></i> ' + t("bk_waiting_seller") + '</div>';
+    }
+    html += '</div>';
+  }
+  return html;
+}
 function renderOrders() {
   var allMyOrders = [];
   for (var i = 0; i < state.orders.length; i++) {
@@ -28661,8 +29062,9 @@ function renderOrders() {
   // plus jamais dépendre de l'ordre de rangement en mémoire.
   allMyOrders.sort(function(a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
 
+  var bookingsHtml = renderBuyerBookings();
   if (allMyOrders.length === 0) {
-    return '<div class="orders-view"><div class="empty-state"><i class="fa-solid fa-box"></i><div class="title">' + t("orders_no_purchase") + '</div></div></div>';
+    return '<div class="orders-view">' + bookingsHtml + '<div class="empty-state"><i class="fa-solid fa-box"></i><div class="title">' + t("orders_no_purchase") + '</div></div></div>';
   }
   // Un achat livré depuis plus de 24h bascule automatiquement dans
   // l'historique — calculé à l'affichage (jamais de vraie "migration" de
@@ -28683,7 +29085,7 @@ function renderOrders() {
   var activeTab = state.ordersTab || "current";
   var myOrders = activeTab === "history" ? historyOrders : currentOrders;
 
-  var html = '<div class="orders-view"><div class="section-title">' + t("orders_title") + '</div>';
+  var html = '<div class="orders-view">' + bookingsHtml + '<div class="section-title">' + t("orders_title") + '</div>';
   html += '<div class="tab-row" style="margin-bottom:12px;">';
   html += '<button class="tab-btn ' + (activeTab !== "history" ? 'active' : '') + '" data-action="set-orders-tab" data-value="current">' + t("orders_tab_current") + ' (' + currentOrders.length + ')</button>';
   html += '<button class="tab-btn ' + (activeTab === "history" ? 'active' : '') + '" data-action="set-orders-tab" data-value="history">' + t("orders_tab_history") + ' (' + historyOrders.length + ')</button>';
@@ -28695,11 +29097,11 @@ function renderOrders() {
   }
   for (var j = 0; j < myOrders.length; j++) {
     var o = myOrders[j];
-    var hasOTP = o.otp && o.status !== "Livrée";
+    var hasOTP = o.otp && o.status !== "Livrée" && !o.isDigital;
     var hasRetraitCode = o.deliveryMode === "relais" && o.codeRetrait && o.status !== "Livrée" && o.status !== "Annulée";
     html += '<div class="card-row" style="flex-direction:column;align-items:stretch">';
     html += '<div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:8px">';
-    html += '<span style="font-weight:700">#' + o.id.slice(-5).toUpperCase() + ' — ' + (o.isInternational ? esc(o.country || "") : (o.city + ', ' + esc(o.zone))) + '</span>';
+    html += '<span style="font-weight:700">#' + o.id.slice(-5).toUpperCase() + ' — ' + (o.isDigital ? '<i class="fa-solid fa-cloud-arrow-down"></i> ' + t("dig_order_label") : o.isInternational ? esc(o.country || "") : (o.city + ', ' + esc(o.zone))) + '</span>';
     html += '<div style="display:flex;align-items:center;gap:8px;">';
     html += '<span class="status-pill"><i class="fa-solid ' + (STATUS_ICONS[o.status] || 'fa-circle') + '"></i> ' + orderStatusLabel(o.status) + '</span>';
     if (o.status === "Nouvelle") {
@@ -28724,7 +29126,9 @@ function renderOrders() {
       html += '</div>';
     }
     html += '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-dim);padding-top:4px">';
-    if (o.isInternational && o.customsXof != null) {
+    if (o.isDigital) {
+      html += '<span>' + t("dig_no_delivery") + '</span><span>' + money(0) + '</span>';
+    } else if (o.isInternational && o.customsXof != null) {
       html += '<span>' + t("intlco_delivery_line") + '</span><span>' + money(o.deliveryFee) + '</span>';
     } else
     html += '<span>' + (o.isInternational ? t("orders_shipping") + ' (' + (o.shippingMode === "aerien" ? t("opt_transport_aerien") : t("opt_transport_maritime")) + ')' : (t("orders_delivery") + ' (' + esc(o.zone) + ')')) + '</span><span>' + orderMoney(o.deliveryFee, o) + '</span>';
@@ -28738,6 +29142,13 @@ function renderOrders() {
       html += '<button class="btn-secondary" style="flex:1;min-width:0;padding:10px 6px;font-size:13px;" data-action="ligdi-check-order" data-value="' + o.id + '"><i class="fa-solid fa-rotate"></i> ' + t("ligdi_recheck") + '</button></div>';
     } else if (o.payment === "ligdicash" && o.paymentStatus === "paid") {
       html += '<div style="margin-top:8px;font-size:11.5px;color:var(--success);"><i class="fa-solid fa-circle-check"></i> ' + t("ligdi_order_paid") + '</div>';
+    }
+    if (o.isDigital && o.paymentStatus === "paid" && o.status !== "Annulée") {
+      for (var dgi = 0; dgi < o.items.length; dgi++) {
+        var dgp = findProductById(o.items[dgi].productId);
+        var dlink = dgp && dgp.digitalKind === "link";
+        html += '<button class="btn-primary" style="width:100%;margin-top:8px;padding:10px 8px;font-size:13px;" data-action="digital-open" data-order="' + o.id + '" data-value="' + esc(o.items[dgi].productId) + '"><i class="fa-solid ' + (dlink ? 'fa-circle-play' : 'fa-download') + '"></i> ' + t(dlink ? "dig_open_link" : "dig_download") + (o.items.length > 1 ? ' — ' + esc(o.items[dgi].name) : '') + '</button>';
+      }
     }
     if (hasOTP) {
       html += '<div style="margin-top:10px;padding:10px;background:var(--bg-body);border-radius:10px;">';
@@ -29003,6 +29414,8 @@ function renderSellerBookings() {
     html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:4px"><i class="fa-solid fa-user"></i> ' + esc(b.buyerName) + ' · <a href="tel:' + esc(b.buyerPhone) + '" style="color:var(--accent)">' + esc(b.buyerPhone) + '</a></div>';
     if (b.note) html += '<div style="font-size:12.5px;margin-bottom:4px;font-style:italic;">"' + esc(b.note) + '"</div>';
     html += '<div style="font-weight:700;font-size:13px;margin-top:4px">' + money(b.price) + '</div>';
+    if (b.paymentStatus === "paid") html += '<div style="margin-top:6px;font-size:11.5px;color:var(--success);"><i class="fa-solid fa-circle-check"></i> ' + t("bk_seller_paid") + '</div>';
+    else if (b.status === "Confirmée") html += '<div style="margin-top:6px;font-size:11.5px;color:var(--text-dim);"><i class="fa-solid fa-hourglass-half"></i> ' + t("bk_seller_wait_pay") + '</div>';
     html += '<div class="status-actions">';
     for (var s = 0; s < BOOKING_STATUS_FLOW.length; s++) {
       var st = BOOKING_STATUS_FLOW[s];
@@ -29093,6 +29506,72 @@ function renderMyProductsGrid(myProducts) {
   return html;
 }
 
+// Champs d'un produit NUMÉRIQUE : comment le client le reçoit (fichier à
+// télécharger ou lien d'accès), puis les informations utiles à l'acheteur.
+// Le fichier part dans l'espace PRIVÉ « digital » et le lien est gardé par
+// le serveur : rien de tout ça n'est visible avant le paiement.
+function renderDigitalPublishFields(d) {
+  if (!d.digitalKind) d.digitalKind = d.category === "Formations & Cours en ligne" ? "link" : "file";
+  var h = '<div style="margin-top:12px;padding:10px 12px;border-radius:12px;background:rgba(46,125,50,0.10);font-size:12px;line-height:1.5;"><i class="fa-solid fa-cloud-arrow-down"></i> ' + t("dig_pub_info") + '</div>';
+  h += '<label class="field-label">' + t("dig_pub_how") + '</label>';
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;">';
+  h += '<button type="button" class="chip ' + (d.digitalKind === "file" ? 'active' : '') + '" style="flex:1 1 130px;white-space:normal;text-align:center;" data-action="set-digital-kind" data-value="file"><i class="fa-solid fa-file-arrow-down"></i> ' + t("dig_pub_kind_file") + '</button>';
+  h += '<button type="button" class="chip ' + (d.digitalKind === "link" ? 'active' : '') + '" style="flex:1 1 130px;white-space:normal;text-align:center;" data-action="set-digital-kind" data-value="link"><i class="fa-solid fa-link"></i> ' + t("dig_pub_kind_link") + '</button>';
+  h += '</div>';
+  if (d.digitalKind === "file") {
+    h += '<label class="field-label">' + t("dig_pub_file") + '</label>';
+    if (d.digitalUploading) {
+      h += '<div style="padding:12px;border-radius:12px;background:var(--bg-body);font-size:12.5px;"><i class="fa-solid fa-spinner fa-spin"></i> ' + t("dig_pub_uploading") + '</div>';
+    } else {
+      if (d.digitalFileName) h += '<div style="padding:10px 12px;border-radius:12px;background:var(--bg-body);font-size:12.5px;margin-bottom:6px;word-break:break-all;"><i class="fa-solid fa-circle-check" style="color:var(--success);"></i> ' + esc(d.digitalFileName) + (d.digitalFileSize ? ' · ' + (Math.round(Number(d.digitalFileSize) / 104857.6) / 10) + ' Mo' : '') + '</div>';
+      h += '<div style="position:relative;">';
+      h += '<div class="file-upload-btn" style="display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px dashed var(--border-color);background:var(--bg-body);color:var(--text-secondary);font-size:13px;font-weight:700;padding:14px;border-radius:12px;"><i class="fa-solid fa-upload"></i> ' + (d.digitalFileName ? t("dig_pub_replace") : t("dig_pub_choose")) + '</div>';
+      h += '<input id="digital-file-input" type="file" accept=".pdf,.epub,.mobi,.zip,.rar,.mp3,.m4a,.wav,.mp4,.mov,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.apk,.png,.jpg,.jpeg,.psd,.ai,.svg" data-action-file="digital-file" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;" />';
+      h += '</div>';
+      h += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;">' + t("dig_pub_file_hint") + '</div>';
+    }
+  } else {
+    h += '<label class="field-label">' + t("dig_pub_link") + '</label>';
+    h += '<input class="input" type="url" inputmode="url" placeholder="https://…" value="' + esc(d.digitalLink || '') + '" data-bind="productDraft.digitalLink" />';
+    h += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;"><i class="fa-solid fa-lock"></i> ' + t("dig_pub_link_hint") + '</div>';
+  }
+  var flds = DIGITAL_FIELDS_BY_CAT[d.category] || [];
+  for (var i = 0; i < flds.length; i++) {
+    var f = flds[i];
+    h += '<label class="field-label">' + getSectorFieldLabel(f) + '</label><input class="input" placeholder="' + esc(t("ph_" + f) !== "ph_" + f ? t("ph_" + f) : "") + '" value="' + esc(d[f] || '') + '" data-bind="productDraft.' + f + '" />';
+  }
+  return h;
+}
+// Envoi du fichier d'un produit numérique vers l'espace privé (adresse
+// d'envoi fournie par le serveur, valable pour CE vendeur seulement).
+function uploadDigitalFile(file) {
+  var d = state.productDraft; if (!d || !file) return;
+  var ext = String(file.name.split(".").pop() || "").toLowerCase();
+  if (file.size > 100 * 1024 * 1024) { showToast("❌ " + t("dig_err_too_big")); return; }
+  if (!FIREBASE_ENABLED) { showToast(t("toast_payment_unavailable_offline")); return; }
+  d.digitalUploading = true; render();
+  callLigdiFunction("digital-access", { operation: "upload_url", fileName: file.name, size: file.size }).then(function(res) {
+    if (!res || !res.success) { d.digitalUploading = false; render(); showToast("❌ " + t(res && res.error === "bad_file_type" ? "dig_err_type" : res && res.error === "file_too_big" ? "dig_err_too_big" : "dig_err_upload")); return; }
+    var up;
+    try { up = sb.storage.from("digital").uploadToSignedUrl(res.path, res.token, file, { contentType: file.type || "application/octet-stream" }); } catch (e) { up = Promise.resolve({ error: e }); }
+    Promise.resolve(up).then(function(r) {
+      d.digitalUploading = false;
+      if (r && r.error) { render(); showToast("❌ " + t("dig_err_upload")); return; }
+      d.digitalFilePath = res.path; d.digitalFileName = file.name; d.digitalFileSize = file.size;
+      if (!d.digitalFormat && ext) d.digitalFormat = ext.toUpperCase();
+      render(); showToast("✅ " + t("dig_pub_uploaded"));
+    }, function() { d.digitalUploading = false; render(); showToast("❌ " + t("dig_err_upload")); });
+  });
+}
+// Enregistre côté serveur (zone protégée) le fichier ou le lien du produit.
+function saveDigitalSecret(productId, sec, attempt) {
+  attempt = attempt || 0;
+  callLigdiFunction("digital-access", Object.assign({ operation: "set_secret", productId: productId }, sec)).then(function(res) {
+    if (res && res.success) return;
+    if (attempt < 4 && (!res || res.error === "network_error" || res.error === "server_error")) { setTimeout(function() { saveDigitalSecret(productId, sec, attempt + 1); }, [2000, 4000, 8000, 15000][attempt]); return; }
+    showToast("❌ " + t(res && res.error === "bad_link" ? "dig_err_link" : "dig_err_secret"));
+  });
+}
 function renderSellerProducts() {
   var d = state.productDraft;
   var editing = !!state.editingProductId;
@@ -29192,6 +29671,8 @@ function renderSellerProducts() {
     // boutique / autre : pas de champs supplémentaires spécifiques au vendeur
   }
 
+  var isDig = isDigitalCategory(d.category);
+  if (isDig) { typeFields = renderDigitalPublishFields(d); hideStock = true; }
   // Champs propres à la CATÉGORIE choisie — s'appliquent à tout vendeur de
   // produits physiques (particulier, boutique...), indépendamment de son
   // propre type, puisque n'importe qui peut vendre un bijou ou un cosmétique.
@@ -29335,6 +29816,7 @@ function renderSellerProducts() {
   }
   html += '<label class="field-label">' + t("publish_name") + '</label>';
   html += '<input class="input" placeholder="' + t("publish_name_placeholder") + '" value="' + esc(d.name) + '" data-bind="productDraft.name" />';
+  if (!isDig) {
   html += '<label class="field-label">' + t("publish_barcode") + '</label>';
   html += '<div style="display:flex;gap:8px;">';
   html += '<input class="input" id="product-barcode-input" placeholder="' + t("publish_barcode_placeholder") + '" value="' + esc(d.barcode || '') + '" data-bind="productDraft.barcode" />';
@@ -29346,6 +29828,7 @@ function renderSellerProducts() {
   html += '<button type="button" class="chip ' + (!hideStock ? 'active' : '') + '" style="white-space:normal;flex:1 1 130px;text-align:center;line-height:1.3;" data-action="set-product-quantifiable" data-value="1">' + (stockLabel === 'Stock' ? t("publish_quantifiable_yes_stock") : t("publish_quantifiable_yes_number")) + '</button>';
   html += '<button type="button" class="chip ' + (hideStock ? 'active' : '') + '" style="white-space:normal;flex:1 1 130px;text-align:center;line-height:1.3;" data-action="set-product-quantifiable" data-value="0">' + t("publish_quantifiable_no") + '</button>';
   html += '</div>';
+  }
   if (hideStock) {
     html += '<label class="field-label">' + publishPriceLabel() + '</label><input class="input" type="number" placeholder="' + t("publish_price_placeholder") + '" value="' + esc(d.price) + '" data-bind="productDraft.price" />';
   } else {
@@ -29370,7 +29853,7 @@ function renderSellerProducts() {
   html += '<label class="field-label">' + t("publish_description") + '</label>';
   html += '<textarea class="input" rows="2" data-bind="productDraft.description">' + esc(d.description) + '</textarea>';
   html += typeFields;
-  if (showsCategoryEtc) {
+  if (showsCategoryEtc && !isDig) {
     html += '<label class="field-label">' + t("publish_colors") + '</label>';
     html += '<div class="option-pills">';
     for (var k = 0; k < COLOR_PRESETS.length; k++) {
@@ -34409,7 +34892,9 @@ var SECTOR_FIELD_LABELS = {
   typeProduitSante: "Type de produit", usagePosologieSante: "Usage / Posologie",
   typeBureautique: "Type", etatBureautique: "État",
   typePrestationDeco: "Type de prestation", delaiPreparationDeco: "Délai de préparation",
-  typeEvenement: "Type d'événement", capaciteEvenement: "Capacité (invités)"
+  typeEvenement: "Type d'événement", capaciteEvenement: "Capacité (invités)",
+  digitalAuthor: "Auteur / Créateur", digitalLanguage: "Langue", digitalLength: "Taille / Durée", digitalFormat: "Format",
+  digitalLevel: "Niveau", digitalPlatform: "Plateforme", digitalVersion: "Version", digitalLicense: "Licence"
 };
 function getSectorFieldLabel(f) {
   var key = "sfield_" + f;
@@ -34643,6 +35128,11 @@ function renderProductModal() {
     html += '<label class="field-label">' + t("pd_note_for_seller") + '</label>';
     html += '<textarea class="input" id="booking-note-input" rows="2" placeholder="' + t("pd_note_placeholder") + '"></textarea>';
     html += '<button class="btn-primary" style="margin-top:10px;" data-action="reserve-service" data-value="' + p.id + '" ' + (p.stock <= 0 ? 'disabled' : '') + '><i class="fa-solid fa-calendar-check"></i> ' + t("pd_reserve") + '</button>';
+  } else if (isDigitalProduct(p)) {
+    var dpaid = digitalPaidOrderFor(p.id);
+    html += '<div class="glass-card" style="padding:12px;margin:10px 0;font-size:12px;line-height:1.5;"><i class="fa-solid fa-cloud-arrow-down" style="color:var(--success);"></i> ' + t(p.digitalKind === "link" ? "dig_pd_info_link" : "dig_pd_info_file") + '</div>';
+    if (dpaid) html += '<button class="btn-primary" style="margin-top:6px;" data-action="digital-open" data-order="' + dpaid.id + '" data-value="' + p.id + '"><i class="fa-solid ' + (p.digitalKind === "link" ? 'fa-circle-play' : 'fa-download') + '"></i> ' + t(p.digitalKind === "link" ? "dig_open_link" : "dig_download") + '</button>';
+    else html += '<button class="btn-primary" style="margin-top:6px;" data-action="buy-digital" data-value="' + p.id + '"><i class="fa-solid fa-bolt"></i> ' + t("dig_buy_btn") + ' — ' + money(getTieredPrice(p, 1), p.country, state.profile ? state.profile.country : null) + '</button>';
   } else {
     html += '<label class="field-label">' + t("pd_quantity") + '</label>';
     html += '<div class="qty-control" style="width:fit-content;">';
@@ -35353,6 +35843,7 @@ function handleFileInput(el) {
     var files = el.files;
     if (!files || files.length === 0) return;
     var action = el.dataset.actionFile;
+    if (action === "digital-file") { uploadDigitalFile(files[0]); try { el.value = ""; } catch (e) {} return; }
 
     if (action === "shop-cover-photo" || action === "shop-profile-photo" || action === "personal-avatar-photo") {
       var shopPhotoFile = files[0];
@@ -35592,7 +36083,8 @@ function submitProductDraft() {
     // ce même écran de géolocalisation malien bloquait sa publication
     // sans issue (l'écran affiché n'a aucun moyen pertinent pour lui de
     // remplir une position GPS qu'il n'a pas besoin d'avoir).
-    if (state.profile.sellerType !== "international" && (state.profile.shopLat == null || state.profile.shopLng == null)) {
+    var digitalDraft = isDigitalCategory(d.category);
+    if (!digitalDraft && state.profile.sellerType !== "international" && (state.profile.shopLat == null || state.profile.shopLng == null)) {
       state.pendingProductPublish = true;
       state.sellerProfileSetupReturnView = state.view;
       state.view = "sellerProfileSetup";
@@ -35622,6 +36114,19 @@ function submitProductDraft() {
     // on lui donne une valeur toujours disponible plutôt que de bloquer.
     // Non quantifiable (choix du vendeur, pas figé par secteur) : valeur
     // "toujours disponible" plutôt que de bloquer sur un champ masqué.
+    var digitalSecret = null;
+    if (digitalDraft) {
+      d.isQuantifiable = false; d.colors = []; d.sizes = [];
+      if (d.digitalUploading) { showToast(t("dig_err_wait_upload")); return; }
+      if (d.digitalKind === "link") {
+        var dl = String(d.digitalLink || "").trim();
+        if (!/^https:\/\/\S{4,}$/.test(dl)) { showToast("❌ " + t("dig_err_link")); return; }
+        digitalSecret = { kind: "link", link: dl };
+      } else {
+        if (d.digitalFilePath) digitalSecret = { kind: "file", path: d.digitalFilePath, fileName: d.digitalFileName, size: d.digitalFileSize };
+        else if (!d.digitalFileName) { showToast("❌ " + t("dig_err_need_file")); return; }
+      }
+    }
     if (d.isQuantifiable === false) d.stock = "999999";
     var stock = parseInt(d.stock, 10);
     if (isNaN(stock) || stock < 0) { showToast(t("toast_stock_invalid")); return; }
@@ -35682,7 +36187,8 @@ function submitProductDraft() {
       sizes: d.sizes || [],
       fitNote: d.fitNote || "",
       tieredPricing: tieredPricing,
-      barcode: (d.barcode || "").trim() || null,
+      barcode: digitalDraft ? null : ((d.barcode || "").trim() || null),
+      isDigital: digitalDraft || undefined,
       sellerId: state.profile.id,
       sellerName: state.profile.name,
       shopName: state.profile.shopName || "Boutique",
@@ -35699,6 +36205,7 @@ function submitProductDraft() {
       if (d[fn] !== undefined && d[fn] !== '') product[fn] = d[fn];
     }
 
+    state.pendingDigitalSecret = digitalSecret ? { productId: product.id, sec: digitalSecret } : null;
     if (!editing) {
       // Nouvelle publication : on montre d'abord le rappel de commission
       // ("vous vendez à X, vous recevrez Y quand une commande s'effectuera")
@@ -35757,6 +36264,8 @@ function finalizeProductSave(product, editing) {
     state.productDraftSnapshot = JSON.stringify(state.productDraft);
     save();
     saveDoc("products", product);
+    var pds = state.pendingDigitalSecret; state.pendingDigitalSecret = null;
+    if (pds && pds.productId === product.id) saveDigitalSecret(product.id, pds.sec, 0);
     // Redirige directement vers la fiche de l'article qui vient d'être
     // publié/modifié — sans ça, on restait sur le même formulaire
     // désormais vide, avec juste un message qui disparaît vite, sans
@@ -35780,6 +36289,7 @@ function finalizeProductSave(product, editing) {
 // fois pour sauvegarder un produit ET pour recharger le brouillon quand on
 // modifie un produit existant (les deux doivent toujours rester synchronisées).
 var SECTOR_SPECIFIC_FIELD_NAMES = ['tempsPreparation', 'ingredients', 'disponibleAujourdhui', 'provenance',
+  'digitalAuthor', 'digitalLanguage', 'digitalLength', 'digitalFormat', 'digitalLevel', 'digitalPlatform', 'digitalVersion', 'digitalLicense', 'digitalKind', 'digitalFileName', 'digitalFileSize',
   'dureeFormation', 'niveauRequis', 'diplomeDelivre', 'modeFormation', 'prochaineRentree',
   'dureeActe', 'surRendezVous', 'dureeSoin', 'serviceADomicile',
   'typeServiceAuto', 'delaiIntervention', 'garantie', 'capacite', 'petitDejeuner',
@@ -35810,6 +36320,7 @@ var SECTOR_SPECIFIC_FIELD_NAMES = ['tempsPreparation', 'ingredients', 'disponibl
 // avaient une valeur par défaut non vide — d'où des fiches produit avec des
 // caractéristiques répétées ou hors sujet (ex: "Fait main" sur un champignon).
 function getRelevantSectorFields(sellerType, sellerSector, category) {
+  if (isDigitalCategory(category)) return (DIGITAL_FIELDS_BY_CAT[category] || []).concat(["digitalKind", "digitalFileName", "digitalFileSize"]);
   if (sellerType === "restaurant") return ["tempsPreparation", "ingredients", "disponibleAujourdhui"];
   if (sellerType === "agriculteur") return ["provenance"];
   if (sellerType === "international") return ["moq", "poidsKg", "volumeM3", "dimL", "dimW", "dimH", "transportModes", "materiau", "garantie"];
@@ -35880,6 +36391,16 @@ function startEditProduct(productId) {
   // Recharge tous les champs spécifiques (secteur/catégorie) déjà enregistrés
   // sur ce produit — sinon "Matériau", "Marque", "État"... reviendraient
   // vides à chaque modification, alors qu'ils avaient bien été remplis.
+  if (isDigitalProduct(product) && FIREBASE_ENABLED) {
+    callLigdiFunction("digital-access", { operation: "my_secret", productId: productId }).then(function(res) {
+      var dd = state.productDraft;
+      if (!res || !res.success || !res.secret || state.editingProductId !== productId || !dd) return;
+      dd.digitalKind = res.secret.kind;
+      if (res.secret.kind === "link" && !dd.digitalLink) dd.digitalLink = res.secret.link || "";
+      if (res.secret.kind === "file") { dd.digitalFileName = res.secret.fileName || dd.digitalFileName; dd.digitalFileSize = res.secret.size || dd.digitalFileSize; }
+      render();
+    });
+  }
   for (var sf2 = 0; sf2 < SECTOR_SPECIFIC_FIELD_NAMES.length; sf2++) {
     var fn2 = SECTOR_SPECIFIC_FIELD_NAMES[sf2];
     state.productDraft[fn2] = product[fn2] !== undefined ? product[fn2] : "";
@@ -40637,6 +41158,14 @@ root.addEventListener("click", function(e) {
       break;
     }
     case "back-to-category-picker": state.productCategoryConfirmed = false; render(); break;
+    case "pay-booking": startLigdicashPayment({ kind: "booking", bookingId: value }); break;
+    case "buy-digital": requirePasswordSetup("buyDigital", { productId: value }); break;
+    case "digital-buy-with": digitalBuyWith(value === "portefeuille" ? "portefeuille" : "ligdicash"); break;
+    case "digital-buy-close": state.digitalBuy = null; state.quickBuyItem = null; render(); break;
+    case "digital-open": digitalOpen(btn.dataset.order, value); break;
+    case "ligdi-digital-open": state.ligdiResult = null; digitalOpen(btn.dataset.order, value); break;
+    case "digital-ready-close": state.digitalReady = null; render(); break;
+    case "set-digital-kind": if (state.productDraft) { state.productDraft.digitalKind = value === "link" ? "link" : "file"; render(); } break;
     case "submit-product": submitProductDraft(); break;
     case "confirm-publish-product": {
       if (state.pendingProductPublish) finalizeProductSave(state.pendingProductPublish, false);
@@ -40707,7 +41236,9 @@ root.addEventListener("click", function(e) {
         if (state.bookings[bi].id === bookingId) { booking = state.bookings[bi]; break; }
       }
       if (booking) {
+        var bkWasConfirmed = booking.status === "Confirmée";
         booking.status = value;
+        if (value === "Confirmée" && !bkWasConfirmed && booking.buyerId) addNotification("sms", "📅 " + t("bk_notif_confirmed") + " « " + (booking.productName || "") + " »", booking.buyerId, "orders");
         save();
         saveDoc("bookings", booking);
         render();
