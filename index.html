@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-10-n";
+    window.SOUNSOUNI_VERSION = "2026-10-11-d";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -7644,6 +7644,8 @@ function activateBoost(targetType, targetId, tierIndex) {
 
   if (cfg.mode === "auto") {
     showToast(t("dt_boost_activated") + tier.days + t("dt_days_suffix"));
+  } else if (cfg.mode === "api" && ligdicashEnabled(state.profile.country || "Mali")) {
+    startLigdicashPayment({ kind: "boost", boostId: boost.id });
   } else {
     showToast(t("toast_request_sent_awaiting_payment"));
   }
@@ -11191,6 +11193,45 @@ const TRANSLATIONS = {
     guide_modal_subtitle: "Toutes les réponses aux questions les plus fréquentes sur Sounsouni.",
     guide_download_button: "Télécharger le guide",
     guide_steps_title: "Guides pas à pas",
+    ligdi_checking: "Vérification du paiement…",
+    ligdi_cancel_title: "Paiement non effectué",
+    ligdi_cancel_order: "Vous avez quitté la page de paiement. Votre commande est gardée 3 heures : vous pouvez la payer maintenant ou plus tard depuis « Achats ».",
+    ligdi_cancel_boost: "Le paiement n'a pas été fait : le boost n'est pas encore activé.",
+    ligdi_option: "Orange Money / Moov Money",
+    ligdi_secured: "Paiement sécurisé par LigdiCash",
+    ligdi_close: "✕ Fermer",
+    ligdi_opening_title: "Paiement sécurisé",
+    ligdi_opening_text: "Ouverture de la page de paiement LigdiCash…",
+    ligdi_ok_title: "Paiement confirmé",
+    ligdi_ok_order: "Merci ! Votre commande est payée, la boutique la prépare.",
+    ligdi_ok_boost: "Merci ! Votre boost est activé.",
+    ligdi_fail_title: "Paiement non abouti",
+    ligdi_fail_order: "Le paiement n'a pas été effectué : la commande est annulée. Vous pouvez recommander quand vous voulez.",
+    ligdi_fail_boost: "Le paiement n'a pas été effectué : le boost n'est pas activé.",
+    ligdi_wait_title: "Paiement en cours de confirmation",
+    ligdi_wait_text: "LigdiCash n'a pas encore confirmé. Vous recevrez une notification dès que c'est fait.",
+    ligdi_unknown_text: "Impossible de vérifier pour l'instant (connexion). Réessayez dans un instant.",
+    ligdi_mismatch_title: "Montant à vérifier",
+    ligdi_mismatch_text: "Le montant reçu ne correspond pas à la commande. Sounsouni va vous contacter.",
+    ligdi_recheck: "Vérifier le paiement",
+    ligdi_btn_orders: "Voir mes achats",
+    ligdi_btn_ok: "OK",
+    ligdi_order_unpaid: "En attente de votre paiement. La boutique préparera la commande dès qu'il sera confirmé.",
+    ligdi_pay_now: "Payer maintenant",
+    ligdi_order_paid: "Payé en ligne (LigdiCash)",
+    ligdi_seller_wait: "En attente du paiement du client — ne préparez pas encore. Vous serez prévenu dès qu'il a payé.",
+    ligdi_already_paid: "déjà payé en ligne",
+    ligdi_no_pending: "Aucun paiement en cours pour cette commande — appuyez sur « Payer maintenant ».",
+    ligdi_saved_offline: "Commande enregistrée. Dès que la connexion revient, payez-la depuis « Achats ».",
+    ligdi_err_price: "Le prix d'un article a changé. Videz le panier et recommencez.",
+    ligdi_err_paid: "Cette commande est déjà payée.",
+    ligdi_err_not_payable: "Cette commande ne peut plus être payée.",
+    ligdi_err_config: "Le paiement en ligne n'est pas encore prêt. Choisissez « Paiement à la livraison ».",
+    ligdi_err_network: "Pas de connexion. Réessayez depuis « Achats ».",
+    ligdi_err_session: "Reconnectez-vous puis réessayez.",
+    ligdi_err_generic: "Le paiement n'a pas pu démarrer. Réessayez depuis « Achats ».",
+    ligdi_err_too_high: "Montant trop élevé pour le paiement mobile money (2 000 000 F au maximum). Divisez votre commande ou choisissez un autre moyen de paiement.",
+    ligdi_err_too_low: "Montant trop petit pour le paiement mobile money (100 F au minimum).",
     guide_buy_13_text: "Gardez votre code secret : donnez-le seulement quand vous avez le colis en main.",
     guide_buy_13_title: "13. C'est commandé !",
     guide_buy_12_text: "Moins cher : récupérez votre colis dans une boutique de votre quartier.",
@@ -13050,6 +13091,45 @@ const TRANSLATIONS = {
     guide_modal_subtitle: "All the answers to the most frequent questions about Sounsouni.",
     guide_download_button: "Download the guide",
     guide_steps_title: "Step-by-step guides",
+    ligdi_checking: "Checking the payment…",
+    ligdi_cancel_title: "Payment not made",
+    ligdi_cancel_order: "You left the payment page. Your order is kept for 3 hours: pay now or later from “Purchases”.",
+    ligdi_cancel_boost: "The payment was not made: the boost is not active yet.",
+    ligdi_option: "Orange Money / Moov Money",
+    ligdi_secured: "Secure payment by LigdiCash",
+    ligdi_close: "✕ Close",
+    ligdi_opening_title: "Secure payment",
+    ligdi_opening_text: "Opening the LigdiCash payment page…",
+    ligdi_ok_title: "Payment confirmed",
+    ligdi_ok_order: "Thank you! Your order is paid, the shop is preparing it.",
+    ligdi_ok_boost: "Thank you! Your boost is active.",
+    ligdi_fail_title: "Payment not completed",
+    ligdi_fail_order: "The payment was not made: the order is cancelled. You can order again anytime.",
+    ligdi_fail_boost: "The payment was not made: the boost is not active.",
+    ligdi_wait_title: "Payment being confirmed",
+    ligdi_wait_text: "LigdiCash has not confirmed yet. You will get a notification as soon as it does.",
+    ligdi_unknown_text: "Cannot check right now (connection). Try again in a moment.",
+    ligdi_mismatch_title: "Amount to check",
+    ligdi_mismatch_text: "The amount received does not match the order. Sounsouni will contact you.",
+    ligdi_recheck: "Check payment",
+    ligdi_btn_orders: "See my purchases",
+    ligdi_btn_ok: "OK",
+    ligdi_order_unpaid: "Waiting for your payment. The shop will prepare the order once it is confirmed.",
+    ligdi_pay_now: "Pay now",
+    ligdi_order_paid: "Paid online (LigdiCash)",
+    ligdi_seller_wait: "Waiting for the customer's payment — do not prepare yet. You will be told once paid.",
+    ligdi_already_paid: "already paid online",
+    ligdi_no_pending: "No payment in progress for this order — tap “Pay now”.",
+    ligdi_saved_offline: "Order saved. Once you are back online, pay it from “Purchases”.",
+    ligdi_err_price: "An item price changed. Empty the cart and start again.",
+    ligdi_err_paid: "This order is already paid.",
+    ligdi_err_not_payable: "This order can no longer be paid.",
+    ligdi_err_config: "Online payment is not ready yet. Choose “Pay on delivery”.",
+    ligdi_err_network: "No connection. Try again from “Purchases”.",
+    ligdi_err_session: "Sign in again and retry.",
+    ligdi_err_generic: "The payment could not start. Try again from “Purchases”.",
+    ligdi_err_too_high: "Amount too high for mobile money (2,000,000 F maximum). Split your order or choose another payment method.",
+    ligdi_err_too_low: "Amount too small for mobile money (100 F minimum).",
     guide_buy_13_text: "Keep your secret code: give it only once the parcel is in your hands.",
     guide_buy_13_title: "13. Order placed!",
     guide_buy_12_text: "Cheaper: collect your parcel at a shop in your neighbourhood.",
@@ -14909,6 +14989,45 @@ const TRANSLATIONS = {
     guide_modal_subtitle: "Sounsouni के बारे में सबसे अक्सर पूछे जाने वाले सवालों के सभी जवाब।",
     guide_download_button: "गाइड डाउनलोड करें",
     guide_steps_title: "चरण-दर-चरण गाइड",
+    ligdi_checking: "भुगतान की जाँच हो रही है…",
+    ligdi_cancel_title: "भुगतान नहीं हुआ",
+    ligdi_cancel_order: "आपने भुगतान पेज छोड़ दिया। आपका ऑर्डर 3 घंटे रखा जाएगा: अभी या बाद में «ख़रीदारी» से भुगतान करें।",
+    ligdi_cancel_boost: "भुगतान नहीं हुआ: बूस्ट अभी चालू नहीं है।",
+    ligdi_option: "Orange Money / Moov Money",
+    ligdi_secured: "LigdiCash द्वारा सुरक्षित भुगतान",
+    ligdi_close: "✕ बंद करें",
+    ligdi_opening_title: "सुरक्षित भुगतान",
+    ligdi_opening_text: "LigdiCash भुगतान पेज खुल रहा है…",
+    ligdi_ok_title: "भुगतान पक्का हुआ",
+    ligdi_ok_order: "धन्यवाद! आपका ऑर्डर भुगतान हो गया, दुकान उसे तैयार कर रही है।",
+    ligdi_ok_boost: "धन्यवाद! आपका बूस्ट चालू है।",
+    ligdi_fail_title: "भुगतान पूरा नहीं हुआ",
+    ligdi_fail_order: "भुगतान नहीं हुआ: ऑर्डर रद्द है। आप कभी भी दोबारा ऑर्डर कर सकते हैं।",
+    ligdi_fail_boost: "भुगतान नहीं हुआ: बूस्ट चालू नहीं हुआ।",
+    ligdi_wait_title: "भुगतान की पुष्टि हो रही है",
+    ligdi_wait_text: "LigdiCash ने अभी पुष्टि नहीं की। पुष्टि होते ही आपको सूचना मिलेगी।",
+    ligdi_unknown_text: "अभी जाँच नहीं हो पा रही (कनेक्शन)। थोड़ी देर में फिर कोशिश करें।",
+    ligdi_mismatch_title: "राशि जाँचनी है",
+    ligdi_mismatch_text: "मिली राशि ऑर्डर से मेल नहीं खाती। Sounsouni आपसे संपर्क करेगा।",
+    ligdi_recheck: "भुगतान जाँचें",
+    ligdi_btn_orders: "मेरी ख़रीदारी देखें",
+    ligdi_btn_ok: "ठीक है",
+    ligdi_order_unpaid: "आपके भुगतान का इंतज़ार है। पुष्टि होते ही दुकान ऑर्डर तैयार करेगी।",
+    ligdi_pay_now: "अभी भुगतान करें",
+    ligdi_order_paid: "ऑनलाइन भुगतान हुआ (LigdiCash)",
+    ligdi_seller_wait: "ग्राहक के भुगतान का इंतज़ार — अभी तैयार न करें। भुगतान होते ही आपको बताया जाएगा।",
+    ligdi_already_paid: "पहले ही ऑनलाइन भुगतान",
+    ligdi_no_pending: "इस ऑर्डर का कोई भुगतान जारी नहीं — «अभी भुगतान करें» छुएँ।",
+    ligdi_saved_offline: "ऑर्डर सहेजा गया। कनेक्शन आते ही «ख़रीदारी» से भुगतान करें।",
+    ligdi_err_price: "किसी सामान की कीमत बदल गई। कार्ट खाली करके फिर शुरू करें।",
+    ligdi_err_paid: "यह ऑर्डर पहले ही भुगतान हो चुका है।",
+    ligdi_err_not_payable: "इस ऑर्डर का अब भुगतान नहीं हो सकता।",
+    ligdi_err_config: "ऑनलाइन भुगतान अभी तैयार नहीं। «डिलीवरी पर भुगतान» चुनें।",
+    ligdi_err_network: "कनेक्शन नहीं। «ख़रीदारी» से फिर कोशिश करें।",
+    ligdi_err_session: "फिर से लॉग इन करके कोशिश करें।",
+    ligdi_err_generic: "भुगतान शुरू नहीं हो पाया। «ख़रीदारी» से फिर कोशिश करें।",
+    ligdi_err_too_high: "मोबाइल मनी के लिए रक़म बहुत ज़्यादा है (अधिकतम 2,000,000 F)। ऑर्डर को बाँटें या भुगतान का दूसरा तरीक़ा चुनें।",
+    ligdi_err_too_low: "मोबाइल मनी के लिए रक़म बहुत कम है (न्यूनतम 100 F)।",
     guide_buy_13_text: "अपना गुप्त कोड संभालें: पार्सल हाथ में आने पर ही दें।",
     guide_buy_13_title: "13. ऑर्डर हो गया!",
     guide_buy_12_text: "सस्ता: अपने मोहल्ले की दुकान से पार्सल लें।",
@@ -17114,7 +17233,7 @@ function placeInternationalOrder() {
     statusHistory: [{ status: "Paiement reçu", at: Date.now(), note: null }],
     createdAt: Date.now(),
     deliveredAt: null,
-    payment: "manuel_international",
+    payment: ligdicashEnabled("Mali") ? "ligdicash" : "manuel_international",
     paymentStatus: "pending_verification",
     specialInstructions: state.checkoutForm.specialInstructions || "",
   };
@@ -17137,6 +17256,12 @@ function placeInternationalOrder() {
     });
   }
 
+  if (orderDraft.payment === "ligdicash") {
+    if (!ligdiAmountOk(orderDraft.total)) return;
+    orderDraft.paymentStatus = "pending_payment";
+    finalizeOrder(orderDraft, { awaitingPayment: true });
+    return;
+  }
   finalizeOrder(orderDraft, { simulated: false });
 }
 
@@ -17311,6 +17436,13 @@ function placeOrder() {
     return;
   }
 
+  if (form.payment === "ligdicash") {
+    if (!ligdicashEnabled(deliveryCountry)) { showToast(t("toast_mobile_money_not_active_country")); return; }
+    if (!ligdiAmountOk(orderDraft.total)) return;
+    orderDraft.paymentStatus = "pending_payment"; // passe à "paid" seulement après confirmation LigdiCash, côté serveur
+    finalizeOrder(orderDraft, { awaitingPayment: true });
+    return;
+  }
   // Paiement mobile money — vérifie d'abord si un vrai service est réglé
   // pour ce pays (voir Admin → Sécurité → Paiement mobile money) avant de
   // créer la commande, pour ne jamais en créer une qu'on ne pourrait pas
@@ -17415,7 +17547,8 @@ function finalizeOrder(order, opts) {
   state.paymentPending = null;
   state.view = "orders";
   
-  var paymentLabel = (opts && opts.simulated) ? (order.payment === "orange_money" ? "Orange Money" : "Moov Money") + " (simulation)" : "à la livraison";
+  var awaitingPayment = !!(opts && opts.awaitingPayment);
+  var paymentLabel = awaitingPayment ? "mobile money (en attente)" : (opts && opts.simulated) ? (order.payment === "orange_money" ? "Orange Money" : "Moov Money") + " (simulation)" : "à la livraison";
   addNotification("whatsapp", "Confirmation : commande #" + order.id.slice(-5).toUpperCase() + " (" + orderMoney(order.total, order) + ") enregistrée. Paiement : " + paymentLabel, order.buyerId, "orders");
   if (order.isInternational) {
     addNotification("sms", "🌍 Votre commande groupée internationale est enregistrée — en attente de vérification du paiement par notre agent sourcing.", order.buyerId, "orders");
@@ -17444,7 +17577,8 @@ function finalizeOrder(order, opts) {
     if (!sellers[sellerKey]) sellers[sellerKey] = { name: order.items[k].sellerName, items: [] };
     sellers[sellerKey].items.push(order.items[k]);
   }
-  var sellerKeys = Object.keys(sellers);
+  // Paiement en ligne : les boutiques sont prévenues par le serveur, seulement une fois payé.
+  var sellerKeys = awaitingPayment ? [] : Object.keys(sellers);
   for (var s = 0; s < sellerKeys.length; s++) {
     var sellerKey2 = sellerKeys[s];
     var itemsList = sellers[sellerKey2].items;
@@ -17477,6 +17611,12 @@ function finalizeOrder(order, opts) {
     buyerLng: order.buyerLng != null ? order.buyerLng : null
   } : null;
   var orderSaved = secureOrderSaveDoc(order);
+  if (awaitingPayment) {
+    Promise.resolve(orderSaved).then(function(okSaved) {
+      if (okSaved === false) { showToast(t("ligdi_saved_offline")); return; }
+      startLigdicashPayment({ kind: "order", orderId: order.id });
+    });
+  }
   if (contactPayload) {
     Promise.resolve(orderSaved).then(function() { saveOrderContactReliably(contactPayload, 0); });
   }
@@ -19372,6 +19512,174 @@ function detectReferral() {
 // Vérifie si l'acheteur revient d'un paiement CinetPay (return_url) et
 // affiche le vrai statut — jamais déduit de l'URL elle-même (facile à
 // manipuler), toujours relu depuis la commande telle qu'enregistrée par
+// ================= PAIEMENT EN LIGNE LIGDICASH =================
+// Le téléphone ne décide JAMAIS qu'un paiement est réussi : il ouvre la
+// page LigdiCash puis demande au serveur (ligdicash-check), qui demande
+// lui-même à LigdiCash. Dans l'application Android, la page s'ouvre dans
+// une fenêtre intégrée sans barre d'adresse (module InAppBrowser) ; sur le
+// site, dans le même onglet, avec retour automatique sur Sounsouni.
+var LIGDI_PENDING_KEY = "sns_ligdi_pending";
+function ligdicashEnabled(country) {
+  var c = getPaymentConfig(country || "Mali");
+  return c.mode === "aggregator" && c.aggregator === "ligdicash";
+}
+function ligdiSavePending(p) { try { if (p) localStorage.setItem(LIGDI_PENDING_KEY, JSON.stringify(p)); else localStorage.removeItem(LIGDI_PENDING_KEY); } catch (e) {} }
+function ligdiReadPending() { try { var v = JSON.parse(localStorage.getItem(LIGDI_PENDING_KEY) || "null"); return v && v.txn && (Date.now() - (v.at || 0) < 6 * 3600e3) ? v : null; } catch (e) { return null; } }
+function callLigdiFunction(name, body, useAdmin) {
+  return fetch(supabaseConfig.url + "/functions/v1/" + name, { method: "POST", headers: authHeaders(null, useAdmin), body: JSON.stringify(body) })
+    .then(readServerJson).catch(function() { return { success: false, error: "network_error" }; });
+}
+// Limites LigdiCash : 100 F (minimum Orange Mali) à 2 000 000 F par paiement.
+function ligdiAmountOk(total) {
+  var n = Math.round(Number(total) || 0);
+  if (n > 2000000) { showToast("❌ " + t("ligdi_err_too_high")); return false; }
+  if (n < 100) { showToast("❌ " + t("ligdi_err_too_low")); return false; }
+  return true;
+}
+function ligdiErrorText(err) {
+  var m = { price_changed: t("ligdi_err_price"), amount_mismatch: t("ligdi_err_price"), already_paid: t("ligdi_err_paid"), not_payable: t("ligdi_err_not_payable"), ligdicash_not_configured: t("ligdi_err_config"), network_error: t("ligdi_err_network"), session_required: t("ligdi_err_session"), amount_too_high: t("ligdi_err_too_high"), amount_too_low: t("ligdi_err_too_low") };
+  return m[err] || t("ligdi_err_generic");
+}
+// ref = { kind: "order", orderId } ou { kind: "boost", boostId }
+function startLigdicashPayment(ref, attempt) {
+  attempt = attempt || 0;
+  if (!FIREBASE_ENABLED) { showToast(t("toast_payment_unavailable_offline")); return; }
+  if (attempt === 0) { state.ligdiOpening = true; render(); }
+  callLigdiFunction("ligdicash-create-payment", ref).then(function(res) {
+    if (!res.success && res.error === "not_found" && attempt < 4) { setTimeout(function() { startLigdicashPayment(ref, attempt + 1); }, [1500, 3000, 5000, 8000][attempt]); return; }
+    state.ligdiOpening = false;
+    if (!res.success) {
+      if (res.error === "session_required") noteSessionRejected();
+      showToast("❌ " + ligdiErrorText(res.error)); render(); return;
+    }
+    var refId = ref.kind === "boost" ? ref.boostId : ref.orderId;
+    ligdiSavePending({ txn: res.transactionId, kind: ref.kind, refId: refId, at: Date.now() });
+    render();
+    openLigdicashPage(res.paymentUrl, res.returnPrefix || "https://sounsouni.pro/?ligdicash=retour", res.transactionId);
+  });
+}
+function nativeInAppBrowser() {
+  try { var C = window.Capacitor; if (C && C.isNativePlatform && C.isNativePlatform() && C.Plugins && C.Plugins.InAppBrowser) return C.Plugins.InAppBrowser; } catch (e) {}
+  return null;
+}
+function openLigdicashPage(url, returnPrefix, txn) {
+  var IAB = nativeInAppBrowser();
+  if (!IAB) { window.location.href = url; return; }
+  var finished = false, poll = null, started = Date.now(), handles = [], cancelled = false;
+  var finish = function(closeIt) {
+    if (finished) return; finished = true;
+    if (poll) clearTimeout(poll);
+    handles.forEach(function(h) { try { h && h.remove && h.remove(); } catch (e) {} });
+    if (closeIt) { try { IAB.close(); } catch (e) {} }
+    checkLigdicashPayment(txn, true, cancelled);
+  };
+  var onNav = function(ev) { var u = ev && (ev.url || ev.URL); if (u && u.indexOf(returnPrefix) === 0) { cancelled = /[?&]r=annule/.test(u); finish(true); } };
+  try {
+    ["browserPageNavigationCompleted", "browserPageLoaded"].forEach(function(n) { var h = IAB.addListener(n, onNav); if (h && h.then) h.then(function(x) { handles.push(x); }); else handles.push(h); });
+    var hc = IAB.addListener("browserClosed", function() { finish(false); }); if (hc && hc.then) hc.then(function(x) { handles.push(x); }); else handles.push(hc);
+  } catch (e) {}
+  // Filet de sécurité : on demande régulièrement le statut au serveur ; dès
+  // que LigdiCash a tranché, la fenêtre se ferme toute seule.
+  // (recommandation LigdiCash : toutes les 5 s, 15 fois ; ensuite plus
+  // doucement, toutes les 20 s, jusqu'à 5 min — le callback reste le moyen principal)
+  var tries = 0;
+  var tick = function() {
+    if (finished) return;
+    if (Date.now() - started > 5 * 60e3) return;
+    tries++;
+    callLigdiFunction("ligdicash-check", { transactionId: txn }).then(function(r) { if (r && r.success && r.status !== "pending") finish(true); });
+    poll = setTimeout(tick, tries < 15 ? 5000 : 20000);
+  };
+  poll = setTimeout(tick, 5000);
+  var opts = { showURL: false, showToolbar: true, clearCache: false, clearSessionCache: false, mediaPlaybackRequiresUserAction: false, closeButtonText: t("ligdi_close"), toolbarPosition: "TOP", showNavigationButtons: false, leftToRight: false, customWebViewUserAgent: null,
+    android: { allowZoom: false, hardwareBack: true, pauseMedia: true }, iOS: { allowOverScroll: true, enableViewportScale: false, allowInLineMediaPlayback: false, surpressIncrementalRendering: false, viewStyle: "FULL_SCREEN", animationEffect: "COVER_VERTICAL", allowsBackForwardNavigationGestures: true } };
+  Promise.resolve(IAB.openInWebView({ url: url, options: opts })).catch(function() { finished = true; if (poll) clearTimeout(poll); window.location.href = url; });
+}
+// Demande le vrai statut au serveur et l'affiche (fenêtre de résultat).
+function checkLigdicashPayment(txn, showResult, cancelled) {
+  if (!txn) return;
+  // Écran « Vérification du paiement… » pendant que le serveur interroge LigdiCash
+  if (showResult) { state.ligdiChecking = true; render(); }
+  callLigdiFunction("ligdicash-check", { transactionId: txn }).then(function(r) {
+    if (state.ligdiChecking) { state.ligdiChecking = false; }
+    if (!r || !r.success) { if (showResult) { state.ligdiResult = { status: "unknown", txn: txn }; render(); } return; }
+    applyLigdiResultLocally(r);
+    if (r.status !== "pending") ligdiSavePending(null);
+    // LigdiCash : un paiement abandonné reste le plus souvent « pending »
+    // (et non « échoué ») — le client qui a annulé voit donc un message adapté.
+    var st = (r.status === "pending" && cancelled) ? "cancelled" : r.status;
+    if (showResult || r.status !== "pending") { state.ligdiResult = { status: st, kind: r.kind, refId: r.refId, txn: txn }; render(); }
+  });
+}
+function applyLigdiResultLocally(r) {
+  var now = Date.now();
+  if (r.kind === "boost") {
+    var b = (state.boosts || []).find(function(x) { return x.id === r.refId; });
+    if (b && r.status === "completed") { b.status = "actif"; b.activatedAt = b.activatedAt || now; b.expiresAt = b.expiresAt || (now + (b.days || 1) * 86400000); }
+    if (b && r.status === "notcompleted") b.status = "refuse";
+  } else {
+    var o = (state.orders || []).find(function(x) { return x.id === r.refId; });
+    if (o && r.status === "completed") { o.paymentStatus = "paid"; o.paidAt = o.paidAt || now; }
+    if (o && r.status === "notcompleted") { o.paymentStatus = "failed"; o.status = "Annulée"; }
+  }
+  save();
+}
+document.addEventListener("visibilitychange", function() { if (document.visibilityState !== "visible") return; if (!state.ligdiResult) { var pv = ligdiReadPending(); if (pv) checkLigdicashPayment(pv.txn, false); } try { maybeRunLigdiSweep(); } catch (e) {} });
+function checkLigdicashReturn() {
+  var q = new URLSearchParams(window.location.search);
+  if (q.get("ligdicash") === "retour" && q.get("txn")) {
+    var txn = q.get("txn"), wasCancelled = q.get("r") === "annule";
+    try { window.history.replaceState({}, "", window.location.pathname); } catch (e) {}
+    checkLigdicashPayment(txn, true, wasCancelled);
+    return;
+  }
+  var pend = ligdiReadPending();
+  if (pend) checkLigdicashPayment(pend.txn, false);
+  setTimeout(function() { try { maybeRunLigdiSweep(); } catch (e) {} }, 20000);
+}
+// Rattrapage côté serveur des paiements restés en attente (filet de sécurité
+// si un callback LigdiCash se perd). Lancé par n'importe quel téléphone
+// connecté, au plus toutes les 5 min par téléphone ; le serveur, lui, ne le
+// fait tourner qu'une fois toutes les 5 min pour tout le monde.
+var ligdiSweepMem = 0;
+function maybeRunLigdiSweep() {
+  if (!FIREBASE_ENABLED || !ligdicashEnabled("Mali")) return;
+  var useAdmin = !state.sessionToken && !!state.adminSessionToken;
+  if (!state.sessionToken && !useAdmin) return;
+  var last = ligdiSweepMem; try { last = Math.max(last, Number(localStorage.getItem("sns_ligdi_sweep") || 0)); } catch (e) {}
+  if (Date.now() - last < 5 * 60e3) return;
+  ligdiSweepMem = Date.now();
+  try { localStorage.setItem("sns_ligdi_sweep", String(ligdiSweepMem)); } catch (e) {}
+  callLigdiFunction("ligdicash-check", { operation: "sweep" }, useAdmin);
+}
+function renderLigdiResultModal() {
+  var r = state.ligdiResult; if (!r) return "";
+  var map = { completed: ["fa-circle-check", "var(--success)", t("ligdi_ok_title"), r.kind === "boost" ? t("ligdi_ok_boost") : t("ligdi_ok_order")],
+    notcompleted: ["fa-circle-xmark", "var(--danger)", t("ligdi_fail_title"), r.kind === "boost" ? t("ligdi_fail_boost") : t("ligdi_fail_order")],
+    pending: ["fa-hourglass-half", "var(--accent)", t("ligdi_wait_title"), t("ligdi_wait_text")],
+    cancelled: ["fa-circle-pause", "var(--accent)", t("ligdi_cancel_title"), r.kind === "boost" ? t("ligdi_cancel_boost") : t("ligdi_cancel_order")],
+    amount_mismatch: ["fa-triangle-exclamation", "var(--danger)", t("ligdi_mismatch_title"), t("ligdi_mismatch_text")],
+    unknown: ["fa-wifi", "var(--text-dim)", t("ligdi_wait_title"), t("ligdi_unknown_text")] };
+  var v = map[r.status] || map.unknown;
+  var html = '<div class="modal-overlay" style="z-index:9998;"><div class="modal-sheet" style="text-align:center;padding:26px 20px;">';
+  html += '<div style="font-size:46px;color:' + v[1] + ';margin-bottom:10px;"><i class="fa-solid ' + v[0] + '"></i></div>';
+  html += '<div style="font-weight:800;font-size:17px;margin-bottom:6px;">' + v[2] + '</div>';
+  html += '<div style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:18px;">' + v[3] + (r.refId && r.kind !== "boost" ? ' <b>#' + esc(String(r.refId).slice(-5).toUpperCase()) + '</b>' : '') + '</div>';
+  if (r.status === "cancelled" && r.kind !== "boost") html += '<button class="btn-primary" style="width:100%;margin-bottom:8px;" data-action="ligdi-pay-again" data-value="' + esc(r.refId || "") + '"><i class="fa-solid fa-mobile-screen"></i> ' + t("ligdi_pay_now") + '</button>';
+  if (r.status === "pending" || r.status === "unknown") html += '<button class="btn-primary" style="width:100%;margin-bottom:8px;" data-action="ligdi-recheck" data-value="' + esc(r.txn || "") + '"><i class="fa-solid fa-rotate"></i> ' + t("ligdi_recheck") + '</button>';
+  html += '<button class="' + (r.status === "pending" || r.status === "unknown" || r.status === "cancelled" ? 'link-btn' : 'btn-primary') + '" style="width:100%;" data-action="ligdi-result-close">' + (r.kind === "boost" ? t("ligdi_btn_ok") : t("ligdi_btn_orders")) + '</button>';
+  html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:12px;"><i class="fa-solid fa-lock"></i> ' + t("ligdi_secured") + '</div>';
+  html += '</div></div>';
+  return html;
+}
+function renderLigdiChecking() {
+  return '<div class="modal-overlay" style="z-index:9997;"><div class="modal-sheet" style="text-align:center;padding:30px 20px;"><div style="font-size:30px;color:var(--accent);margin-bottom:10px;"><i class="fa-solid fa-spinner fa-spin"></i></div><div style="font-weight:800;font-size:16px;">' + t("ligdi_checking") + '</div></div></div>';
+}
+function renderLigdiOpening() {
+  if (!state.ligdiOpening) return "";
+  return '<div class="modal-overlay" style="z-index:9997;"><div class="modal-sheet" style="text-align:center;padding:30px 20px;"><div style="font-size:40px;color:var(--accent);margin-bottom:10px;"><i class="fa-solid fa-lock"></i></div><div style="font-weight:800;font-size:16px;margin-bottom:6px;">' + t("ligdi_opening_title") + '</div><div style="font-size:12.5px;color:var(--text-dim);line-height:1.5;">' + t("ligdi_opening_text") + '</div><div style="margin-top:14px;font-size:22px;color:var(--accent);"><i class="fa-solid fa-spinner fa-spin"></i></div></div></div>';
+}
+
 // cinetpay-webhook après vérification réelle auprès de CinetPay.
 function checkPaymentReturn() {
   var urlParams = new URLSearchParams(window.location.search);
@@ -22769,6 +23077,9 @@ function buildHTML() {
   if (state.showMascotHint && state.view === "market" && !state.activeTour) html += renderMascotHint();
   if (state.activeTour) html += renderTourOverlay();
   if (state.guideVideoKey) html += renderGuideVideoModal();
+  if (state.ligdiOpening) html += renderLigdiOpening();
+  if (state.ligdiChecking && !state.ligdiResult) html += renderLigdiChecking();
+  if (state.ligdiResult) html += renderLigdiResultModal();
   if (state.toastMsg) html += '<div class="toast">' + esc(state.toastMsg) + '</div>';
   if (state.showDownloadNudge) html += renderDownloadNudge();
   if (state.lightboxOpen) html += renderLightbox();
@@ -27612,6 +27923,7 @@ function renderInternationalCheckout() {
   html += '<div class="divider-dashed"></div>';
   html += line(t("orders_total"), bd.totalXof, true);
   html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:14px;line-height:1.5;"><i class="fa-solid fa-circle-check" style="color:var(--success,#2a9d5c);"></i> ' + t("intlco_all_included") + '</div>';
+  if (ligdicashEnabled("Mali")) html += '<div style="font-size:11.5px;margin-bottom:14px;padding:8px 10px;border-radius:10px;background:var(--bg-body);"><i class="fa-solid fa-mobile-screen"></i> ' + t("ligdi_option") + ' — <i class="fa-solid fa-lock"></i> ' + t("ligdi_secured") + '</div>';
   // Adresse de livraison à Bamako
   var fA = state.checkoutForm;
   html += '<div style="font-weight:700;font-size:13px;margin-bottom:2px;"><i class="fa-solid fa-house"></i> ' + t("intlco_home_title") + '</div>';
@@ -27903,8 +28215,13 @@ function renderCheckout() {
   var checkoutGrandTotal = checkoutSubtotal() + fee;
   var buyerWalletBalance = state.profile ? getWallet(state.profile.phone).balance : 0;
   html += paymentOption("portefeuille", t("co_wallet_balance") + money(buyerWalletBalance) + ")", "fa-wallet", buyerWalletBalance >= checkoutGrandTotal, buyerWalletBalance < checkoutGrandTotal ? t("co_insufficient_balance") : null);
-  html += paymentOption("orange_money", "Orange Money", "fa-mobile-screen");
-  html += paymentOption("moov_money", "Moov Money", "fa-mobile-screen");
+  if (ligdicashEnabled(countryForCity(state.checkoutForm.city) || "Mali")) {
+    html += paymentOption("ligdicash", t("ligdi_option"), "fa-mobile-screen", true);
+    html += '<div style="font-size:10.5px;color:var(--text-dim);margin:-2px 0 8px 6px;"><i class="fa-solid fa-lock"></i> ' + t("ligdi_secured") + '</div>';
+  } else {
+    html += paymentOption("orange_money", "Orange Money", "fa-mobile-screen");
+    html += paymentOption("moov_money", "Moov Money", "fa-mobile-screen");
+  }
   html += '</div>';
   html += '<div class="divider-dashed"></div>';
   html += '<div class="delivery-estimate" style="margin:0 0 14px">';
@@ -28173,6 +28490,13 @@ function renderOrders() {
     html += '<div style="display:flex;justify-content:space-between;font-weight:800;font-size:13.5px;border-top:1px solid var(--border-color);margin-top:8px;padding-top:8px">';
     html += '<span>' + t("orders_total") + '</span><span>' + orderMoney(o.total, o) + '</span>';
     html += '</div>';
+    if (o.payment === "ligdicash" && o.paymentStatus === "pending_payment" && o.status !== "Annulée") {
+      html += '<div style="margin-top:10px;padding:10px;border-radius:10px;background:rgba(255,170,0,0.12);font-size:12px;line-height:1.45;"><i class="fa-solid fa-hourglass-half"></i> ' + t("ligdi_order_unpaid") + '</div>';
+      html += '<div style="display:flex;gap:8px;margin-top:8px;"><button class="btn-primary" style="flex:1;min-width:0;padding:10px 6px;font-size:13px;" data-action="ligdi-pay-order" data-value="' + o.id + '"><i class="fa-solid fa-mobile-screen"></i> ' + t("ligdi_pay_now") + '</button>';
+      html += '<button class="btn-secondary" style="flex:1;min-width:0;padding:10px 6px;font-size:13px;" data-action="ligdi-check-order" data-value="' + o.id + '"><i class="fa-solid fa-rotate"></i> ' + t("ligdi_recheck") + '</button></div>';
+    } else if (o.payment === "ligdicash" && o.paymentStatus === "paid") {
+      html += '<div style="margin-top:8px;font-size:11.5px;color:var(--success);"><i class="fa-solid fa-circle-check"></i> ' + t("ligdi_order_paid") + '</div>';
+    }
     if (hasOTP) {
       html += '<div style="margin-top:10px;padding:10px;background:var(--bg-body);border-radius:10px;">';
       html += '<div style="font-size:11px;font-weight:700;color:var(--text-dim);margin-bottom:6px;">🔑 ' + t("orders_otp_title") + '</div>';
@@ -29146,6 +29470,8 @@ function renderSellerOrders() {
       // l'acheteur, par exemple) — même si CE vendeur n'avait encore rien
       // confirmé de son côté, il n'y a plus rien à faire ici.
       html += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:8px"><i class="fa-solid fa-circle-info"></i> ' + t("seller_order_no_longer_active") + '</div>';
+    } else if (o2.payment === "ligdicash" && o2.paymentStatus !== "paid") {
+      html += '<div style="font-size:11.5px;margin-top:8px;padding:8px 10px;border-radius:10px;background:rgba(255,170,0,0.12);"><i class="fa-solid fa-hourglass-half"></i> ' + t("ligdi_seller_wait") + '</div>';
     } else {
       html += '<div class="status-actions">';
       html += '<button class="pulse-attention" data-action="seller-confirm-ready" data-order="' + o2.id + '">' + t("seller_confirm_your_part") + '</button>';
@@ -29556,7 +29882,7 @@ function renderLivreur() {
       }
       html += '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:13px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border-color)"><span>' + t("livreur_delivery_earning") + '</span><span style="color:var(--accent)">' + money(o2.deliveryFee) + '</span></div>';
       // Paiement à la livraison : le livreur doit savoir combien demander au client.
-      if (o2.deliveryMode !== "relais" && typeof o2.total === "number" && o2.paymentStatus !== "paid") {
+      if (o2.deliveryMode !== "relais" && typeof o2.total === "number" && o2.payment !== "ligdicash" && o2.payment !== "portefeuille") {
         html += '<div style="display:flex;justify-content:space-between;font-weight:800;font-size:13px;margin-top:4px;"><span><i class="fa-solid fa-money-bill-wave"></i> ' + t("livreur_to_collect") + '</span><span>' + orderMoney(o2.total, o2) + '</span></div>';
       }
       if (o2.deliveryMode === "relais") {
@@ -29884,7 +30210,7 @@ function relaisOrderCard(order, stage) {
     html += '<div style="font-size:13px;flex:1;">' + it.qty + '× ' + esc(orderItemName(it)) + itemVariant(it) + (itProd && itProd.description ? '<div style="font-size:10.5px;color:var(--text-dim);">' + esc(itProd.description.slice(0,60)) + (itProd.description.length > 60 ? '…' : '') + '</div>' : '') + (itProd ? '<button class="link-btn" style="font-size:10px;padding:0;margin-top:2px;" data-action="open-product" data-value="' + itProd.id + '">' + t("livreur_view_full_product") + ' <i class="fa-solid fa-arrow-up-right-from-square"></i></button>' : '') + '</div>';
     html += '</div>';
   }
-  html += '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:13px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border-color)"><span>' + t("pv_amount_to_collect") + '</span><span style="color:var(--accent)">' + orderMoney(order.total, order) + '</span></div>';
+  html += '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:13px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border-color)"><span>' + t("pv_amount_to_collect") + '</span><span style="color:var(--accent)">' + ((order.payment === "ligdicash" && order.paymentStatus === "paid") || order.payment === "portefeuille" ? '0 FCFA · ' + t("ligdi_already_paid") : orderMoney(order.total, order)) + '</span></div>';
 
   if (stage === "depot") {
     html += '<div style="margin-top:8px;padding:10px;background:var(--bg-body);border-radius:10px;">';
@@ -32082,6 +32408,7 @@ function renderAdminTarifs() {
 }
 
 function renderAdminDashboard(stats) {
+  maybeRunLigdiSweep();
   var html = '';
   html += renderVisitStatsCard();
   if (!state.adminCountryScope) {
@@ -33479,11 +33806,13 @@ function renderAdminInternational() {
     html += '<option value="cinetpay"' + (pCfg.aggregator === "cinetpay" ? ' selected' : '') + '>CinetPay</option>';
     html += '<option value="paydunya"' + (pCfg.aggregator === "paydunya" ? ' selected' : '') + '>PayDunya</option>';
     html += '<option value="flutterwave"' + (pCfg.aggregator === "flutterwave" ? ' selected' : '') + '>Flutterwave</option>';
+    html += '<option value="ligdicash"' + (pCfg.aggregator === "ligdicash" ? ' selected' : '') + '>LigdiCash (Orange Money, Moov Money)</option>';
     html += '</select>';
     var secretNames = {
       cinetpay: ['CINETPAY_APIKEY_' + pSlug, 'CINETPAY_SITEID_' + pSlug],
       paydunya: ['PAYDUNYA_MASTERKEY_' + pSlug, 'PAYDUNYA_PRIVATEKEY_' + pSlug, 'PAYDUNYA_TOKEN_' + pSlug],
-      flutterwave: ['FLUTTERWAVE_SECRETKEY_' + pSlug]
+      flutterwave: ['FLUTTERWAVE_SECRETKEY_' + pSlug],
+      ligdicash: ['LIGDICASH_API_KEY', 'LIGDICASH_AUTH_TOKEN']
     };
     var namesForAgg = secretNames[pCfg.aggregator] || secretNames.cinetpay;
     html += '<div style="font-size:10.5px;color:var(--text-dim);background:var(--bg-card);border-radius:8px;padding:8px;">Secrets Supabase à créer :<br>' + namesForAgg.map(function(n) { return '<code>' + n + '</code>'; }).join('<br>') + '</div>';
@@ -38652,7 +38981,17 @@ root.addEventListener("click", function(e) {
       setCartQty(value, current + Number(btn.dataset.delta));
       break;
     }
+    case "ligdi-result-close": {
+      var lr = state.ligdiResult; state.ligdiResult = null;
+      if (lr && lr.kind !== "boost") state.view = "orders";
+      render(); break;
+    }
+    case "ligdi-recheck": { state.ligdiResult = null; render(); checkLigdicashPayment(value, true); break; }
+    case "ligdi-pay-again": { state.ligdiResult = null; render(); startLigdicashPayment({ kind: "order", orderId: value }); break; }
+    case "ligdi-pay-order": { startLigdicashPayment({ kind: "order", orderId: value }); break; }
+    case "ligdi-check-order": { var lp = ligdiReadPending(); if (lp && lp.refId === value) checkLigdicashPayment(lp.txn, true); else showToast(t("ligdi_no_pending")); break; }
     case "set-payment": {
+      if (value === "ligdicash" && ligdicashEnabled(countryForCity(state.checkoutForm.city) || "Mali")) { state.checkoutForm.payment = value; render(); break; }
       if (value !== "paiement_livraison" && value !== "portefeuille") {
         showToast(t("toast_payment_dev"));
         return;
@@ -42657,6 +42996,7 @@ function trySplashFinish() {
     bootStep("villes internationales", seedDefaultInternationalCities);
     bootStep("colis en point de retrait", checkStalePickupOrders);
     bootStep("retour de paiement", checkPaymentReturn);
+    bootStep("retour LigdiCash", checkLigdicashReturn);
     bootStep("affichage", render);
     bootStep("compteur de visiteurs", function() { setTimeout(trackVisit, 3000); });
     bootStep("nettoyage du journal", function() { (state.debugLog || []).forEach(function(l) { l.message = maskSecrets(l.message); l.detail = maskSecrets(l.detail); }); });
