@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-11-g";
+    window.SOUNSOUNI_VERSION = "2026-10-11-h";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -11255,6 +11255,14 @@ const TRANSLATIONS = {
     ligdi_wait_push_moov: "Un message Moov Money va s'afficher sur votre téléphone : tapez votre code secret pour confirmer. Restez sur Sounsouni, nous vérifions automatiquement.",
     ligdi_wait_push_om: "Un message Orange Money va s'afficher sur votre téléphone : tapez votre code secret pour confirmer. Restez sur Sounsouni, nous vérifions automatiquement.",
     ligdi_secured_by: "Paiement sécurisé par",
+    wallet_topup_btn: "Recharger par Orange / Moov Money",
+    wallet_topup_title: "Recharger mon portefeuille",
+    wallet_topup_sub: "Payez par Orange Money ou Moov Money : le montant arrive dans votre portefeuille dès que le paiement est confirmé.",
+    wallet_topup_amount: "Montant à recharger (FCFA)",
+    wallet_topup_fees: "Les frais de l'opérateur (environ 2 %) sont ajoutés au moment du paiement. Votre portefeuille reçoit exactement le montant choisi.",
+    wallet_topup_continue: "Continuer",
+    ligdi_ok_wallet: "Votre portefeuille a été rechargé.",
+    ligdi_fail_wallet: "Le paiement n'a pas été effectué : votre portefeuille n'a pas changé.",
     ligdi_is_orange_number: "Ce numéro est un numéro Orange Money : la page Orange Money s'ouvre.",
     ligdi_is_moov_number: "Ce numéro est un numéro Moov Money : la page Moov Money s'ouvre.",
     guide_buy_13_text: "Gardez votre code secret : donnez-le seulement quand vous avez le colis en main.",
@@ -13178,6 +13186,14 @@ const TRANSLATIONS = {
     ligdi_wait_push_moov: "A Moov Money message will appear on your phone: type your secret code to confirm. Stay on Sounsouni, we check automatically.",
     ligdi_wait_push_om: "An Orange Money message will appear on your phone: type your secret code to confirm. Stay on Sounsouni, we check automatically.",
     ligdi_secured_by: "Payment secured by",
+    wallet_topup_btn: "Top up with Orange / Moov Money",
+    wallet_topup_title: "Top up my wallet",
+    wallet_topup_sub: "Pay with Orange Money or Moov Money: the amount reaches your wallet as soon as the payment is confirmed.",
+    wallet_topup_amount: "Amount to add (FCFA)",
+    wallet_topup_fees: "Operator fees (about 2%) are added when you pay. Your wallet receives exactly the chosen amount.",
+    wallet_topup_continue: "Continue",
+    ligdi_ok_wallet: "Your wallet has been topped up.",
+    ligdi_fail_wallet: "The payment was not made: your wallet has not changed.",
     ligdi_is_orange_number: "This is an Orange Money number: the Orange Money page opens.",
     ligdi_is_moov_number: "This is a Moov Money number: the Moov Money page opens.",
     guide_buy_13_text: "Keep your secret code: give it only once the parcel is in your hands.",
@@ -15101,6 +15117,14 @@ const TRANSLATIONS = {
     ligdi_wait_push_moov: "आपके फ़ोन पर Moov Money संदेश आएगा: पुष्टि के लिए अपना गुप्त कोड लिखें। Sounsouni पर रहें, हम अपने आप जाँचते हैं।",
     ligdi_wait_push_om: "आपके फ़ोन पर Orange Money संदेश आएगा: पुष्टि के लिए अपना गुप्त कोड लिखें। Sounsouni पर रहें, हम अपने आप जाँचते हैं।",
     ligdi_secured_by: "भुगतान सुरक्षित:",
+    wallet_topup_btn: "Orange / Moov Money से रिचार्ज करें",
+    wallet_topup_title: "मेरा वॉलेट रिचार्ज करें",
+    wallet_topup_sub: "Orange Money या Moov Money से भुगतान करें: भुगतान की पुष्टि होते ही रक़म आपके वॉलेट में आ जाती है।",
+    wallet_topup_amount: "रिचार्ज की रक़म (FCFA)",
+    wallet_topup_fees: "ऑपरेटर का शुल्क (लगभग 2%) भुगतान के समय जोड़ा जाता है। आपके वॉलेट में ठीक चुनी गई रक़म आती है।",
+    wallet_topup_continue: "आगे बढ़ें",
+    ligdi_ok_wallet: "आपका वॉलेट रिचार्ज हो गया।",
+    ligdi_fail_wallet: "भुगतान नहीं हुआ: आपका वॉलेट नहीं बदला।",
     ligdi_is_orange_number: "यह Orange Money नंबर है: Orange Money पेज खुल रहा है।",
     ligdi_is_moov_number: "यह Moov Money नंबर है: Moov Money पेज खुल रहा है।",
     guide_buy_13_text: "अपना गुप्त कोड संभालें: पार्सल हाथ में आने पर ही दें।",
@@ -19628,14 +19652,15 @@ function ligdiMyPhone8() {
 function startLigdicashPayment(ref) {
   if (!FIREBASE_ENABLED) { showToast(t("toast_payment_unavailable_offline")); return; }
   var amt = 0;
-  if (ref.kind === "boost") { var bb = (state.boosts || []).find(function(x) { return x.id === ref.boostId; }); amt = bb ? Number(bb.price) || 0 : 0; }
+  if (ref.kind === "wallet") amt = Number(ref.amount) || 0;
+  else if (ref.kind === "boost") { var bb = (state.boosts || []).find(function(x) { return x.id === ref.boostId; }); amt = bb ? Number(bb.price) || 0 : 0; }
   else { var oo = (state.orders || []).find(function(x) { return x.id === ref.orderId; }); amt = oo ? Number(oo.total) || 0 : 0; }
   state.ligdiChoose = { ref: ref, amount: amt, op: "orange", phone: ligdiMyPhone8() };
   render();
 }
 function ligdiChooseGo() {
   var c = state.ligdiChoose; if (!c) return;
-  var ref = { kind: c.ref.kind, orderId: c.ref.orderId, boostId: c.ref.boostId };
+  var ref = { kind: c.ref.kind, orderId: c.ref.orderId, boostId: c.ref.boostId, amount: c.ref.amount };
   var el = document.getElementById("ligdi-phone");
   var ph = String((el && el.value) || c.phone || "").replace(/\D/g, "");
   if (ph.length === 11 && ph.indexOf("223") === 0) ph = ph.slice(3);
@@ -19654,7 +19679,7 @@ function ligdiCreateAndOpen(ref, attempt) {
       if (res.error === "session_required") noteSessionRejected();
       showToast("❌ " + ligdiErrorText(res.error)); render(); return;
     }
-    var refId = ref.kind === "boost" ? ref.boostId : ref.orderId;
+    var refId = ref.kind === "boost" ? ref.boostId : ref.kind === "wallet" ? "wallet" : ref.orderId;
     ligdiSavePending({ txn: res.transactionId, kind: ref.kind, refId: refId, at: Date.now() });
     render();
     var md = String(res.mode || "");
@@ -19804,6 +19829,7 @@ function checkLigdicashPayment(txn, showResult, cancelled) {
 }
 function applyLigdiResultLocally(r) {
   var now = Date.now();
+  if (r.kind === "wallet") { if (r.status === "completed") { try { fetchMyWalletState(); } catch (e) {} } return; }
   if (r.kind === "boost") {
     var b = (state.boosts || []).find(function(x) { return x.id === r.refId; });
     if (b && r.status === "completed") { b.status = "actif"; b.activatedAt = b.activatedAt || now; b.expiresAt = b.expiresAt || (now + (b.days || 1) * 86400000); }
@@ -19845,20 +19871,21 @@ function maybeRunLigdiSweep() {
 }
 function renderLigdiResultModal() {
   var r = state.ligdiResult; if (!r) return "";
-  var map = { completed: ["fa-circle-check", "var(--success)", t("ligdi_ok_title"), r.kind === "boost" ? t("ligdi_ok_boost") : t("ligdi_ok_order")],
-    notcompleted: ["fa-circle-xmark", "var(--danger)", t("ligdi_fail_title"), r.kind === "boost" ? t("ligdi_fail_boost") : t("ligdi_fail_order")],
+  var wk = r.kind === "wallet";
+  var map = { completed: ["fa-circle-check", "var(--success)", t("ligdi_ok_title"), wk ? t("ligdi_ok_wallet") : r.kind === "boost" ? t("ligdi_ok_boost") : t("ligdi_ok_order")],
+    notcompleted: ["fa-circle-xmark", "var(--danger)", t("ligdi_fail_title"), wk ? t("ligdi_fail_wallet") : r.kind === "boost" ? t("ligdi_fail_boost") : t("ligdi_fail_order")],
     pending: ["fa-hourglass-half", "var(--accent)", t("ligdi_wait_title"), t("ligdi_wait_text")],
-    cancelled: ["fa-circle-pause", "var(--accent)", t("ligdi_cancel_title"), r.kind === "boost" ? t("ligdi_cancel_boost") : t("ligdi_cancel_order")],
+    cancelled: ["fa-circle-pause", "var(--accent)", t("ligdi_cancel_title"), wk ? t("ligdi_fail_wallet") : r.kind === "boost" ? t("ligdi_cancel_boost") : t("ligdi_cancel_order")],
     amount_mismatch: ["fa-triangle-exclamation", "var(--danger)", t("ligdi_mismatch_title"), t("ligdi_mismatch_text")],
     unknown: ["fa-wifi", "var(--text-dim)", t("ligdi_wait_title"), t("ligdi_unknown_text")] };
   var v = map[r.status] || map.unknown;
   var html = '<div class="modal-overlay" style="z-index:9998;"><div class="modal-sheet" style="text-align:center;padding:26px 20px;">';
   html += '<div style="font-size:46px;color:' + v[1] + ';margin-bottom:10px;"><i class="fa-solid ' + v[0] + '"></i></div>';
   html += '<div style="font-weight:800;font-size:17px;margin-bottom:6px;">' + v[2] + '</div>';
-  html += '<div style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:18px;">' + v[3] + (r.refId && r.kind !== "boost" ? ' <b>#' + esc(String(r.refId).slice(-5).toUpperCase()) + '</b>' : '') + '</div>';
-  if (r.status === "cancelled" && r.kind !== "boost") html += '<button class="btn-primary" style="width:100%;margin-bottom:8px;" data-action="ligdi-pay-again" data-value="' + esc(r.refId || "") + '"><i class="fa-solid fa-mobile-screen"></i> ' + t("ligdi_pay_now") + '</button>';
+  html += '<div style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:18px;">' + v[3] + (r.refId && r.kind === "order" ? ' <b>#' + esc(String(r.refId).slice(-5).toUpperCase()) + '</b>' : '') + '</div>';
+  if (r.status === "cancelled" && r.kind === "order") html += '<button class="btn-primary" style="width:100%;margin-bottom:8px;" data-action="ligdi-pay-again" data-value="' + esc(r.refId || "") + '"><i class="fa-solid fa-mobile-screen"></i> ' + t("ligdi_pay_now") + '</button>';
   if (r.status === "pending" || r.status === "unknown") html += '<button class="btn-primary" style="width:100%;margin-bottom:8px;" data-action="ligdi-recheck" data-value="' + esc(r.txn || "") + '"><i class="fa-solid fa-rotate"></i> ' + t("ligdi_recheck") + '</button>';
-  html += '<button class="' + (r.status === "pending" || r.status === "unknown" || r.status === "cancelled" ? 'link-btn' : 'btn-primary') + '" style="width:100%;" data-action="ligdi-result-close">' + (r.kind === "boost" ? t("ligdi_btn_ok") : t("ligdi_btn_orders")) + '</button>';
+  html += '<button class="' + (r.status === "pending" || r.status === "unknown" || r.status === "cancelled" ? 'link-btn' : 'btn-primary') + '" style="width:100%;" data-action="ligdi-result-close">' + (r.kind !== "order" ? t("ligdi_btn_ok") : t("ligdi_btn_orders")) + '</button>';
   html += ligdiBrandLine();
   html += '</div></div>';
   return html;
@@ -23228,6 +23255,7 @@ function buildHTML() {
   if (state.showUserGuide) html += renderUserGuideModal();
   if (state.showWallet) html += renderWalletModal();
   if (state.showWalletTransfer) html += renderWalletTransferModal();
+  if (state.walletTopup) html += renderWalletTopupModal();
   if (state.showCagnottesList) html += renderCagnottesListModal();
   if (state.showCreateCagnotte) html += renderCreateCagnotteModal();
   if (state.cagnotteDetailId) html += renderCagnotteDetailModal();
@@ -24792,6 +24820,7 @@ function walletReasonLabel(t) {
     paiement_boutique: t.type === "credit" ? ("Paiement reçu" + (t.accountName ? " de " + t.accountName : "")) : ("Paiement en boutique" + (t.accountName ? " — " + t.accountName : "")),
     diaspora: "Transfert international" + (t.accountName ? " — " + t.accountName : ""),
     achat_boutique: "Achat sur Sounsouni" + (t.accountName ? " — " + t.accountName : ""),
+    recharge_mobile: "Recharge mobile money" + (t.accountName ? " — " + t.accountName : ""),
     "Ajustement Admin": "Ajustement Admin"
   };
   return labels[t.reason] || (t.reason + (t.accountName ? " — " + t.accountName : ""));
@@ -25083,6 +25112,25 @@ function renderWalletTransferModal() {
   return html;
 }
 
+// Recharge du portefeuille par Orange Money / Moov Money (LigdiCash) : le
+// portefeuille n'est crédité que lorsque le paiement est confirmé, côté serveur.
+function renderWalletTopupModal() {
+  var w = state.walletTopup; if (!w) return "";
+  var html = '<div class="modal-overlay" style="z-index:9995;"><div class="modal-sheet" style="padding:20px 16px;">';
+  html += '<div style="font-weight:800;font-size:17px;text-align:center;margin-bottom:6px;"><i class="fa-solid fa-wallet"></i> ' + t("wallet_topup_title") + '</div>';
+  html += '<div style="font-size:12px;color:var(--text-dim);text-align:center;margin-bottom:14px;line-height:1.5;">' + t("wallet_topup_sub") + '</div>';
+  html += '<label class="field-label" style="margin-top:0;">' + t("wallet_topup_amount") + '</label>';
+  html += '<input class="input" id="topup-amount" type="number" inputmode="numeric" min="100" step="100" placeholder="Ex : 10000" data-bind="walletTopup.amount" value="' + esc(String(w.amount || "")) + '" style="margin-bottom:10px;font-size:18px;font-weight:700;" />';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">';
+  [1000, 2500, 5000, 10000, 25000].forEach(function(v) { html += '<button type="button" class="btn-secondary" style="flex:1 1 28%;min-width:0;padding:8px 4px;font-size:12.5px;" data-action="wallet-topup-pick" data-value="' + v + '">' + v.toLocaleString("fr-FR") + ' F</button>'; });
+  html += '</div>';
+  html += '<div style="font-size:11px;color:var(--text-dim);background:var(--bg-body);border-radius:10px;padding:8px 10px;margin-bottom:14px;line-height:1.5;"><i class="fa-solid fa-circle-info"></i> ' + t("wallet_topup_fees") + '</div>';
+  html += '<button class="btn-primary" style="width:100%;margin-bottom:8px;" data-action="wallet-topup-go"><i class="fa-solid fa-arrow-right"></i> ' + t("wallet_topup_continue") + '</button>';
+  html += '<button class="link-btn" style="width:100%;" data-action="wallet-topup-close">' + t("wallet_back") + '</button>';
+  html += ligdiBrandLine();
+  html += '</div></div>';
+  return html;
+}
 function renderWalletModal() {
   var wallet = getWallet(state.profile.phone);
   var html = '<div class="modal-overlay" id="wallet-overlay" data-action="close-wallet">';
@@ -25095,6 +25143,7 @@ function renderWalletModal() {
   html += '<div style="font-size:30px;font-weight:800;color:white;margin-top:4px;">' + money(wallet.balance) + '</div>';
   html += '<div style="font-size:10.5px;color:rgba(255,255,255,0.75);margin-top:6px;">' + t("wallet_balance_hint") + '</div>';
   html += '</div>';
+  if (ligdicashEnabled("Mali")) html += '<button class="btn-primary" style="margin-bottom:10px;background:#ff7900;border-color:#ff7900;" data-action="open-wallet-topup"><i class="fa-solid fa-mobile-screen"></i> ' + t("wallet_topup_btn") + '</button>';
   html += '<button class="btn-primary" style="margin-bottom:10px;" data-action="open-wallet-transfer"><i class="fa-solid fa-paper-plane"></i> ' + t("wallet_send_money") + '</button>';
   html += '<button class="btn-secondary" style="margin-bottom:16px;" data-action="open-payment-code"><i class="fa-solid fa-qrcode"></i> Payer en boutique</button>';
   html += '<button class="btn-secondary" style="margin-bottom:16px;" data-action="open-cagnottes-list"><i class="fa-solid fa-hand-holding-heart"></i> ' + t("wallet_pots") + '</button>';
@@ -37668,6 +37717,18 @@ root.addEventListener("click", function(e) {
     case "open-wallet": state.showWallet = true; state.showProfileScreen = false; render(); break;
     case "close-wallet": state.showWallet = false; state.showProfileScreen = true; render(); break;
     case "open-wallet-transfer": state.showWallet = false; state.showWalletTransfer = true; render(); break;
+    case "open-wallet-topup": state.showWallet = false; state.walletTopup = { amount: "" }; render(); break;
+    case "wallet-topup-close": state.walletTopup = null; state.showWallet = true; render(); break;
+    case "wallet-topup-pick": if (state.walletTopup) { state.walletTopup.amount = String(value); render(); } break;
+    case "wallet-topup-go": {
+      var tuEl = document.getElementById("topup-amount");
+      var tuAmt = Math.round(Number((tuEl && tuEl.value) || (state.walletTopup && state.walletTopup.amount) || 0));
+      if (!(tuAmt >= 100)) { showToast("❌ " + t("ligdi_err_too_low")); break; }
+      if (tuAmt > 2000000) { showToast("❌ " + t("ligdi_err_too_high")); break; }
+      state.walletTopup = null;
+      startLigdicashPayment({ kind: "wallet", amount: tuAmt });
+      break;
+    }
     case "close-wallet-transfer": state.showWalletTransfer = false; state.showWallet = true; render(); break;
     case "cancel-sensitive-confirm": {
       state.showSensitiveConfirm = false;
