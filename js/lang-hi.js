@@ -214,6 +214,7 @@
     market_search_prompt: "आज आप क्या ढूंढ रहे हैं?",
     market_search_placeholder: "एक उत्पाद, एक श्रेणी खोजें…",
     market_delivery_tag: "डिलीवरी",
+    reco_top_pick: "सबसे पसंदीदा",
     market_delivery_title: "पूरे माली में 🇲🇱",
     market_delivery_sub: "तेज़, सुरक्षित और भरोसेमंद",
     market_results: "परिणाम",

@@ -214,6 +214,7 @@
     market_search_prompt: "Que recherchez-vous aujourd'hui ?",
     market_search_placeholder: "Rechercher un produit, une categorie…",
     market_delivery_tag: "LIVRAISON",
+    reco_top_pick: "Coup de cœur",
     market_delivery_title: "Partout au Mali 🇲🇱",
     market_delivery_sub: "Rapide, sécurisée et fiable",
     market_results: "résultat(s)",

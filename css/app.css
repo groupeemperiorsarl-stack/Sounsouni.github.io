@@ -4949,18 +4949,20 @@ body.dark-mode .gems-header .icon-btn { background: linear-gradient(145deg, #2c2
 /* Bandeau « Livraison partout au Mali » + fourgonnette 3D */
 .gems-delivery-banner.sns-van-banner {
   position: relative; display: block; height: 134px; padding: 0; border-radius: 22px; overflow: hidden;
-  background: linear-gradient(135deg, #8bc34a 0%, #4f8a2b 100%);
+  background: #6aa53a url("../img/3d/banner-bg.webp") center / cover no-repeat;
   box-shadow: 0 14px 26px rgba(60,100,30,.32), inset 0 1px 0 rgba(255,255,255,.4);
 }
+/* voile vert à gauche : le texte reste lisible devant les pommes-cannelle */
 .gems-delivery-banner.sns-van-banner::before {
-  content: ""; position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(70% 90% at 88% 35%, rgba(255,255,255,.38), rgba(255,255,255,0) 70%);
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  background: linear-gradient(90deg, rgba(38,84,22,.8) 0%, rgba(46,96,28,.45) 34%, rgba(46,96,28,0) 50%);
 }
-.sns-van-text { position: absolute; left: 16px; top: 16px; width: 50%; z-index: 2; }
+.sns-van-text { position: absolute; left: 16px; top: 16px; width: 50%; z-index: 3; }
 .sns-van-banner .gems-delivery-tag { background: rgba(255,255,255,.24); border-radius: 999px; padding: 4px 9px; font-size: 10px; letter-spacing: .08em; }
 .sns-van-banner .gems-delivery-title { font-size: 18px; line-height: 1.15; margin-top: 8px; text-shadow: 0 2px 6px rgba(0,0,0,.18); }
-.sns-van-banner .gems-delivery-sub { color: #eef7e3; font-size: 11.5px; margin-top: 4px; }
-.sns-van-3d { position: absolute; right: -4px; bottom: 6px; width: 52%; height: 112px; z-index: 1; }
+.sns-van-banner .gems-delivery-sub { color: #fff; font-size: 11.5px; margin-top: 4px; font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,.55), 0 0 8px rgba(20,50,10,.5); }
+.sns-van-banner .gems-delivery-title { text-shadow: 0 2px 6px rgba(0,0,0,.4), 0 0 10px rgba(20,50,10,.45) !important; }
+.sns-van-3d { position: absolute; right: -6px; bottom: 6px; width: 46%; height: 100px; z-index: 2; }
 .sns-van-3d img, .sns-van-3d canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: right bottom; filter: drop-shadow(0 12px 12px rgba(20,50,10,.4)); }
 .sns-van-3d canvas { opacity: 0; transition: opacity .5s; filter: none; }
 [data-sns3d].sns3d-live canvas { opacity: 1; }
@@ -4991,3 +4993,64 @@ body.dark-mode .gems-header .icon-btn { background: linear-gradient(145deg, #2c2
 @media (prefers-reduced-motion: reduce) {
   .sns-ripple, .sns-ripple-ring, .modal-sheet.sns-zoom-open, .sns-success-3d img { animation: none !important; }
 }
+
+/* ============================================================
+   « Recommandé pour vous » — mosaïque nouvelle génération
+   ============================================================ */
+.rb-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.rb-star { width: 28px; height: 28px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; color: #fff;
+  background: linear-gradient(145deg, #ffd54f, #f59e0b); box-shadow: 0 6px 12px rgba(245,158,11,.35), inset 0 1px 0 rgba(255,255,255,.6); }
+.reco-bento { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: dense; gap: 10px; }
+.reco-circle-item.rb-item { align-items: stretch; text-align: left; }
+.rb-item { position: relative; border-radius: 22px; overflow: hidden; cursor: pointer; background: var(--r-card-bg); box-shadow: var(--r-card);
+  transition: transform .18s cubic-bezier(.2,.8,.2,1), box-shadow .18s; -webkit-tap-highlight-color: transparent; }
+.rb-item:active { transform: scale(.97); box-shadow: 0 5px 12px rgba(50,85,30,.18); }
+.rb-photo { position: relative; width: 100%; height: 100%; min-height: 100%; }
+.rb-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.rb-emoji { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 46px; background: var(--r-well); }
+.rb-big { grid-row: span 2; }
+.rb-small { aspect-ratio: 1 / 1; }
+.rb-n1 .rb-big { grid-column: span 2; grid-row: auto; aspect-ratio: 16 / 11; }
+.rb-n2 .rb-big { grid-row: auto; aspect-ratio: 3 / 4; }
+.rb-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 45%, rgba(10,25,5,.72) 100%); }
+.rb-over { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.rb-over .rb-name { color: #fff; font-weight: 700; font-size: 12.5px; line-height: 1.25; text-shadow: 0 1px 4px rgba(0,0,0,.4);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+.rb-small .rb-over .rb-name { -webkit-line-clamp: 1; font-size: 12px; }
+.rb-price { display: inline-block; padding: 4px 10px; border-radius: 999px; font-weight: 800; font-size: 12px; color: #1b4d1f;
+  background: rgba(255,255,255,.92); box-shadow: 0 4px 10px rgba(0,0,0,.2); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.rb-big .rb-name { font-size: 14px; }
+.rb-big .rb-price { font-size: 13px; padding: 5px 12px; }
+.rb-badge { position: absolute; top: 10px; left: 10px; padding: 5px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; color: #fff;
+  background: linear-gradient(145deg, #ff7a59, #e53935); box-shadow: 0 6px 12px rgba(229,57,53,.35), inset 0 1px 0 rgba(255,255,255,.4); }
+.reco-circle-item.rb-wide { flex-direction: row; align-items: center; }
+.rb-wide { grid-column: span 2; display: flex; align-items: center; gap: 12px; padding: 8px; }
+.rb-thumb { position: relative; flex: 0 0 auto; width: 86px; height: 86px; border-radius: 16px; overflow: hidden; box-shadow: 0 6px 12px rgba(40,70,25,.22); }
+.rb-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rb-thumb .rb-emoji { font-size: 34px; }
+.rb-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.rb-info .rb-name { font-weight: 800; font-size: 13.5px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rb-shop { font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rb-price-inline { font-weight: 800; font-size: 14px; color: var(--primary); }
+.rb-go { flex: 0 0 auto; width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; margin-right: 4px;
+  background: linear-gradient(180deg, var(--accent-light), var(--primary)); box-shadow: 0 6px 12px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,.4); }
+
+/* ============================================================
+   « Entreprise » — icônes de secteur colorées en relief
+   ============================================================ */
+.sector-icons-grid { grid-auto-columns: 80px; gap: 10px; padding: 4px 2px 8px; scroll-snap-type: x proximity; scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent); mask-image: linear-gradient(90deg, #000 88%, transparent); }
+.sector-icons-grid::-webkit-scrollbar { display: none; }
+.sector-icon-item { width: 80px; height: 92px; gap: 7px; border-radius: 22px; padding: 8px 4px 6px; scroll-snap-align: start;
+  background: var(--r-card-bg); box-shadow: var(--r-out-sm); justify-content: flex-start; }
+.sector-icon-item:active { transform: scale(.94); box-shadow: var(--r-in); }
+.sector-icon-item .sx-icon { position: relative; width: 44px; height: 44px; border-radius: 15px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  background: linear-gradient(145deg, var(--sx1), var(--sx2)); color: #fff; font-size: 18px; overflow: hidden;
+  box-shadow: 0 8px 14px rgba(var(--sxg), .38), inset 0 2px 0 rgba(255,255,255,.45), inset 0 -3px 0 rgba(0,0,0,.14); }
+.sector-icon-item .sx-icon::after { content: ""; position: absolute; left: 4px; right: 4px; top: 3px; height: 45%; border-radius: 12px 12px 18px 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,0)); pointer-events: none; }
+.sector-icon-item .sx-icon i { position: relative; z-index: 1; width: auto; height: auto; background: none !important; box-shadow: none; font-size: 18px; text-shadow: 0 2px 4px rgba(0,0,0,.18); }
+.sector-icon-item .sx-label { font-size: 10px; font-weight: 700; line-height: 1.15; max-width: 74px; white-space: normal; text-overflow: clip;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--text-primary); text-align: center; }
+.sector-icon-item.active { background: var(--r-well); box-shadow: var(--r-in); }
+.sector-icon-item.active .sx-label { color: var(--primary); }

@@ -16416,24 +16416,37 @@ function getContextualRecommendations(limit, category, sectorKey) {
   return result.filter(function(p) { return !isProductHiddenFromPublic(p); }).slice(0, limit);
 }
 
+// « Recommandé pour vous » — nouvelle génération : mosaïque (bento).
+// 1 grande carte « Coup de cœur » + 2 carrées + 1 large en bas ; le nom et
+// le prix sont posés sur la photo (voile sombre en bas pour la lisibilité).
 function renderRecommendationsCircles(items) {
   var recoCfg = getSectionStyleConfig("reco_section_config", { title: t("market_section_recommended_default"), textColor: "var(--accent)", shapeColor: "#7bcb3a" });
   var recoTitleStyle = 'font-family:' + SECTION_FONT_FAMILIES[recoCfg.fontFamily] + ';font-weight:' + (recoCfg.bold ? '700' : '400') + ';color:' + recoCfg.textColor + ';font-size:' + recoCfg.fontSize + 'px;';
-  var html = '<div class="brand-fx-' + recoCfg.effect + '" style="margin-bottom:16px;">';
-  html += '<div style="margin-bottom:10px;' + recoTitleStyle + '"><i class="fa-solid fa-star"></i> ' + esc(sectionTitleFor(recoCfg, "market_section_recommended_default")) + '</div>';
-  html += '<div class="reco-circles-grid">';
-  for (var i = 0; i < items.length && i < 9; i++) {
-    var p = items[i];
-    var displayNameForShort = productDisplayName(p);
-    var shortName = displayNameForShort.length > 26 ? displayNameForShort.slice(0, 26) + '…' : displayNameForShort;
-    html += '<div class="reco-circle-item" data-action="open-product" data-value="' + p.id + '">';
-    html += '<div class="reco-circle-img" style="animation-delay:' + (i * 0.3) + 's;border-color:' + recoCfg.shapeColor + ';">';
-    html += '<div class="reco-circle-glow" style="animation-delay:' + (i * 0.7) + 's;background:' + recoCfg.shapeColor + ';"></div>';
-    if (p.images && p.images.length) html += '<img loading="lazy" src="' + p.images[0] + '" alt="" style="object-position:' + imagePositionCss(p.imagePositions, 0) + ';" />';
-    else html += '<span>' + (p.emoji || '🛍️') + '</span>';
-    html += '</div>';
-    html += '<div class="reco-circle-name">' + esc(shortName) + '</div>';
-    html += '<div class="reco-circle-price">' + money(p.price, p.country, state.profile ? state.profile.country : null) + '</div>';
+  var list = items.slice(0, 9);
+  var n = Math.min(list.length, 4);
+  var html = '<div class="brand-fx-' + recoCfg.effect + '" style="margin-bottom:18px;">';
+  html += '<div class="rb-head" style="' + recoTitleStyle + '"><span class="rb-star"><i class="fa-solid fa-star"></i></span> ' + esc(sectionTitleFor(recoCfg, "market_section_recommended_default")) + '</div>';
+  html += '<div class="reco-circles-grid reco-bento rb-n' + n + '">';
+  for (var i = 0; i < list.length; i++) {
+    var p = list[i];
+    var kind = i >= 4 ? 'rb-small' : (i === 0 ? 'rb-big' : (i === 3 ? 'rb-wide' : 'rb-small'));
+    if (n === 2 && i === 1) kind = 'rb-big';
+    var img = (p.images && p.images.length)
+      ? '<img loading="lazy" src="' + p.images[0] + '" alt="" style="object-position:' + imagePositionCss(p.imagePositions, 0) + ';" />'
+      : '<span class="rb-emoji">' + (p.emoji || '🛍️') + '</span>';
+    var price = money(p.price, p.country, state.profile ? state.profile.country : null);
+    html += '<div class="reco-circle-item rb-item ' + kind + '" data-action="open-product" data-value="' + p.id + '">';
+    if (kind === 'rb-wide') {
+      html += '<div class="rb-thumb">' + img + '</div>';
+      html += '<div class="rb-info"><div class="rb-name">' + esc(productDisplayName(p)) + '</div>';
+      if (p.shopName) html += '<div class="rb-shop"><i class="fa-solid fa-store"></i> ' + esc(p.shopName) + '</div>';
+      html += '<div class="rb-price-inline">' + price + '</div></div>';
+      html += '<div class="rb-go"><i class="fa-solid fa-arrow-right"></i></div>';
+    } else {
+      html += '<div class="rb-photo">' + img + '<div class="rb-shade"></div>';
+      if (i === 0) html += '<span class="rb-badge"><i class="fa-solid fa-heart"></i> ' + t("reco_top_pick") + '</span>';
+      html += '<div class="rb-over"><div class="rb-name">' + esc(productDisplayName(p)) + '</div><span class="rb-price">' + price + '</span></div></div>';
+    }
     html += '</div>';
   }
   html += '</div></div>';
@@ -16581,18 +16594,28 @@ function getSectorShortcuts() {
   return list;
 }
 
+// Une couleur vive par secteur (dégradé + reflet), pour qu'on reconnaisse chacun d'un coup d'œil.
+var SECTOR_COLORS = {
+  restaurant: ["#ff8a50", "#e64a19", "230,74,25"], agriculteur: ["#9ccc65", "#558b2f", "85,139,47"],
+  boutique: ["#4fc3f7", "#1e88e5", "30,136,229"], education: ["#9575cd", "#5e35b1", "94,53,177"],
+  sante: ["#ef6f6c", "#c62828", "198,40,40"], beaute: ["#f06292", "#ad1457", "173,20,87"],
+  automobile: ["#78909c", "#37474f", "55,71,79"], hotellerie: ["#4db6ac", "#00796b", "0,121,107"],
+  decoration: ["#ffd54f", "#f57f17", "245,127,23"], evenementiel: ["#ba68c8", "#7b1fa2", "123,31,162"],
+  autre: ["#b0bec5", "#607d8b", "96,125,139"]
+};
 function renderSectorIcons() {
   var shortcuts = getSectorShortcuts();
   var secCfg = getSectionStyleConfig("sector_icons_config", { title: t("market_section_sector_default"), textColor: "var(--text-primary)", shapeColor: "#7bcb3a" });
   var secTitleStyle = 'font-family:' + SECTION_FONT_FAMILIES[secCfg.fontFamily] + ';font-weight:' + (secCfg.bold ? '800' : '400') + ';color:' + secCfg.textColor + ';font-size:' + secCfg.fontSize + 'px;';
   var html = '<div class="sector-icons-section brand-fx-' + secCfg.effect + '">';
-  html += '<div style="margin-bottom:8px;' + secTitleStyle + '">' + esc(sectionTitleFor(secCfg, "market_section_sector_default")) + '</div>';
+  html += '<div class="rb-head" style="' + secTitleStyle + '">' + esc(sectionTitleFor(secCfg, "market_section_sector_default")) + '</div>';
   html += '<div class="sector-icons-grid">';
   for (var i = 0; i < shortcuts.length; i++) {
     var s = shortcuts[i];
     var isActive = state.sectorFilter === s.key;
     html += '<button class="sector-icon-item ' + (isActive ? 'active' : '') + '" data-action="set-sector-filter" data-value="' + s.key + '">';
-    html += '<i class="fa-solid ' + s.icon + '" style="background:linear-gradient(135deg,' + secCfg.shapeColor + ',' + secCfg.shapeColor + 'cc);"></i><span>' + esc(s.label) + '</span>';
+    var sc = SECTOR_COLORS[s.key.replace("entreprise:", "")] || SECTOR_COLORS.autre;
+    html += '<span class="sx-icon" style="--sx1:' + sc[0] + ';--sx2:' + sc[1] + ';--sxg:' + sc[2] + ';"><i class="fa-solid ' + s.icon + '"></i></span><span class="sx-label">' + esc(s.label) + '</span>';
     html += '</button>';
   }
   html += '</div></div>';

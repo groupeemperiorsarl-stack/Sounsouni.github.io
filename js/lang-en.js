@@ -214,6 +214,7 @@
     market_search_prompt: "What are you looking for today?",
     market_search_placeholder: "Search for a product, a category…",
     market_delivery_tag: "DELIVERY",
+    reco_top_pick: "Top pick",
     market_delivery_title: "Everywhere in Mali 🇲🇱",
     market_delivery_sub: "Fast, secure and reliable",
     market_results: "result(s)",
