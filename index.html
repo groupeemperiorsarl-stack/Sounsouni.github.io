@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-14-c";
+    window.SOUNSOUNI_VERSION = "2026-10-14-d";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -9008,6 +9008,8 @@ function defaultState() {
     reportProductId: null,
     guestAuthRequested: false,
     guestPendingCheckout: false,
+    guestReturnProductId: null,
+    highlightOrderId: null,
     showGuestAuthPrompt: false,
     guestAuthReason: "",
     showGuestInstallGuide: false,
@@ -17141,10 +17143,13 @@ var PUBLIC_SITE_URL = "https://sounsouni.pro";
 // parrainage de la personne qui partage (chaque partage est aussi un lien
 // d'affiliation).
 function productShareUrl(p) {
-  var url = PUBLIC_SITE_URL + "/?product=" + encodeURIComponent(p.id);
+  // Lien court vers la page de partage de l'article (p/<id>) : WhatsApp,
+  // Facebook… y lisent la photo, le prix et la description pour l'aperçu,
+  // puis la page renvoie aussitôt vers l'article dans l'app.
+  var url = PUBLIC_SITE_URL + "/p/" + encodeURIComponent(p.id);
   var code = null;
   try { code = state.profile ? getReferralCode() : null; } catch (e) {}
-  if (code) url += "&ref=" + encodeURIComponent(code);
+  if (code) url += "?ref=" + encodeURIComponent(code);
   return url;
 }
 function shareProduct(productId) {
@@ -19915,6 +19920,9 @@ function handleIncomingAppLink(url) {
     var ref = u.searchParams.get("ref");
     if (ref) localStorage.setItem("gems_referral", ref);
     var pid = u.searchParams.get("product");
+    // Lien de partage court : sounsouni.pro/p/<id>
+    var pm = !pid && u.pathname.match(/^\/p\/([A-Za-z0-9_\-]{1,80})(?:\.html)?\/?$/);
+    if (pm) pid = pm[1];
     if (pid) {
       window._pendingProductLink = pid;
       if (!state.profile) { window._nativeGuestMode = true; state.guestAuthRequested = false; }
@@ -20094,14 +20102,28 @@ function ligdiWaitDone(r, txn) {
   state.ligdiResult = { status: r.status, kind: r.kind, refId: r.refId, txn: txn };
   render();
 }
+// Fermer une fenêtre de paiement (croix ou « Payer plus tard ») : on reste sur
+// la fiche de la commande concernée (dans « Achats »), jamais ailleurs.
+function ligdiBackToRef(ref) {
+  if (!ref) return;
+  if (ref.kind === "order" && ref.orderId) {
+    state.view = "orders"; state.ordersTab = "current"; state.detailProductId = null;
+    state.highlightOrderId = ref.orderId;
+    setTimeout(function() { var el = document.getElementById("order-card-" + ref.orderId); if (el && el.scrollIntoView) el.scrollIntoView({ block: "center", behavior: "smooth" }); }, 120);
+    setTimeout(function() { if (state.highlightOrderId === ref.orderId) { state.highlightOrderId = null; render(); } }, 6000);
+  } else if (ref.kind === "booking") {
+    state.view = "orders"; state.detailProductId = null;
+  }
+}
 function renderLigdiChoose() {
   var c = state.ligdiChoose; if (!c) return "";
   var tab = function(op, label, color) {
     var on = c.op === op;
     return '<button type="button" data-action="ligdi-op" data-value="' + op + '" style="flex:1;min-width:0;padding:10px 6px;border-radius:12px;font-weight:800;font-size:13px;cursor:pointer;background:' + (on ? color : 'var(--bg-body)') + ';color:' + (on ? '#fff' : 'var(--text-primary)') + ';border:2px solid ' + (on ? color : 'var(--border-color)') + ';">' + label + '</button>';
   };
-  var html = '<div class="modal-overlay" style="z-index:9996;"><div class="modal-sheet" style="padding:20px 16px;">';
-  html += '<div style="font-weight:800;font-size:17px;text-align:center;margin-bottom:12px;">' + t("ligdi_choose_title") + (c.amount ? ' <span style="color:var(--accent);">' + Number(c.amount).toLocaleString("fr-FR") + ' FCFA</span>' : '') + '</div>';
+  var html = '<div class="modal-overlay" style="z-index:9996;"><div class="modal-sheet" style="padding:20px 16px;position:relative;">';
+  html += '<button class="modal-close" data-action="ligdi-choose-close" aria-label="Fermer" style="position:absolute;top:10px;right:10px;"><i class="fa-solid fa-xmark"></i></button>';
+  html += '<div style="font-weight:800;font-size:17px;text-align:center;margin:0 34px 12px;">' + t("ligdi_choose_title") + (c.amount ? ' <span style="color:var(--accent);">' + Number(c.amount).toLocaleString("fr-FR") + ' FCFA</span>' : '') + '</div>';
   html += '<div style="display:flex;gap:8px;margin-bottom:14px;">' + tab("orange", "Orange Money", "#ff7900") + tab("moov", "Moov Money", "#0066b3") + '</div>';
   html += '<label class="field-label" style="margin-top:0;">' + t(c.op === "moov" ? "ligdi_moov_number" : "ligdi_om_number") + '</label>';
   html += '<input class="input" id="ligdi-phone" type="tel" inputmode="numeric" maxlength="14" autocomplete="tel" placeholder="Ex : ' + (c.op === "moov" ? '66' : '76') + ' 12 34 56" data-bind="ligdiChoose.phone" value="' + esc(c.phone || "") + '" style="margin-bottom:12px;font-size:16px;letter-spacing:1px;" />';
@@ -20128,7 +20150,8 @@ function ligdiBrandLine() {
 }
 function renderLigdiWaiting() {
   var w = state.ligdiWaiting; if (!w) return "";
-  var html = '<div class="modal-overlay" style="z-index:9996;"><div class="modal-sheet" style="text-align:center;padding:24px 18px;">';
+  var html = '<div class="modal-overlay" style="z-index:9996;"><div class="modal-sheet" style="text-align:center;padding:24px 18px;position:relative;">';
+  html += '<button class="modal-close" data-action="ligdi-wait-close" aria-label="Fermer" style="position:absolute;top:10px;right:10px;"><i class="fa-solid fa-xmark"></i></button>';
   var mv = w.op === "moov";
   html += '<div style="font-size:40px;color:' + (mv ? '#0066b3' : '#ff7900') + ';margin-bottom:8px;"><i class="fa-solid fa-mobile-screen-button"></i></div>';
   html += '<div style="font-weight:800;font-size:16px;margin-bottom:6px;">' + t(w.push ? "ligdi_wait_push_title" : (mv ? "ligdi_wait_moov_title" : "ligdi_wait_om_title")) + '</div>';
@@ -23536,11 +23559,22 @@ function buildHTML() {
     for (var gci = 0; gci < state.cart.length; gci++) {
       if (state.cart[gci].buyerId === "guest") state.cart[gci].buyerId = state.profile.id;
     }
-    var guestGoCheckout = state.guestPendingCheckout && state.profile.role === "acheteur" && cartCount() > 0;
+    // Tout compte peut acheter (acheteur, mais aussi un vendeur qui se
+    // connecte avec son compte) : on reprend là où le visiteur s'était
+    // arrêté — la commande de son article, sinon la fiche de l'article.
+    var guestGoCheckout = state.guestPendingCheckout && state.profile.role !== "admin" && cartCount() > 0;
+    var guestBackProduct = !guestGoCheckout && state.guestReturnProductId && findProductById(state.guestReturnProductId) ? state.guestReturnProductId : null;
     state.guestAuthRequested = false;
     state.guestPendingCheckout = false;
     state.showGuestAuthPrompt = false;
-    if (guestGoCheckout) state.view = "checkout";
+    state.guestReturnProductId = null;
+    if (guestGoCheckout || guestBackProduct) {
+      state.showVendorHub = false; state.showRoleMenu = false; state.showProfileScreen = false;
+      // Le guide de découverte attendra : la personne est en train d'acheter.
+      if (state.activeTour && state.activeTour.tourKey === "decouvrir") state.activeTour = null;
+    }
+    if (guestGoCheckout) { state.view = "checkout"; state.detailProductId = null; }
+    else if (guestBackProduct) { state.view = "market"; state.detailProductId = guestBackProduct; }
     save();
   }
   if (state.view === "onboarding") return renderOnboarding();
@@ -29105,7 +29139,7 @@ function renderOrders() {
     var o = myOrders[j];
     var hasOTP = o.otp && o.status !== "Livrée" && !o.isDigital;
     var hasRetraitCode = o.deliveryMode === "relais" && o.codeRetrait && o.status !== "Livrée" && o.status !== "Annulée";
-    html += '<div class="card-row" style="flex-direction:column;align-items:stretch">';
+    html += '<div class="card-row" id="order-card-' + esc(o.id) + '" style="flex-direction:column;align-items:stretch' + (state.highlightOrderId === o.id ? ';border:2px solid var(--accent);box-shadow:0 0 0 3px rgba(255,121,0,0.18)' : '') + '">';
     html += '<div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:8px">';
     html += '<span style="font-weight:700">#' + o.id.slice(-5).toUpperCase() + ' — ' + (o.isDigital ? '<i class="fa-solid fa-cloud-arrow-down"></i> ' + t("dig_order_label") : o.isInternational ? esc(o.country || "") : (o.city + ', ' + esc(o.zone))) + '</span>';
     html += '<div style="display:flex;align-items:center;gap:8px;">';
@@ -36902,6 +36936,9 @@ root.addEventListener("click", function(e) {
   if (isGuestBrowsingMode()) {
     if (action === "guest-open-auth") {
       state.showGuestAuthPrompt = false;
+      // On retient l'article regardé, pour y revenir juste après l'inscription
+      // ou la connexion (au lieu de retomber sur le marché).
+      if (state.detailProductId) state.guestReturnProductId = state.detailProductId;
       state.detailProductId = null;
       state.guestAuthRequested = true;
       render();
@@ -36961,7 +36998,7 @@ root.addEventListener("click", function(e) {
       return;
     }
     if (action === "buy-now" || action === "go-checkout-from-cart") {
-      if (action === "buy-now") addToCart(value, state.selectedQty, state.selectedColor, state.selectedSize);
+      if (action === "buy-now") { addToCart(value, state.selectedQty, state.selectedColor, state.selectedSize); state.guestReturnProductId = value; }
       state.guestPendingCheckout = true;
       state.guestAuthReason = "guest_reason_checkout";
       state.detailProductId = null;
@@ -39772,9 +39809,9 @@ root.addEventListener("click", function(e) {
     case "ligdi-pay-order": { startLigdicashPayment({ kind: "order", orderId: value }); break; }
     case "ligdi-op": { if (state.ligdiChoose) { var lpEl = document.getElementById("ligdi-phone"); if (lpEl) state.ligdiChoose.phone = lpEl.value; state.ligdiChoose.op = value === "moov" ? "moov" : "orange"; render(); } break; }
     case "ligdi-go": { ligdiChooseGo(); break; }
-    case "ligdi-choose-close": { state.ligdiChoose = null; render(); showToast(t("ligdi_later_toast")); break; }
+    case "ligdi-choose-close": { var lcRef = state.ligdiChoose && state.ligdiChoose.ref; state.ligdiChoose = null; ligdiBackToRef(lcRef); render(); if (lcRef && lcRef.kind !== "wallet") showToast(t("ligdi_later_toast")); break; }
     case "ligdi-wait-check": { var wq = state.ligdiWaiting; if (wq) checkLigdicashPayment(wq.txn, true); break; }
-    case "ligdi-wait-close": { state.ligdiWaiting = null; render(); showToast(t("ligdi_later_toast")); break; }
+    case "ligdi-wait-close": { var lwW = state.ligdiWaiting; var lwRef = lwW ? { kind: lwW.kind, orderId: lwW.refId, bookingId: lwW.refId } : null; state.ligdiWaiting = null; ligdiBackToRef(lwRef); render(); showToast(t("ligdi_later_toast")); break; }
     case "ligdi-check-order": { var lp = ligdiReadPending(); if (lp && lp.refId === value) checkLigdicashPayment(lp.txn, true); else showToast(t("ligdi_no_pending")); break; }
     case "set-payment": {
       if (value === "ligdicash" && ligdicashEnabled(countryForCity(state.checkoutForm.city) || "Mali")) { state.checkoutForm.payment = value; render(); break; }

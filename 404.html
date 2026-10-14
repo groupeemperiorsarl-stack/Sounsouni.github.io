@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sounsouni</title>
+<script>
+// Lien d'article tout neuf (sa page de partage n'est pas encore prête) : on ouvre quand même l'article.
+var m = location.pathname.match(/^\/p\/([A-Za-z0-9_\-]{1,80})(?:\.html)?\/?$/);
+var r = new URLSearchParams(location.search).get("ref");
+location.replace(m ? "/?product=" + m[1] + (r ? "&ref=" + encodeURIComponent(r) : "") : "/");
+</script></head><body style="font-family:sans-serif;text-align:center;padding:40px 16px"><p>Ouverture de Sounsouni…</p><p><a href="/">Accueil</a></p></body></html>
