@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-14-a";
+    window.SOUNSOUNI_VERSION = "2026-10-14-b";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -26169,6 +26169,9 @@ function verifyAccountPassword(accountId, password) {
   })
     .then(function(r) { return r.json(); })
     .then(function(res) {
+      if (res && res.error === "too_many_attempts") {
+        showToast("🔒 Trop d'essais ratés. Réessayez dans 15 minutes.");
+      }
       // Un mot de passe correct délivre un vrai jeton de session — on le
       // garde, il faudra le présenter pour toute action sensible ensuite
       // (commandes, portefeuille, changement de mot de passe...).
