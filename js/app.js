@@ -1382,6 +1382,79 @@ function saveRelaisCommissionRate(rate) {
   render();
 }
 
+// ---------- EFFETS ANIMÉS DU MARCHÉ (interrupteur Admin, coupé par défaut) ----------
+// Réglage partagé (collection "settings", id "market_fx") : quand il est
+// coupé — c'est le cas tant que l'admin ne l'a pas allumé — les animations
+// qui tournent en boucle sur le marché s'arrêtent pour tout le monde
+// (balayages de l'en-tête et du menu, cercles "Recommandé", reflets,
+// effets des images de marque et de la pub VIP, changement automatique
+// des cases "À la une"). La classe "sns-fx-off" est posée dès le départ
+// sur <html> (voir index.html), donc rien ne bouge avant le chargement.
+function isMarketFxEnabled() {
+  if (state.settings) {
+    for (var i = 0; i < state.settings.length; i++) {
+      if (state.settings[i] && state.settings[i].id === "market_fx") return state.settings[i].enabled === true;
+    }
+  }
+  return false;
+}
+function applyMarketFxClass() {
+  try { document.documentElement.classList.toggle("sns-fx-off", !isMarketFxEnabled()); } catch (e) {}
+}
+function toggleMarketFx() {
+  var doc = { id: "market_fx", enabled: !isMarketFxEnabled() };
+  var idx = -1;
+  for (var i = 0; i < state.settings.length; i++) {
+    if (state.settings[i] && state.settings[i].id === "market_fx") { idx = i; break; }
+  }
+  if (idx === -1) state.settings.push(doc); else state.settings[idx] = doc;
+  save();
+  saveDoc("settings", doc);
+  applyMarketFxClass();
+  showToast(doc.enabled ? "Effets animés du marché : activés" : "Effets animés du marché : désactivés");
+  render();
+}
+
+// ---------- TOUCHER « DOIGT DANS L'EAU » + OUVERTURE DOUCE ----------
+// Une onde part de l'endroit touché, sur tout ce qui se touche. Elle est
+// dessinée dans une couche à part (position fixe, au-dessus de tout, sans
+// capter les touchers) : on ne modifie jamais les boutons eux-mêmes.
+var snsLastTap = null;
+(function() {
+  var layer = null;
+  var SEL = 'button, a, [data-action], .product-card, .nav-item, .reco-circle-item, .chip, label.toggle, .toggle-switch';
+  function reduced() { try { return window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { return false; } }
+  document.addEventListener("pointerdown", function(e) {
+    snsLastTap = { x: e.clientX, y: e.clientY, at: Date.now() };
+    if (e.button && e.button !== 0) return;
+    var el = e.target && e.target.closest ? e.target.closest(SEL) : null;
+    if (!el || el.classList.contains("modal-overlay") || el.disabled || reduced()) return;
+    var r = el.getBoundingClientRect();
+    if (r.width < 8 || r.height < 8 || r.width * r.height > window.innerWidth * window.innerHeight * 0.45) return;
+    if (!layer) { layer = document.createElement("div"); layer.className = "sns-ripple-layer"; document.body.appendChild(layer); }
+    var cs = getComputedStyle(el);
+    var box = document.createElement("div"); box.className = "sns-ripple-box";
+    box.style.cssText = "left:" + r.left + "px;top:" + r.top + "px;width:" + r.width + "px;height:" + r.height + "px;border-radius:" + cs.borderRadius + ";";
+    var size = Math.max(r.width, r.height) * 2.1;
+    var dot = document.createElement("span"); dot.className = "sns-ripple";
+    dot.style.cssText = "width:" + size + "px;height:" + size + "px;left:" + (e.clientX - r.left - size / 2) + "px;top:" + (e.clientY - r.top - size / 2) + "px;";
+    var ring = document.createElement("span"); ring.className = "sns-ripple-ring";
+    ring.style.cssText = "width:" + size * 0.6 + "px;height:" + size * 0.6 + "px;left:" + (e.clientX - r.left - size * 0.3) + "px;top:" + (e.clientY - r.top - size * 0.3) + "px;";
+    box.appendChild(dot); box.appendChild(ring); layer.appendChild(box);
+    setTimeout(function() { if (box.parentNode) box.parentNode.removeChild(box); }, 700);
+  }, { passive: true, capture: true });
+})();
+// La fiche article s'ouvre en grandissant depuis l'endroit touché.
+function snsZoomFromTap(sheet) {
+  if (!sheet || !snsLastTap || Date.now() - snsLastTap.at > 1500) return;
+  try {
+    var r = sheet.getBoundingClientRect();
+    sheet.style.transformOrigin = Math.round(snsLastTap.x - r.left) + "px " + Math.round(Math.max(0, snsLastTap.y - r.top)) + "px";
+    sheet.classList.add("sns-zoom-open");
+    setTimeout(function() { sheet.classList.remove("sns-zoom-open"); }, 600);
+  } catch (e) {}
+}
+
 // ---------- BOOST (mise en avant payante) ----------
 // Config par défaut : forfaits de départ + mode "auto" (activation immédiate,
 // sans vérification de paiement — voir discussion avec l'utilisateur : tant
@@ -9291,7 +9364,8 @@ function renderLigdiResultModal() {
     unknown: ["fa-wifi", "var(--text-dim)", t("ligdi_wait_title"), t("ligdi_unknown_text")] };
   var v = map[r.status] || map.unknown;
   var html = '<div class="modal-overlay" style="z-index:9998;"><div class="modal-sheet" style="text-align:center;padding:26px 20px;">';
-  html += '<div style="font-size:46px;color:' + v[1] + ';margin-bottom:10px;"><i class="fa-solid ' + v[0] + '"></i></div>';
+  if (r.status === "completed") html += '<div class="sns-success-3d" id="sns-success-3d" data-sns3d="success"><div class="sns-success-glow"></div><img src="img/3d/success.webp" alt="" width="440" height="441" decoding="async" /></div>';
+  else html += '<div style="font-size:46px;color:' + v[1] + ';margin-bottom:10px;"><i class="fa-solid ' + v[0] + '"></i></div>';
   html += '<div style="font-weight:800;font-size:17px;margin-bottom:6px;">' + v[2] + '</div>';
   html += '<div style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:18px;">' + v[3] + (r.refId && r.kind === "order" ? ' <b>#' + esc(String(r.refId).slice(-5).toUpperCase()) + '</b>' : '') + '</div>';
   var rdo = r.kind === "order" && r.status === "completed" ? (state.orders || []).find(function(x) { return x.id === r.refId; }) : null;
@@ -12366,13 +12440,14 @@ function render() {
     // jamais bloquer l'app à cause de ça.
     var newHtml = buildHTML();
     if (window.Idiomorph) {
-      Idiomorph.morph(root, newHtml, { morphStyle: "innerHTML" });
+      Idiomorph.morph(root, newHtml, { morphStyle: "innerHTML", callbacks: { beforeNodeMorphed: function(oldNode) { return !(oldNode.nodeType === 1 && oldNode.getAttribute && oldNode.getAttribute("data-sns3d-state")); } } });
     } else {
       root.innerHTML = newHtml;
     }
     applyEmployeeRestrictions();
     renderPendingQRCodes();
     observeVisibilityAnimations();
+    if (window.snsMount3D) { try { window.snsMount3D(); } catch (e3d) {} }
     renderPendingStorageReport();
     if (state.showScannerModal && !window._scannerActive) {
       window._scannerActive = true;
@@ -12460,6 +12535,7 @@ function render() {
   });
   setupMarketInfiniteScroll();
   
+  applyMarketFxClass();
   if (state.seasonalEffects.enabled && state.view !== "onboarding") {
     var effectsRunning = document.querySelectorAll('.snowflake, .heart-float, .firework, .mali-flag-float').length > 0;
     if (!effectsRunning) {
@@ -16834,16 +16910,13 @@ function renderMarketTopSection(compact) {
   html += '</div>';
 
   if (!compact) {
-    var delivBgCfg = getBrandImageConfig("delivery_banner_bg_config");
-    var delivBgStyle = '';
-    if (delivBgCfg.enabled && delivBgCfg.imageUrl) {
-      var delivOverlay = delivBgCfg.overlayEnabled ? 'linear-gradient(rgba(0,0,0,0.28),rgba(0,0,0,0.28)),' : '';
-      delivBgStyle = 'background-image:' + delivOverlay + 'url(\'' + delivBgCfg.imageUrl + '\');background-size:cover;background-position:center;opacity:' + delivBgCfg.opacity + ';';
-    }
-    html += '<div class="gems-delivery-banner' + (delivBgCfg.enabled && delivBgCfg.imageUrl ? ' brand-fx-' + delivBgCfg.effect : '') + '" style="' + delivBgStyle + '"><div><span class="gems-delivery-tag">' + t("market_delivery_tag") + '</span>';
+    // Nouveau design : bandeau vert en relief + fourgonnette Sounsouni en 3D
+    // (image fixe tout de suite ; vraie 3D animée seulement quand le bandeau
+    // est à l'écran et que le téléphone le permet — voir js/sns3d.js).
+    html += '<div class="gems-delivery-banner sns-van-banner"><div class="sns-van-text"><span class="gems-delivery-tag">' + t("market_delivery_tag") + '</span>';
     html += '<div class="gems-delivery-title">' + t("market_delivery_title") + '</div>';
     html += '<div class="gems-delivery-sub">' + t("market_delivery_sub") + '</div></div>';
-    html += '<i class="fa-solid fa-truck-fast gems-delivery-icon"></i></div>';
+    html += '<div class="sns-van-3d" id="sns-van-3d" data-sns3d="van"><img src="img/3d/van.webp" alt="" width="520" height="341" decoding="async" /></div></div>';
   }
 
   html += '</div>';
@@ -20691,6 +20764,7 @@ function renderAdminTextes() {
   var html = '<div style="font-size:12px;color:var(--text-dim);margin-bottom:16px;">Tous les réglages de texte et d\'images de marque de l\'application, réunis ici — plus besoin de les chercher dans plusieurs onglets différents.</div>';
 
   html += '<div class="divider-dashed" style="margin:0 0 16px;"></div>';
+  html += '<div style="font-size:11.5px;color:var(--text-dim);margin:4px 0 8px;">Le bandeau « Livraison partout au Mali » montre maintenant la fourgonnette Sounsouni en 3D : la photo de fond ci-dessous n\'y est plus affichée.</div>';
   html += renderBrandImageAdminSection("delivery_banner_bg_config", "Photo de fond — bandeau \"Livraison partout au Mali\"", { showOverlayToggle: true });
   html += '<div class="divider-dashed" style="margin:20px 0;"></div>';
   html += renderBrandImageAdminSection("header_bg_config", "Photo de fond — en-tête", { showOverlayToggle: true });
@@ -23179,7 +23253,16 @@ function renderAdminAccountDetail(accountId) {
 
 function renderAdminEffects() {
   var e = state.seasonalEffects;
-  var html = '<div class="seasonal-effects-panel">';
+  var fxOn = isMarketFxEnabled();
+  var html = '<div class="seasonal-effects-panel" style="margin-bottom:12px;">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+  html += '<div style="font-weight:700;font-size:14px;"><i class="fa-solid fa-wand-magic-sparkles"></i> Effets animés du marché</div>';
+  html += '<div class="flex-row"><span style="font-size:12px;color:var(--text-dim);">' + (fxOn ? 'Activé' : 'Désactivé') + '</span>';
+  html += '<div class="toggle-switch ' + (fxOn ? 'active' : '') + '" data-action="toggle-market-fx"><div class="toggle-knob"></div></div></div>';
+  html += '</div>';
+  html += '<div style="font-size:11px;color:var(--text-dim);margin-top:4px;">Reflets, pulsations, balayages et changement automatique des articles « À la une ». Pour tout le monde. Coupé = application plus légère sur les petits téléphones.</div>';
+  html += '</div>';
+  html += '<div class="seasonal-effects-panel">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
   html += '<div style="font-weight:700;font-size:14px;"><i class="fa-solid fa-sparkles"></i> Effets saisonniers</div>';
   html += '<div class="flex-row"><span style="font-size:12px;color:var(--text-dim);">Activé</span>';
@@ -25837,6 +25920,7 @@ function observeVisibilityAnimations() {
 (function() {
   setInterval(function() {
     document.querySelectorAll(".na-shuffle-grid").forEach(function(grid) {
+      if (!isMarketFxEnabled()) return; // effets du marché coupés en Admin
       if (!grid.classList.contains("in-view")) return; // hors écran : on ne fait rien du tout, même pas le tirage au sort
       // Environ 1 case sur 3 tente un changement à chaque tick (~900ms) —
       // ça donne, en moyenne, une case qui change toutes les 2-3 secondes,
@@ -28787,6 +28871,7 @@ root.addEventListener("click", function(e) {
       window._skipScrollRestore = true;
       render();
       window.scrollTo(0, 0);
+      snsZoomFromTap(document.querySelector("#modal-overlay:not(.no-anim) .modal-sheet"));
       break;
     }
     case "close-product": {
@@ -30702,6 +30787,7 @@ root.addEventListener("click", function(e) {
     case "lightbox-prev": state.lightboxIndex = (state.lightboxIndex - 1 + state.lightboxImages.length) % state.lightboxImages.length; render(); break;
     case "lightbox-next": state.lightboxIndex = (state.lightboxIndex + 1) % state.lightboxImages.length; render(); break;
     case "toggle-seasonal": toggleSeasonalEffects(); break;
+    case "toggle-market-fx": toggleMarketFx(); break;
     case "toggle-market-config": {
       var mCfg = getMarketConfig();
       mCfg[value] = !mCfg[value];
