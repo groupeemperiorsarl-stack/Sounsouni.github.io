@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-14-b";
+    window.SOUNSOUNI_VERSION = "2026-10-14-c";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -16282,7 +16282,6 @@ function registerAccount() {
     loginHistory: [Date.now()],
     behavior: { views: [], purchases: [], searches: [] }
   };
-  console.log("account =", account);
 
   var mergingIntoExisting = d.isFirstShopEver && d.role === "vendeur" && state.profile && state.profile.id;
   if (mergingIntoExisting) {
