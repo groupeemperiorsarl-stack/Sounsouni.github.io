@@ -1,0 +1,5 @@
+Médaillons des catégories (img/cat/*.webp) — rendus avec Blender 5.2 (Cycles), logiciel libre.
+Installer : python3 -m venv blend && blend/bin/pip install bpy==5.2.2
+Modèles réalistes libres : github.com/KhronosGroup/glTF-Sample-Assets (dossier ../gltf/<Nom>.glb).
+Rendre un médaillon : blend/bin/python medal.py shoe sortie.png 640 128
+Puis export.py (recadrage, 240 px, webp). Correspondance catégorie → image : CATEGORY_MEDALS dans js/app.js.

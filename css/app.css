@@ -5054,3 +5054,19 @@ body.dark-mode .gems-header .icon-btn { background: linear-gradient(145deg, #2c2
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--text-primary); text-align: center; }
 .sector-icon-item.active { background: var(--r-well); box-shadow: var(--r-in); }
 .sector-icon-item.active .sx-label { color: var(--primary); }
+
+/* ============================================================
+   Catégories : médaillons photoréalistes + étiquettes en relief
+   ============================================================ */
+.cat-medal-shape { overflow: visible; border-radius: 0; max-width: 104px; }
+.cat-medal { position: absolute; inset: -4%; width: 108%; height: 108%; object-fit: contain; pointer-events: none;
+  filter: drop-shadow(0 8px 10px rgba(50,35,8,.32)); transition: transform .18s cubic-bezier(.2,.8,.2,1), filter .18s; }
+.cat-medal-shape:not(.no-medal) .star-cat-icon { display: none; }
+.star-cat-item:active .cat-medal { transform: scale(.94); }
+.cat-medal-shape.active .cat-medal { filter: drop-shadow(0 0 10px rgba(123,203,58,.85)) drop-shadow(0 8px 10px rgba(50,35,8,.32)); }
+.cat-pill { margin-top: 7px; padding: 5px 10px; border-radius: 14px; font-size: 11px; font-weight: 800; color: #1f2d1c;
+  background: linear-gradient(180deg, #fffaf0, #efe4cc); border: 1.5px solid #d9b45a;
+  box-shadow: 0 4px 9px rgba(80,60,20,.2), inset 0 1px 0 #fff, inset 0 -2px 0 rgba(160,120,40,.16);
+  white-space: normal; display: block; overflow: hidden; line-height: 1.2; max-width: 100%; box-sizing: border-box; text-align: center; }
+.cat-pill > span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+body.dark-mode .cat-pill { color: #f3ead2; background: linear-gradient(180deg, #3a3326, #262118); border-color: #a8873e; box-shadow: 0 4px 9px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.08); }

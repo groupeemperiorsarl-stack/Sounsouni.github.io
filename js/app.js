@@ -16547,6 +16547,18 @@ function renderFacetedStar(uid, active) {
   return svg;
 }
 
+// Médaillons des catégories (or gravé, émeraudes, velours, dôme de verre) :
+// images préparées à l'avance avec Blender, ~20 Ko chacune, dans img/cat/.
+var CATEGORY_MEDALS = {
+  "Tout": "bags", "Mode Femme": "corset", "Mode Homme": "tie", "Mode Enfant": "tshirt", "Chaussures": "shoe",
+  "Bijoux & Accessoires": "watch", "Beauté & Cosmétiques": "perfume", "Électronique & Téléphones": "phone", "Informatique": "laptop",
+  "Électroménager": "fridge", "Solaire & Énergie": "solar", "Maison & Décoration": "sofa", "Cuisine & Ustensiles": "pot",
+  "Alimentation & Épicerie": "avocado", "Boissons": "water", "Agriculture & Élevage": "plant", "Bricolage & Outillage": "tools",
+  "Automobile & Moto": "car", "Sport & Loisirs": "ball", "Jouets & Jeux": "duck", "Bébé & Puériculture": "babybottle",
+  "Bureautique & Fournitures": "pencils", "Art & Artisanat local": "djembe", "Santé & Bien-être": "pills",
+  "E-books & Livres numériques": "ebook", "Formations & Cours en ligne": "gradcap", "Logiciels & Applications": "apps",
+  "Musique, Vidéos & Créations": "headphones", "Documents & Modèles": "docs", "Autre": "gift"
+};
 function renderCategoryStars() {
   var starCfg = getSectionStyleConfig("category_stars_config", { title: t("market_section_categories_default"), textColor: "var(--text-primary)", shapeColor: "#0a5c36" });
   var row1 = [], row2 = [];
@@ -16560,11 +16572,19 @@ function renderCategoryStars() {
         var c = list[j];
         var isActive = state.category === c.name;
         inner += '<button class="star-cat-item" data-action="set-category" data-value="' + esc(c.name) + '">';
-        inner += '<span class="star-cat-shape ' + (isActive ? 'active' : '') + '">';
-        inner += '<img loading="lazy" class="star-cat-frame" src="' + STAR_FRAME_IMG + '" alt="" />';
+        var medal = CATEGORY_MEDALS[c.name];
+        if (medal) {
+          // Médaillon photoréaliste (rendu Blender) ; si l'image ne charge pas,
+          // on revient tout seul à l'ancien anneau + émoji.
+          inner += '<span class="star-cat-shape cat-medal-shape ' + (isActive ? 'active' : '') + '">';
+          inner += '<img loading="lazy" decoding="async" class="cat-medal" src="img/cat/' + medal + '.webp?v=1" alt="" onerror="this.onerror=null;this.className=\'star-cat-frame\';this.src=STAR_FRAME_IMG;this.parentNode.classList.add(\'no-medal\')" />';
+        } else {
+          inner += '<span class="star-cat-shape no-medal ' + (isActive ? 'active' : '') + '">';
+          inner += '<img loading="lazy" class="star-cat-frame" src="' + STAR_FRAME_IMG + '" alt="" />';
+        }
         inner += '<span class="star-cat-icon">' + c.icon + '</span>';
         inner += '</span>';
-        inner += '<span class="star-cat-label">' + esc(translateCategory(c.name)) + '</span>';
+        inner += '<span class="star-cat-label cat-pill"><span>' + esc(translateCategory(c.name)) + '</span></span>';
         inner += '</button>';
       }
     }
