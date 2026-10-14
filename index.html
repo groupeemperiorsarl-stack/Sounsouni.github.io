@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-14-d";
+    window.SOUNSOUNI_VERSION = "2026-10-14-e";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -20181,8 +20181,10 @@ function openLigdicashPage(url, returnPrefix, txn) {
   };
   var onNav = function(ev) { var u = ev && (ev.url || ev.URL); if (u && u.indexOf(returnPrefix) === 0) { cancelled = /[?&]r=annule/.test(u); finish(true); } };
   try {
-    ["browserPageNavigationCompleted", "browserPageLoaded"].forEach(function(n) { var h = IAB.addListener(n, onNav); if (h && h.then) h.then(function(x) { handles.push(x); }); else handles.push(h); });
     var hc = IAB.addListener("browserClosed", function() { finish(false); }); if (hc && hc.then) hc.then(function(x) { handles.push(x); }); else handles.push(hc);
+  } catch (e) {}
+  try {
+    ["browserPageNavigationCompleted", "browserPageLoaded"].forEach(function(n) { var h = IAB.addListener(n, onNav); if (h && h.then) h.then(function(x) { handles.push(x); }); else handles.push(h); });
   } catch (e) {}
   // Filet de sécurité : on demande régulièrement le statut au serveur ; dès
   // que LigdiCash a tranché, la fenêtre se ferme toute seule.
