@@ -1,7 +1,7 @@
 # Recadre chaque médaillon, carré 240 px, webp léger → img/cat/
 from PIL import Image
 import glob, os
-src = '/tmp/claude-0/-home-claude/24c68de7-e3d6-5a53-a13a-e15c79004fc0/scratchpad/blender/hq/'
+src = '/tmp/claude-0/-home-claude/24c68de7-e3d6-5a53-a13a-e15c79004fc0/scratchpad/blender/hqB/'
 dst = '/home/claude/sounsouni.github.io/img/cat/'; os.makedirs(dst, exist_ok=True)
 tot = 0
 for f in sorted(glob.glob(src + '*.png')):

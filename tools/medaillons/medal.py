@@ -6,6 +6,11 @@ KIND, OUT = args[0], args[1]
 SIZE = int(args[2]) if len(args) > 2 else 640
 SPP = int(args[3]) if len(args) > 3 else 128
 HERE = os.path.dirname(os.path.abspath(__file__))
+V = os.environ.get('SNS_V', '')
+def M(r):
+    return 0.77 + (r - 0.64) * 0.647 if V else r
+ZK = 0.85 if V else 1.0
+TK = 0.75 if V else 1.0
 GLTF = os.path.join(HERE, '..', 'gltf')
 bpy.ops.wm.read_factory_settings(use_empty=True)
 sc = bpy.context.scene
@@ -27,7 +32,7 @@ def bsdf(nodes): return nodes.get('Principled BSDF')
 w = bpy.data.worlds.new('w'); sc.world = w; w.use_nodes = True
 wn, wl = w.node_tree.nodes, w.node_tree.links
 env = wn.new('ShaderNodeTexEnvironment')
-env.image = bpy.data.images.load('/home/claude/blend/lib/python3.13/site-packages/bpy/5.2/datafiles/studiolights/world/interior.exr')
+env.image = bpy.data.images.load('/home/claude/blend/lib/python3.13/site-packages/bpy/5.2/datafiles/studiolights/world/' + (os.environ.get('SNS_ENV') or ('studio' if V else 'interior')) + '.exr')
 bg = wn['Background']; bg.inputs['Strength'].default_value = 0.55
 mp = wn.new('ShaderNodeMapping'); mp.inputs['Rotation'].default_value = (0, 0, math.radians(200))
 tcw = wn.new('ShaderNodeTexCoord'); wl.new(tcw.outputs['Generated'], mp.inputs['Vector']); wl.new(mp.outputs['Vector'], env.inputs['Vector'])
@@ -94,6 +99,7 @@ A(0.893, 0.072); A(0.905, 0.062)
 arc(0.955, 0.062, 0.05, math.pi, 0, 20)
 A(1.008, -0.10)
 nP = len(prof)
+prof = [(M(r), z * ZK) for r, z in prof]
 ring = lathe('ring', prof, 360, gold, uv_band=((band0) / (nP - 1), (band1 - 1) / (nP - 1)))
 # filets concentriques
 def torus(name, R, r, z, material, maj=256, mino=16):
@@ -101,20 +107,20 @@ def torus(name, R, r, z, material, maj=256, mino=16):
     o = bpy.context.active_object; o.name = name; o.data.materials.append(material)
     for p in o.data.polygons: p.use_smooth = True
     return o
-torus('fil1', 0.705, 0.010, 0.07, gold_plain); torus('fil2', 0.895, 0.011, 0.082, gold_plain); torus('fil3', 1.012, 0.014, -0.02, gold_plain)
+torus('fil1', M(0.705), 0.010 * TK, 0.07 * ZK, gold_plain); torus('fil2', M(0.895), 0.011 * TK, 0.082 * ZK, gold_plain); torus('fil3', M(1.012), 0.014 * TK, -0.02, gold_plain)
 
-bpy.ops.mesh.primitive_uv_sphere_add(radius=0.0135, segments=12, ring_count=8)
+bpy.ops.mesh.primitive_uv_sphere_add(radius=0.0135 * TK, segments=12, ring_count=8)
 bead = bpy.context.active_object; bead.data.materials.append(gold_plain)
 for p in bead.data.polygons: p.use_smooth = True
 NB = 150
 for i in range(NB):
     a = 2 * math.pi * (i + 0.5) / NB
     for rr, zz in ((0.742, 0.142), (0.858, 0.142)):
-        b = bead.copy(); b.data = bead.data; sc.collection.objects.link(b); b.location = (rr * math.cos(a), rr * math.sin(a), zz)
+        b = bead.copy(); b.data = bead.data; sc.collection.objects.link(b); b.location = (M(rr) * math.cos(a), M(rr) * math.sin(a), zz * ZK)
 bpy.data.objects.remove(bead)
 for i in range(10):
     a = math.pi / 2 + 2 * math.pi * (i + 0.5) / 10
-    bpy.ops.mesh.primitive_uv_sphere_add(radius=0.024, segments=20, ring_count=12, location=(0.80 * math.cos(a), 0.80 * math.sin(a), 0.172))
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=0.024 * TK, segments=20, ring_count=12, location=(M(0.80) * math.cos(a), M(0.80) * math.sin(a), 0.172 * ZK))
     f = bpy.context.active_object; f.data.materials.append(gold_plain)
     for p in f.data.polygons: p.use_smooth = True
 # ---------- émeraudes taille brillant (verre physique) ----------
@@ -144,34 +150,36 @@ def brilliant(name, rad, depth):
 NG = 10
 for i in range(NG):
     a = math.pi / 2 + 2 * math.pi * i / NG
-    x, y = 0.955 * math.cos(a), 0.955 * math.sin(a)
-    gm = brilliant('gem%d' % i, 0.075, 0.07); gm.location = (x, y, 0.135)
-    c = torus('cup%d' % i, 0.083, 0.02, 0.118, gold_plain, 48, 12); c.location = (x, y, 0.118)
+    GK = 0.82 if V else 1.0
+    x, y = M(0.955) * math.cos(a), M(0.955) * math.sin(a)
+    gm = brilliant('gem%d' % i, 0.075 * GK, 0.07 * GK); gm.location = (x, y, 0.135 * ZK)
+    c = torus('cup%d' % i, 0.083 * GK, 0.02 * GK, 0.118 * ZK, gold_plain, 48, 12); c.location = (x, y, 0.118 * ZK)
     for k in range(4):
         pa = 2 * math.pi * k / 4 + math.pi / 4 + a
-        bpy.ops.mesh.primitive_uv_sphere_add(radius=0.022, segments=16, ring_count=10, location=(x + 0.082 * math.cos(pa), y + 0.082 * math.sin(pa), 0.16))
+        bpy.ops.mesh.primitive_uv_sphere_add(radius=0.022 * GK, segments=16, ring_count=10, location=(x + 0.082 * GK * math.cos(pa), y + 0.082 * GK * math.sin(pa), 0.16 * ZK))
         pr = bpy.context.active_object; pr.data.materials.append(gold_plain)
         for p in pr.data.polygons: p.use_smooth = True
 
 # ---------- velours vert (cuvette) ----------
 vel, vn, vl = mat('velvet'); v = bsdf(vn)
-v.inputs['Base Color'].default_value = (0.006, 0.09, 0.03, 1); v.inputs['Roughness'].default_value = 0.9
-v.inputs['Sheen Weight'].default_value = 0.7; v.inputs['Sheen Tint'].default_value = (0.25, 0.7, 0.32, 1); v.inputs['Sheen Roughness'].default_value = 0.35
+v.inputs['Base Color'].default_value = (0.018, 0.20, 0.07, 1) if V else (0.006, 0.09, 0.03, 1); v.inputs['Roughness'].default_value = 0.9
+v.inputs['Sheen Weight'].default_value = 0.7; v.inputs['Sheen Tint'].default_value = (0.5, 1.0, 0.55, 1) if V else (0.25, 0.7, 0.32, 1); v.inputs['Sheen Roughness'].default_value = 0.35
 vnoise = vn.new('ShaderNodeTexNoise'); vnoise.inputs['Scale'].default_value = 600; vnoise.inputs['Detail'].default_value = 4
 vb = vn.new('ShaderNodeBump'); vb.inputs['Strength'].default_value = 0.25
 vl.new(vnoise.outputs['Fac'], vb.inputs['Height']); vl.new(vb.outputs['Normal'], v.inputs['Normal'])
-vprof = [(0.0005 + 0.67 * i / 24, -0.075 + 0.055 * (i / 24) ** 2) for i in range(25)]
+vprof = [(0.0005 + M(0.67) * i / 24, -0.075 + 0.055 * (i / 24) ** 2) for i in range(25)]
 lathe('velvet', vprof, 180, vel)
 
 # ---------- dôme de verre (vrai verre, coque mince) ----------
 glass, gln, _ = mat('glass'); gb = bsdf(gln)
 gb.inputs['Base Color'].default_value = (1, 1, 1, 1); gb.inputs['Transmission Weight'].default_value = 1.0
 gb.inputs['Roughness'].default_value = 0.0; gb.inputs['IOR'].default_value = 1.45
-base, hgt = 0.668, 0.25
+base, hgt = M(0.668), 0.25
 Rs = (base * base + hgt * hgt) / (2 * hgt); th = math.asin(base / Rs)
 dprof_out = [(Rs * math.sin(th * (1 - i / 40)), Rs * math.cos(th * (1 - i / 40)) - (Rs - hgt) + 0.03) for i in range(41)]
 dprof_out[-1] = (0.0005, dprof_out[-1][1])
 dome = lathe('dome', dprof_out, 220, glass)
+if V == 'B': dome.hide_render = True
 sol = dome.modifiers.new('s', 'SOLIDIFY'); sol.thickness = 0.012; sol.offset = -1
 
 # ---------- objet de la catégorie ----------
@@ -192,9 +200,11 @@ def fit(root, new, target, rot, lift=0.0, offset=(0, 0)):
             for c in o.bound_box: pts.append(o.matrix_world @ mathutils.Vector(c))
     mn = mathutils.Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)))
     mx = mathutils.Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)))
+    target *= {'A': 1.18, 'B': 1.42}.get(V, 1.0)
     size = max(mx.x - mn.x, mx.y - mn.y); s = target / size
     root.scale = (s, s, s); bpy.context.view_layer.update()
     ctr = (mn + mx) / 2
+    if V == 'B': lift += 0.30
     root.location = (-ctr.x * s + offset[0], -ctr.y * s + offset[1], -mn.z * s - 0.068 + lift)
 
 SPEC = {
@@ -296,6 +306,10 @@ area('key', (-3.0, 3.5, 4.5), 2.5, 260, (1.0, 0.9, 0.75))
 area('fill', (3.5, -1.0, 3.0), 3.0, 60, (1.0, 0.97, 0.9))
 area('bounce', (0.5, -3.5, 1.2), 3.0, 45, (0.6, 1.0, 0.6))
 area('spark', (-1.2, 1.2, 5.0), 0.3, 40, (1, 1, 1))
+if V:
+    sp = bpy.data.lights.new('spot', 'SPOT'); sp.energy = 420; sp.spot_size = math.radians(28); sp.spot_blend = 0.6; sp.color = (1, 0.97, 0.9); sp.shadow_soft_size = 0.4
+    so = bpy.data.objects.new('spot', sp); sc.collection.objects.link(so); so.location = (-1.2, 1.6, 4.6)
+    so.rotation_euler = (mathutils.Vector((0, 0, 0.1)) - so.location).to_track_quat('-Z', 'Y').to_euler()
 
 # ---------- caméra ----------
 cd = bpy.data.cameras.new('cam'); cd.lens = 120; cd.sensor_width = 36
