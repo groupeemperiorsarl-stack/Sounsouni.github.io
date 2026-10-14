@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-11-i";
+    window.SOUNSOUNI_VERSION = "2026-10-14-a";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -16434,6 +16434,8 @@ function registerAccount() {
         if (state.profile && state.profile.id === account.id) state.profile = null;
         var reasonMsg = res.error === "phone_already_used" ? "Ce numéro a déjà un compte."
           : res.error === "phone_already_seller" ? "Ce numéro a déjà un compte vendeur."
+          : res.error === "login_required_for_phone" ? "Ce numéro a déjà un compte. Connectez-vous d'abord avec ce numéro, puis ajoutez votre boutique."
+          : res.error === "invalid_phone" ? "Numéro de téléphone invalide."
           : "Impossible de créer le compte, réessayez.";
         showToast("❌ " + reasonMsg);
         save();
@@ -26136,7 +26138,9 @@ function authHeaders(extra, useAdminToken) {
 function createAccountSecurely(account) {
   return fetch(supabaseConfig.url + "/functions/v1/create-account", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+    // Le jeton de session (si on est déjà connecté) prouve que ce numéro
+    // est bien le nôtre quand on ajoute une boutique sur le même numéro.
+    headers: authHeaders(),
     body: JSON.stringify({ account: account })
   })
     .then(function(r) { return r.json(); })
