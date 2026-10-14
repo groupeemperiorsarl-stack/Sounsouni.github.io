@@ -2,7 +2,7 @@
 // une courte description, pour que WhatsApp / Facebook affichent un bel aperçu
 // quand on partage le lien. La page renvoie aussitôt vers l'article dans l'app.
 import fs from "node:fs";
-const html = fs.readFileSync("index.html", "utf8");
+const html = fs.readFileSync(fs.existsSync("js/app.js") ? "js/app.js" : "index.html", "utf8");
 const url = (html.match(/url:\s*"(https:\/\/[a-z0-9]+\.supabase\.co)"/) || [])[1];
 const key = (html.match(/anonKey:\s*"([^"]+)"/) || [])[1];
 if (!url || !key) throw new Error("configuration Supabase introuvable dans index.html");

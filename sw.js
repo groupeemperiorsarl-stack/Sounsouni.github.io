@@ -10,7 +10,11 @@
 // Le nom change à chaque correctif important (v1 -> v2) : ça force les
 // téléphones qui avaient déjà l'ancienne version à tout nettoyer et
 // repartir sur une base saine, une bonne fois pour toutes.
-const CACHE_NAME = "sounsouni-shell-v2";
+const CACHE_NAME = "sounsouni-shell-v3";
+// Fichiers de l'application (code, style, textes, images) : gardés sur le
+// téléphone. Leur adresse contient le numéro de version (?v=...) ou une
+// empreinte (img/e/...), donc une nouvelle version = une nouvelle adresse.
+const ASSET_CACHE = "sounsouni-assets-v1";
 const SHELL_FILES = [
   "./index.html",
   "./manifest.json",
@@ -42,7 +46,7 @@ self.addEventListener("activate", function (event) {
     caches.keys().then(function (names) {
       return Promise.all(
         names
-          .filter(function (name) { return name !== CACHE_NAME; })
+          .filter(function (name) { return name !== CACHE_NAME && name !== ASSET_CACHE; })
           .map(function (name) { return caches.delete(name); })
       );
     })
@@ -68,6 +72,30 @@ self.addEventListener("fetch", function (event) {
     event.respondWith(
       fetch(event.request, { cache: "no-store" }).catch(function () {
         return caches.match("./index.html");
+      })
+    );
+    return;
+  }
+
+  // Code, style, textes et images de l'app : cache d'abord (ouverture quasi
+  // instantanée), réseau la première fois. Quand une nouvelle version d'un
+  // fichier arrive, les anciennes versions de ce même fichier sont effacées.
+  var u = new URL(url);
+  if (/^\/(js|css|img\/e)\//.test(u.pathname)) {
+    event.respondWith(
+      caches.open(ASSET_CACHE).then(function (cache) {
+        return cache.match(event.request).then(function (hit) {
+          if (hit) return hit;
+          return fetch(event.request).then(function (res) {
+            if (res && res.ok) {
+              cache.put(event.request, res.clone());
+              cache.keys().then(function (keys) {
+                keys.forEach(function (k) { var ku = new URL(k.url); if (ku.pathname === u.pathname && ku.search !== u.search) cache.delete(k); });
+              });
+            }
+            return res;
+          });
+        });
       })
     );
     return;
