@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-14-f";
+    window.SOUNSOUNI_VERSION = "2026-10-14-g";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -20164,11 +20164,20 @@ function renderLigdiWaiting() {
   html += '</div></div>';
   return html;
 }
+// Version d'Android du téléphone (pour choisir le bon navigateur intégré).
+(function readAndroidSdk() {
+  try {
+    var D = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Device;
+    if (D && D.getInfo) D.getInfo().then(function(i) { if (i && i.androidSDKVersion) window._androidSdk = Number(i.androidSDKVersion) || 0; }).catch(function() {});
+  } catch (e) {}
+})();
 function nativeInAppBrowser() {
   try {
     var C = window.Capacitor;
     if (!(C && C.isNativePlatform && C.isNativePlatform() && C.Plugins)) return null;
-    if (C.Plugins.InAppBrowser) return C.Plugins.InAppBrowser;
+    // Vrai navigateur intégré (sans barre d'adresse, bouton « Fermer ») :
+    // seulement à partir d'Android 8 (API 26), là où ce module fonctionne.
+    if (C.Plugins.InAppBrowser && (window._androidSdk || 0) >= 26) return C.Plugins.InAppBrowser;
     // Navigateur intégré « léger » (@capacitor/browser) : marche sur tous les
     // téléphones Android, même anciens. La page s'ouvre par-dessus l'app,
     // avec une croix pour revenir. On l'habille comme l'autre module.
