@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-14-e";
+    window.SOUNSOUNI_VERSION = "2026-10-14-f";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -20165,7 +20165,20 @@ function renderLigdiWaiting() {
   return html;
 }
 function nativeInAppBrowser() {
-  try { var C = window.Capacitor; if (C && C.isNativePlatform && C.isNativePlatform() && C.Plugins && C.Plugins.InAppBrowser) return C.Plugins.InAppBrowser; } catch (e) {}
+  try {
+    var C = window.Capacitor;
+    if (!(C && C.isNativePlatform && C.isNativePlatform() && C.Plugins)) return null;
+    if (C.Plugins.InAppBrowser) return C.Plugins.InAppBrowser;
+    // Navigateur intégré « léger » (@capacitor/browser) : marche sur tous les
+    // téléphones Android, même anciens. La page s'ouvre par-dessus l'app,
+    // avec une croix pour revenir. On l'habille comme l'autre module.
+    var B = C.Plugins.Browser;
+    if (B && B.open) return {
+      openInWebView: function(o) { return B.open({ url: o.url, toolbarColor: "#ff7900", presentationStyle: "fullscreen" }); },
+      addListener: function(name, fn) { if (name !== "browserClosed") return null; return B.addListener ? B.addListener("browserFinished", fn) : null; },
+      close: function() { try { var r = B.close(); if (r && r.catch) r.catch(function() {}); } catch (e) {} }
+    };
+  } catch (e) {}
   return null;
 }
 function openLigdicashPage(url, returnPrefix, txn) {
