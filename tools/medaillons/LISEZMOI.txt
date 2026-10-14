@@ -4,3 +4,4 @@ Modèles réalistes libres : github.com/KhronosGroup/glTF-Sample-Assets (dossier
 Rendre un médaillon : blend/bin/python medal.py shoe sortie.png 640 128
 Puis export.py (recadrage, 240 px, webp). Correspondance catégorie → image : CATEGORY_MEDALS dans js/app.js.
 Version actuelle (option B, l'objet sort du cadre) : SNS_V=B ; casserole et outils avec SNS_ENV=courtyard. Liste et angles : hqB.sh
+Version 2026-10-14-n : objets générés par Gemini (une image de 30 objets), fonds retirés avec rembg (logiciel libre), posés dans cadre_vide.png par compose_gemini.py.

@@ -16577,7 +16577,7 @@ function renderCategoryStars() {
           // Médaillon photoréaliste (rendu Blender) ; si l'image ne charge pas,
           // on revient tout seul à l'ancien anneau + émoji.
           inner += '<span class="star-cat-shape cat-medal-shape ' + (isActive ? 'active' : '') + '">';
-          inner += '<img loading="lazy" decoding="async" class="cat-medal" src="img/cat/' + medal + '.webp?v=2" alt="" onerror="this.onerror=null;this.className=\'star-cat-frame\';this.src=STAR_FRAME_IMG;this.parentNode.classList.add(\'no-medal\')" />';
+          inner += '<img loading="lazy" decoding="async" class="cat-medal" src="img/cat/' + medal + '.webp?v=3" alt="" onerror="this.onerror=null;this.className=\'star-cat-frame\';this.src=STAR_FRAME_IMG;this.parentNode.classList.add(\'no-medal\')" />';
         } else {
           inner += '<span class="star-cat-shape no-medal ' + (isActive ? 'active' : '') + '">';
           inner += '<img loading="lazy" class="star-cat-frame" src="' + STAR_FRAME_IMG + '" alt="" />';
