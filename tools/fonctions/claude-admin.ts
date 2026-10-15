@@ -182,6 +182,39 @@ Deno.serve(async (req) => {
       return json({ success: true, setting: doc });
     }
 
+    // ---- Tests d'intégration LigdiCash ----
+    if (op === "ligdicash_test_link") {
+      // Lien de paiement « test » : ne crédite aucun portefeuille, ne touche à aucune commande.
+      const amount = Math.round(Number(body.amount) || 10); if (amount < 1 || amount > 1000) return json({ success: false, error: "amount_1_1000" }, 400);
+      const apiKey = Deno.env.get("LIGDICASH_API_KEY"), authToken = Deno.env.get("LIGDICASH_AUTH_TOKEN");
+      if (!apiKey || !authToken) return json({ success: false, error: "ligdicash_not_configured" }, 500);
+      const base = Deno.env.get("LIGDICASH_BASE_URL") || "https://app.ligdicash.com", site = Deno.env.get("FRONTEND_URL") || "https://sounsouni.pro";
+      const rand = Array.from(crypto.getRandomValues(new Uint8Array(5))).map((b) => b.toString(36).padStart(2, "0")).join("").toUpperCase();
+      const transactionId = "SNST" + Date.now().toString(36).toUpperCase() + rand;
+      const txn: any = { transactionId, kind: "test", refId: "test:" + transactionId, buyerId: null, amount, status: "pending", ligdicashToken: null, createdAt: Date.now(), mode: "redirect", note: "Test d'intégration LigdiCash" };
+      await putDoc("ligdicashTransactions", { ...txn, id: transactionId });
+      const back = site + "/?ligdicash=retour&txn=" + transactionId;
+      const res: any = await fetch(base + "/pay/v01/redirect/checkout-invoice/create", { method: "POST", headers: { "Apikey": apiKey, "Authorization": "Bearer " + authToken, "Accept": "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({ commande: { invoice: { items: [], total_amount: amount, devise: "XOF", description: "Test d'intégration Sounsouni", customer: "", customer_firstname: "Test", customer_lastname: "LigdiCash", customer_email: "", external_id: "", otp: "" },
+          store: { name: "Sounsouni", website_url: site }, actions: { cancel_url: back + "&r=annule", return_url: back + "&r=ok", callback_url: Deno.env.get("SUPABASE_URL") + "/functions/v1/ligdicash-callback" }, custom_data: { transaction_id: transactionId } } }) }).then((r) => r.json()).catch(() => null);
+      if (!res || res.response_code !== "00" || !res.token) {
+        await putDoc("ligdicashTransactions", { ...txn, id: transactionId, status: "creation_failed", error: String((res && res.response_text) || "network").slice(0, 200) });
+        return json({ success: false, error: "ligdicash_error", detail: res }, 502);
+      }
+      await putDoc("ligdicashTransactions", { ...txn, id: transactionId, ligdicashToken: res.token, paymentUrl: res.response_text, history: [{ at: Date.now(), type: "create", response_code: res.response_code }] });
+      await log("lien_test_ligdicash", transactionId, amount + " FCFA");
+      return json({ success: true, transactionId, amount, paymentUrl: res.response_text });
+    }
+    if (op === "ligdicash_logs") {
+      const since = Number(body.since) || 0;
+      const { data } = await db.from("app_data").select("data").eq("collection", "ligdicashTransactions").eq("data->>kind", "callback_log").order("updated_at", { ascending: false }).limit(Math.min(Number(body.limit) || 50, 200));
+      return json({ success: true, logs: (data || []).map((r: any) => r.data).filter((x: any) => Number(x.receivedAt) >= since) });
+    }
+    if (op === "ligdicash_txn") {
+      const t = await getDoc("ligdicashTransactions", String(body.id || "")); if (!t) return json({ success: false, error: "not_found" }, 404);
+      const { ligdicashToken, ...rest } = t; return json({ success: true, transaction: rest });
+    }
+
     return json({ success: false, error: "unknown_op" }, 400);
   } catch (e) {
     console.error("claude-admin", e);
