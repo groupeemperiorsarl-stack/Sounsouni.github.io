@@ -420,6 +420,8 @@
     repere_gate_intro: "Ça aide beaucoup le livreur à vous trouver — une fois rempli, c'est enregistré avec votre adresse et on ne vous le redemandera plus.",
     repere_gate_optional: "(optionnel)",
     repere_gate_no_gps: "Aucune position GPS n'est enregistrée sur cette adresse — ce champ est donc obligatoire pour pouvoir vous livrer.",
+    checkout_back_product: "Retour à l'article",
+    checkout_back_cart: "Retour au panier",
     checkout_title: "Livraison & paiement",
     checkout_deal_badge: "🔥 Beaucoup moins cher",
     at_word: "à",

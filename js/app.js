@@ -6600,6 +6600,7 @@ function buyNow(productId, qty, color, size) {
     showToast(t("toast_choose_size"));
     return;
   }
+  if (state.view !== "checkout") state.checkoutReturnView = state.view;
   state.quickBuyItem = { productId: productId, qty: Math.max(1, qty || 1), color: color || null, size: size || null };
   state.detailProductId = null;
   modalWasOpenFor = null;
@@ -16953,13 +16954,10 @@ function renderMarketTopSection(compact) {
   html += '</div>';
 
   if (!compact) {
-    // Nouveau design : bandeau vert en relief + fourgonnette Sounsouni en 3D
-    // (image fixe tout de suite ; vraie 3D animée seulement quand le bandeau
-    // est à l'écran et que le téléphone le permet — voir js/sns3d.js).
-    html += '<div class="gems-delivery-banner sns-van-banner"><div class="sns-van-text"><span class="gems-delivery-tag">' + t("market_delivery_tag") + '</span>';
-    html += '<div class="gems-delivery-title">' + t("market_delivery_title") + '</div>';
-    html += '<div class="gems-delivery-sub">' + t("market_delivery_sub") + '</div></div>';
-    html += '<div class="sns-van-3d" id="sns-van-3d" data-sns3d="van"><img src="img/3d/van.webp" alt="" width="520" height="341" decoding="async" /></div></div>';
+    // Bandeau livraison : image complète choisie par Issa (camionnette,
+    // motos, panier pommes-cannelle, mosquée de Djenné). Le texte est dans
+    // l'image ; il reste lu par les lecteurs d'écran grâce à aria-label.
+    html += '<div class="gems-delivery-banner sns-livraison-banner" role="img" aria-label="' + esc(t("market_delivery_tag") + " — " + t("market_delivery_title") + ". " + t("market_delivery_sub")) + '"><img src="img/3d/livraison-banner.webp" alt="" width="1000" height="465" decoding="async" /></div>';
   }
 
   html += '</div>';
@@ -17714,7 +17712,7 @@ function renderInternationalCheckout() {
   var rate = getInrToXofRate();
   var totalXof = Math.round(totalInr * rate);
 
-  var html = '<button class="link-btn" style="margin-bottom:14px" data-action="go-to-market-home"><i class="fa-solid fa-arrow-left"></i> ' + t("relais_apply_back") + '</button>';
+  var html = '<button class="link-btn" style="margin-bottom:14px" data-action="checkout-back"><i class="fa-solid fa-arrow-left"></i> ' + t(state.quickBuyItem ? "checkout_back_product" : "checkout_back_cart") + '</button>';
   html += '<div class="section-title" style="margin-bottom:4px;"><i class="fa-solid fa-earth-asia"></i> ' + t("intlco_title") + '</div>';
   html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:16px;">' + t("intlco_explainer") + '</div>';
 
@@ -17841,7 +17839,7 @@ function renderCheckout() {
   }
   var items = checkoutItems();
   
-  var html = '<div class="checkout-view"><div class="section-title">' + t("checkout_title") + '</div>';
+  var html = '<div class="checkout-view"><button class="link-btn checkout-back-btn" data-action="checkout-back"><i class="fa-solid fa-arrow-left"></i> ' + t(state.quickBuyItem ? "checkout_back_product" : "checkout_back_cart") + '</button><div class="section-title">' + t("checkout_title") + '</div>';
   if (state.showAddressRequiredPopup) {
     html += '<div class="glass-card" style="position:relative;padding:14px 34px 14px 14px;margin-bottom:14px;background:rgba(255,159,10,0.12);border:1.5px solid #ff9f0a;">';
     html += '<button type="button" data-action="dismiss-address-required-popup" style="position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.08);border:none;color:var(--text-secondary);font-size:11px;"><i class="fa-solid fa-xmark"></i></button>';
@@ -26406,6 +26404,25 @@ root.addEventListener("click", function(e) {
         save();
       }
       render();
+      break;
+    }
+    case "checkout-back": {
+      // Retour depuis « Livraison & paiement » : achat direct → on rouvre la
+      // fiche de l'article (avec la quantité/couleur/taille déjà choisies) ;
+      // achat depuis le panier → retour au panier. Rien n'est payé.
+      var cbq = state.quickBuyItem;
+      state.ligdiChoose = null; state.showAddressRequiredPopup = false;
+      if (cbq) {
+        state.quickBuyItem = null;
+        var cbv = state.checkoutReturnView;
+        state.view = (cbv && cbv !== "checkout" && cbv !== "onboarding") ? cbv : "market";
+        state.detailProductId = cbq.productId; state.activeImageIndex = 0;
+        state.selectedQty = cbq.qty || 1; state.selectedColor = cbq.color || null; state.selectedSize = cbq.size || null;
+        modalWasOpenFor = null;
+      } else {
+        state.view = "cart";
+      }
+      save(); render();
       break;
     }
     case "go-checkout-from-cart": {

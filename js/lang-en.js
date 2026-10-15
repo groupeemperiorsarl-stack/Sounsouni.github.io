@@ -420,6 +420,8 @@
     repere_gate_intro: "This really helps the courier find you — once filled in, it is saved with your address and you won't be asked again.",
     repere_gate_optional: "(optional)",
     repere_gate_no_gps: "No GPS location is saved for this address — this field is therefore required so we can deliver to you.",
+    checkout_back_product: "Back to the item",
+    checkout_back_cart: "Back to cart",
     checkout_title: "Delivery & payment",
     checkout_deal_badge: "🔥 Much cheaper",
     at_word: "at",
