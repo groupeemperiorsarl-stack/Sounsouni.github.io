@@ -20378,7 +20378,8 @@ var ADMIN_MODULES_META = {
   filature:           { icon: "fa-user-secret",           get name() { return t("admin_mod_filature"); },     get sub() { return t("admin_mod_filature_sub"); } },
   moderation:         { icon: "fa-shield-virus",           name: "Modération des articles", sub: "Articles signalés ou suspects, en attente de ta décision" },
   versements:         { icon: "fa-money-bill-transfer",   name: "Versements", sub: "Vendeurs : chaque jour à 17 h · Points de retrait : le mardi" },
-  test:               { icon: "fa-bug",                    name: "Test", sub: "Journaux d'erreurs et diagnostics" }
+  test:               { icon: "fa-bug",                    name: "Test", sub: "Journaux d'erreurs et diagnostics" },
+  claude:             { icon: "fa-robot",                  name: "Accès Claude", sub: "Ce que l'assistant Claude peut faire, et tout ce qu'il a fait" }
 };
 
 // Nombre d'éléments en attente pour chaque module — utilisé pour le badge
@@ -20573,7 +20574,7 @@ function renderAdmin() {
   }
 
   // ---- Modules valides pour ce rôle (Groupe 1 complet, Groupe 2 restreint) ----
-  var validTabsOwner = ["dashboard","comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","moderation","versements","filature","test"];
+  var validTabsOwner = ["dashboard","comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","moderation","versements","filature","test","claude"];
   var validTabsEmployee = ["dashboard","comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","pub","reviews","moderation","versements","partenaires"];
   var validTabs = isOwner ? validTabsOwner : validTabsEmployee;
   if (validTabs.indexOf(state.adminTab) === -1) state.adminTab = "dashboard";
@@ -20617,6 +20618,7 @@ function renderAdmin() {
   else if (state.adminTab === "filature" && currentAdminHasFilatureAccess()) html += renderAdminFilature();
   else if (state.adminTab === "versements") html += renderAdminVersements();
   else if (state.adminTab === "test") html += renderAdminTest();
+  else if (state.adminTab === "claude") html += renderAdminClaude();
 
   html += '</div></div>';
   return html;
@@ -22489,7 +22491,7 @@ function renderAdminDashboard(stats) {
 
   // ---- Grille des modules — cœur de la navigation du centre de contrôle ----
   var tileList = state.adminIsOwner
-    ? ["comptes","vendeurs","versements","disputes","moderation","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","test"]
+    ? ["comptes","vendeurs","versements","disputes","moderation","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","claude","test"]
     : ["comptes","vendeurs","versements","disputes","moderation","relaisapplications","livreurapplications","quartiers","messagerie","pub","reviews","partenaires"];
   html += '<div class="section-head" style="display:flex;align-items:baseline;justify-content:space-between;margin:20px 0 12px;"><h2 style="font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--mc-dim);font-weight:700;margin:0;">' + t("ad_modules_title") + '</h2></div>';
   html += renderAdminTileGrid(tileList);
@@ -23293,6 +23295,65 @@ function renderAdminAccountDetail(accountId) {
   return html;
 }
 
+
+// ---------- ACCÈS CLAUDE (clé technique de l'assistant, fonction claude-admin) ----------
+// Interrupteur + journal de tout ce que Claude a fait. Les deux sont des
+// réglages protégés (settings/claude_access et settings/claude_log) : seul
+// l'admin (ou le serveur) peut les modifier.
+function getSettingDoc(id) {
+  for (var i = 0; i < (state.settings || []).length; i++) { if (state.settings[i] && state.settings[i].id === id) return state.settings[i]; }
+  return null;
+}
+var CLAUDE_OP_LABELS = {
+  article_publie: "Article publié", article_modifie: "Article modifié", article_retire: "Article retiré",
+  pub_vip_creee: "Pub VIP créée", pub_vip_modifiee: "Pub VIP modifiée", pub_vip_supprimee: "Pub VIP supprimée",
+  reglage_modifie: "Réglage modifié", boutique_creee: "Boutique créée", boutique_mise_a_jour: "Boutique mise à jour"
+};
+function renderAdminClaude() {
+  var acc = getSettingDoc("claude_access") || {};
+  var on = acc.enabled === true;
+  var logDoc = getSettingDoc("claude_log") || {};
+  var entries = Array.isArray(logDoc.entries) ? logDoc.entries : [];
+  var official = (state.products || []).filter(function(p) { return p.sellerId === "sounsouni-officiel"; }).length;
+  var html = '<div class="seasonal-effects-panel" style="margin-bottom:12px;">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">';
+  html += '<div style="font-weight:700;font-size:14px;"><i class="fa-solid fa-robot"></i> Accès de Claude</div>';
+  html += '<div class="flex-row"><span style="font-size:12px;color:var(--text-dim);">' + (on ? 'Activé' : 'Coupé') + '</span>';
+  html += '<div class="toggle-switch ' + (on ? 'active' : '') + '" data-action="toggle-claude-access"><div class="toggle-knob"></div></div></div></div>';
+  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:6px;line-height:1.5;">Coupé = Claude ne peut plus rien lire ni rien faire, immédiatement.' + (acc.changedAt ? ' Dernier changement : ' + esc(new Date(acc.changedAt).toLocaleString("fr-FR")) + (acc.changedBy ? ' (' + esc(acc.changedBy) + ')' : '') + '.' : '') + '</div>';
+  html += '</div>';
+  html += '<div class="seasonal-effects-panel" style="margin-bottom:12px;font-size:12px;line-height:1.6;">';
+  html += '<div style="font-weight:700;font-size:13px;margin-bottom:6px;">Ce que Claude peut faire</div>';
+  html += '<div>✅ Voir l\'état de Sounsouni (commandes, paiements, articles, litiges) <b>sans</b> les données personnelles (téléphones, adresses, noms des clients).</div>';
+  html += '<div>✅ Publier, modifier ou retirer les articles de la boutique <b>Sounsouni Officiel</b> (' + official + ' article' + (official > 1 ? 's' : '') + ' aujourd\'hui).</div>';
+  html += '<div>✅ Gérer les pubs VIP et quelques réglages d\'affichage du marché.</div>';
+  html += '<div style="margin-top:6px;">⛔ Jamais : toucher aux articles des autres vendeurs, aux comptes, aux mots de passe, à l\'argent ou à cet interrupteur.</div>';
+  html += '</div>';
+  html += '<div class="seasonal-effects-panel">';
+  html += '<div style="font-weight:700;font-size:13px;margin-bottom:8px;">Journal (' + entries.length + ')</div>';
+  if (!entries.length) html += '<div style="font-size:12px;color:var(--text-dim);">Aucune action pour le moment.</div>';
+  for (var i = 0; i < entries.length && i < 60; i++) {
+    var e = entries[i] || {};
+    html += '<div style="display:flex;gap:8px;padding:7px 0;border-top:1px solid var(--border-color);font-size:12px;">';
+    html += '<div style="flex:0 0 auto;color:var(--text-dim);min-width:92px;">' + esc(new Date(e.at || 0).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })) + '</div>';
+    html += '<div style="min-width:0;"><b>' + esc(CLAUDE_OP_LABELS[e.op] || e.op || "") + '</b>' + (e.summary ? ' — ' + esc(e.summary) : '') + '</div></div>';
+  }
+  html += '</div>';
+  return html;
+}
+function toggleClaudeAccess() {
+  var cur = getSettingDoc("claude_access") || {};
+  var turnOn = cur.enabled !== true;
+  if (!turnOn && !confirm("Couper l'accès de Claude ? Il ne pourra plus rien lire ni rien faire tant que vous ne le rallumez pas.")) return;
+  var doc = { id: "claude_access", enabled: turnOn, changedAt: Date.now(), changedBy: state.profile ? (state.profile.name || "admin") : "admin" };
+  var idx = -1;
+  for (var i = 0; i < state.settings.length; i++) { if (state.settings[i] && state.settings[i].id === "claude_access") { idx = i; break; } }
+  if (idx === -1) state.settings.push(doc); else state.settings[idx] = doc;
+  save();
+  saveDoc("settings", doc);
+  showToast(turnOn ? "Accès de Claude activé" : "Accès de Claude coupé");
+  render();
+}
 
 function renderAdminEffects() {
   var e = state.seasonalEffects;
@@ -30831,6 +30892,7 @@ root.addEventListener("click", function(e) {
     case "lightbox-next": state.lightboxIndex = (state.lightboxIndex + 1) % state.lightboxImages.length; render(); break;
     case "toggle-seasonal": toggleSeasonalEffects(); break;
     case "toggle-market-fx": toggleMarketFx(); break;
+    case "toggle-claude-access": toggleClaudeAccess(); break;
     case "toggle-market-config": {
       var mCfg = getMarketConfig();
       mCfg[value] = !mCfg[value];
