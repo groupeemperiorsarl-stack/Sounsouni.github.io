@@ -12381,6 +12381,25 @@ function applyEmployeeRestrictions() {
   }
 }
 
+// Fiche article : nombre d'articles dans « Vous pourriez aussi aimer » et
+// taille des lots de « Produits du marché ».
+var PD_RELATED_MAX = 9, PD_MARKET_PAGE = 9, PD_MARKET_MAX = 120;
+function setupPdMarketScroll() {
+  var sentinel = document.getElementById("pd-market-sentinel");
+  if (!sentinel || !('IntersectionObserver' in window)) return;
+  var obs = new IntersectionObserver(function(entries) {
+    if (!entries[0].isIntersecting) return;
+    var st = window._pdMarket, grid = document.getElementById("pd-market-grid");
+    if (!st || !st.list || !grid) { obs.disconnect(); return; }
+    var from = st.shown, to = Math.min(from + PD_MARKET_PAGE, st.list.length), add = "";
+    for (var i = from; i < to; i++) add += productCard(st.list[i]);
+    grid.insertAdjacentHTML("beforeend", add);
+    st.shown = to;
+    if (to >= st.list.length) { obs.disconnect(); if (sentinel.parentNode) sentinel.parentNode.removeChild(sentinel); }
+  }, { rootMargin: "300px" });
+  obs.observe(sentinel);
+}
+
 function setupMarketInfiniteScroll() {
   var sentinel = document.getElementById("market-infinite-sentinel");
   if (!sentinel) return;
@@ -12586,6 +12605,7 @@ function render() {
     paintFrameEditor(box.dataset.config);
   });
   setupMarketInfiniteScroll();
+  setupPdMarketScroll();
   
   applyMarketFxClass();
   if (state.seasonalEffects.enabled && state.view !== "onboarding") {
@@ -24537,7 +24557,8 @@ function renderProductModal() {
   // présents — sans cette limite, une catégorie où beaucoup de vendeurs
   // boostent pouvait se retrouver avec une section "que du sponsorisé",
   // ce qui n'est ni honnête ni agréable à voir.
-  var related = capBoostedShare(relatedCandidates, 30, 0.25);
+  // 9 au maximum (3 lignes de 3) : section courte, peu de données.
+  var related = capBoostedShare(relatedCandidates, PD_RELATED_MAX, 0.25);
   if (related.length > 0) {
     html += '<div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">';
     html += '<div style="font-weight:700;font-size:14px;margin-bottom:10px;"><i class="fa-solid fa-star"></i> Vous pourriez aussi aimer</div>';
@@ -24546,18 +24567,29 @@ function renderProductModal() {
     html += '</div></div>';
   }
 
-  // Produits du marché (échantillon général)
+  // Produits du marché : 2 colonnes comme le marché principal, affichés
+  // par lots de 9. Le lot suivant n'arrive que quand le client atteint le
+  // bas de la liste (voir setupPdMarketScroll) — avant, TOUS les articles
+  // s'affichaient d'un coup, avec toutes leurs photos.
+  var relatedIds = {};
+  for (var ri = 0; ri < related.length; ri++) relatedIds[related[ri].id] = true;
   var marketCandidates = [];
   for (var ms = 0; ms < state.products.length; ms++) {
-    if (state.products[ms].id !== p.id) marketCandidates.push(state.products[ms]);
+    var mprod = state.products[ms];
+    if (mprod.id !== p.id && !relatedIds[mprod.id]) marketCandidates.push(mprod);
   }
-  var marketSample = capBoostedShare(marketCandidates, 30, 0.25);
+  var marketSample = capBoostedShare(marketCandidates, PD_MARKET_MAX, 0.25);
+  if (!window._pdMarket || window._pdMarket.pid !== p.id) window._pdMarket = { pid: p.id, shown: PD_MARKET_PAGE };
+  window._pdMarket.list = marketSample;
   if (marketSample.length > 0) {
+    var pdShown = Math.min(window._pdMarket.shown, marketSample.length);
     html += '<div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">';
     html += '<div style="font-weight:700;font-size:14px;margin-bottom:10px;"><i class="fa-solid fa-shop"></i> Produits du marché</div>';
-    html += '<div class="new-arrivals-scroll">';
-    for (var mp = 0; mp < marketSample.length; mp++) html += productCard(marketSample[mp]);
-    html += '</div></div>';
+    html += '<div class="product-grid" id="pd-market-grid">';
+    for (var mp = 0; mp < pdShown; mp++) html += productCard(marketSample[mp]);
+    html += '</div>';
+    if (pdShown < marketSample.length) html += '<div id="pd-market-sentinel" style="height:1px;"></div>';
+    html += '</div>';
   }
 
   // ---- Signalement d'un article (pas pour son propre vendeur) ----
