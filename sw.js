@@ -15,6 +15,14 @@ const CACHE_NAME = "sounsouni-shell-v3";
 // téléphone. Leur adresse contient le numéro de version (?v=...) ou une
 // empreinte (img/e/...), donc une nouvelle version = une nouvelle adresse.
 const ASSET_CACHE = "sounsouni-assets-v1";
+// Photos des articles (stockage public « photo » de Supabase) : ce sont des
+// fichiers, pas des données. Chaque adresse est unique et ne change jamais,
+// on peut donc les garder sur le téléphone : une photo déjà vue n'est plus
+// jamais retéléchargée (gros gain sur le trafic du forfait Supabase).
+// Au plus PHOTO_MAX photos gardées ; les plus anciennes sont effacées.
+const PHOTO_CACHE = "sounsouni-photos-v1";
+const PHOTO_MAX = 600;
+const PHOTO_RE = /^https:\/\/[a-z0-9]+\.supabase\.co\/storage\/v1\/object\/public\/photo\//;
 const SHELL_FILES = [
   "./index.html",
   "./manifest.json",
@@ -46,7 +54,7 @@ self.addEventListener("activate", function (event) {
     caches.keys().then(function (names) {
       return Promise.all(
         names
-          .filter(function (name) { return name !== CACHE_NAME && name !== ASSET_CACHE; })
+          .filter(function (name) { return name !== CACHE_NAME && name !== ASSET_CACHE && name !== PHOTO_CACHE; })
           .map(function (name) { return caches.delete(name); })
       );
     })
@@ -60,6 +68,26 @@ self.addEventListener("fetch", function (event) {
   // Jamais intercepter les appels vers Supabase, ni aucune requête vers un
   // autre domaine (Chart.js, Leaflet, FontAwesome...) — uniquement le
   // réseau en direct, comme si ce service worker n'existait pas pour eux.
+  if (event.request.method === "GET" && PHOTO_RE.test(url) && /\.(jpe?g|png|webp|gif)(\?|$)/i.test(url) && !event.request.headers.get("range")) {
+    event.respondWith(
+      caches.open(PHOTO_CACHE).then(function (cache) {
+        return cache.match(url).then(function (hit) {
+          if (hit) return hit;
+          return fetch(url, { mode: "cors", credentials: "omit" }).then(function (res) {
+            if (res && res.ok && res.status === 200) {
+              cache.put(url, res.clone()).then(function () {
+                cache.keys().then(function (keys) {
+                  for (var i = 0; i < keys.length - PHOTO_MAX; i++) cache.delete(keys[i]);
+                });
+              });
+            }
+            return res;
+          }).catch(function () { return fetch(event.request); });
+        });
+      })
+    );
+    return;
+  }
   if (url.indexOf(self.location.origin) !== 0) return;
   if (event.request.method !== "GET") return;
 

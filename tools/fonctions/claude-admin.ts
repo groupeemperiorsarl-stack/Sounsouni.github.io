@@ -43,7 +43,7 @@ async function uploadImage(b64: string, id: string, i: number) {
   const m = /^data:(image\/(png|jpe?g|webp));base64,(.+)$/.exec(b64); if (!m) throw new Error("bad_image");
   const bin = Uint8Array.from(atob(m[3]), (c) => c.charCodeAt(0)); if (bin.length > 4_000_000) throw new Error("image_too_big");
   const path = "claude/" + id + "-" + i + "-" + Date.now() + "." + (m[2] === "jpeg" ? "jpg" : m[2]);
-  const { error } = await db.storage.from("photo").upload(path, bin, { contentType: m[1], upsert: true }); if (error) throw error;
+  const { error } = await db.storage.from("photo").upload(path, bin, { contentType: m[1], upsert: true, cacheControl: "31536000" }); if (error) throw error;
   return db.storage.from("photo").getPublicUrl(path).data.publicUrl;
 }
 
@@ -148,6 +148,34 @@ Deno.serve(async (req) => {
       }
       await log(created ? "boutique_creee" : "boutique_mise_a_jour", OFFICIAL_ID, "Boutique Sounsouni Officiel");
       return json({ success: true, created, shop: scrub(shop) });
+    }
+
+    // ---- Économie du trafic : vignettes et mémoire longue des photos ----
+    if (op === "thumb_put") {
+      // Vignette WebP (≤ 40 Ko) rangée uniquement sous thumbs/<chemin d'une photo existante>.webp
+      const path = String(body.path || "");
+      if (!/^thumbs\/[A-Za-z0-9._\-\/]+\.(jpe?g|png|webp)\.webp$/.test(path) || path.includes("..")) return json({ success: false, error: "bad_path" }, 400);
+      const m = /^data:image\/webp;base64,(.+)$/.exec(String(body.data || "")); if (!m) return json({ success: false, error: "bad_image" }, 400);
+      const bin = Uint8Array.from(atob(m[1]), (c) => c.charCodeAt(0)); if (bin.length > 40000) return json({ success: false, error: "too_big" }, 400);
+      const orig = path.slice(7, -5); const dir = orig.includes("/") ? orig.slice(0, orig.lastIndexOf("/")) : ""; const name = orig.slice(orig.lastIndexOf("/") + 1);
+      const { data: ex } = await db.storage.from("photo").list(dir, { search: name, limit: 5 }); if (!(ex || []).some((f: any) => f.name === name)) return json({ success: false, error: "original_missing" }, 404);
+      const { error } = await db.storage.from("photo").upload(path, bin, { contentType: "image/webp", upsert: true, cacheControl: "31536000" }); if (error) throw error;
+      return json({ success: true, path });
+    }
+    if (op === "recache") {
+      // Réenvoie des photos existantes à l'identique avec « mémoire 1 an » (même adresse, même contenu).
+      const paths: string[] = (Array.isArray(body.paths) ? body.paths : []).slice(0, 25).map(String);
+      const done: string[] = [], failed: string[] = [];
+      for (const p of paths) {
+        try {
+          if (p.includes("..") || !/\.(jpe?g|png|webp)$/i.test(p)) throw new Error("bad_path");
+          const { data: blob, error: e1 } = await db.storage.from("photo").download(p); if (e1 || !blob) throw e1 || new Error("dl");
+          const { error: e2 } = await db.storage.from("photo").upload(p, blob, { contentType: blob.type || undefined, upsert: true, cacheControl: "31536000" }); if (e2) throw e2;
+          done.push(p);
+        } catch (_) { failed.push(p); }
+      }
+      if (done.length) await log("photos_memoire_longue", String(done.length), done.length + " photo(s) passées à 1 an");
+      return json({ success: true, done: done.length, failed });
     }
 
     if (op === "product_save") return json({ success: true, ...(await productSave(body.product || {})) });

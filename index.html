@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-15-d";
+    window.SOUNSOUNI_VERSION = "2026-10-15-e";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -123,7 +123,7 @@
          (voir snsLoadLib dans js/app.js) — plus rien à télécharger au démarrage. -->
 
     <!-- CSS principal -->
-    <link rel="stylesheet" href="css/app.css?v=2026-10-15-d">
+    <link rel="stylesheet" href="css/app.css?v=2026-10-15-e">
 </head>
 <body>
 <div id="su-upload-loader" role="status" aria-live="polite">
@@ -167,11 +167,11 @@
 
     <!-- JavaScript principal -->
     <!-- Textes : le français toujours (langue de secours), et la langue choisie si c'est une autre -->
-    <script src="js/lang-fr.js?v=2026-10-15-d"></script>
+    <script src="js/lang-fr.js?v=2026-10-15-e"></script>
     <script>(function () { var l = null; try { l = localStorage.getItem("sounsouni_language"); } catch (e) {}
       if (!l) { var n = (navigator.language || navigator.userLanguage || "fr").toLowerCase(); l = n.indexOf("hi") === 0 ? "hi" : (n.indexOf("en") === 0 ? "en" : "fr"); }
-      if (l === "en" || l === "hi") document.write('<script src="js/lang-' + l + '.js?v=2026-10-15-d"><\/script>'); })();</script>
-    <script src="js/app.js?v=2026-10-15-d"></script>
-    <script src="js/sns3d.js?v=2026-10-15-d" defer></script>
+      if (l === "en" || l === "hi") document.write('<script src="js/lang-' + l + '.js?v=2026-10-15-e"><\/script>'); })();</script>
+    <script src="js/app.js?v=2026-10-15-e"></script>
+    <script src="js/sns3d.js?v=2026-10-15-e" defer></script>
 </body>
 </html>
