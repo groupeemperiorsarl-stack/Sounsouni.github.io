@@ -23307,7 +23307,7 @@ function getSettingDoc(id) {
 var CLAUDE_OP_LABELS = {
   article_publie: "Article publié", article_modifie: "Article modifié", article_retire: "Article retiré",
   pub_vip_creee: "Pub VIP créée", pub_vip_modifiee: "Pub VIP modifiée", pub_vip_supprimee: "Pub VIP supprimée",
-  reglage_modifie: "Réglage modifié", boutique_creee: "Boutique créée", boutique_mise_a_jour: "Boutique mise à jour"
+  reglage_modifie: "Réglage modifié", boutique_creee: "Boutique créée", boutique_mise_a_jour: "Boutique mise à jour", lien_test_ligdicash: "Lien de test LigdiCash"
 };
 function renderAdminClaude() {
   var acc = getSettingDoc("claude_access") || {};
