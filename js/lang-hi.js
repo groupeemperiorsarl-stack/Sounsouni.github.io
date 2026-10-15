@@ -1280,7 +1280,7 @@
     ligdi_wait_moov_title: "Moov Money पेज पर पुष्टि करें",
     ligdi_open_moov: "Moov Money पेज खोलें",
     ligdi_wait_push_title: "अपने फ़ोन पर पुष्टि करें",
-    ligdi_wait_push_moov: "आपके फ़ोन पर Moov Money संदेश आएगा: पुष्टि के लिए अपना गुप्त कोड लिखें। Sounsouni पर रहें, हम अपने आप जाँचते हैं।",
+    ligdi_wait_push_moov: "आपके फ़ोन पर Moov Money संदेश आएगा: पुष्टि के लिए अपना गुप्त कोड लिखें। अगर कुछ न दिखे, तो आपको डायल करने के लिए कोड वाला SMS मिलेगा: उसका पालन करें। Sounsouni पर रहें, हम अपने आप जाँचते हैं।",
     ligdi_wait_push_om: "आपके फ़ोन पर Orange Money संदेश आएगा: पुष्टि के लिए अपना गुप्त कोड लिखें। Sounsouni पर रहें, हम अपने आप जाँचते हैं।",
     ligdi_secured_by: "भुगतान सुरक्षित:",
     wallet_topup_btn: "Orange / Moov Money से रिचार्ज करें",

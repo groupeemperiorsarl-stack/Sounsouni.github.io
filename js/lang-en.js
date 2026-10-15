@@ -1280,7 +1280,7 @@
     ligdi_wait_moov_title: "Confirm on the Moov Money page",
     ligdi_open_moov: "Open the Moov Money page",
     ligdi_wait_push_title: "Confirm on your phone",
-    ligdi_wait_push_moov: "A Moov Money message will appear on your phone: type your secret code to confirm. Stay on Sounsouni, we check automatically.",
+    ligdi_wait_push_moov: "A Moov Money message will appear on your phone: type your secret code to confirm. If nothing appears, you will get an SMS with a code to dial: follow it. Stay on Sounsouni, we check automatically.",
     ligdi_wait_push_om: "An Orange Money message will appear on your phone: type your secret code to confirm. Stay on Sounsouni, we check automatically.",
     ligdi_secured_by: "Payment secured by",
     wallet_topup_btn: "Top up with Orange / Moov Money",

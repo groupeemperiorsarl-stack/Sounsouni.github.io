@@ -1280,7 +1280,7 @@
     ligdi_wait_moov_title: "Validez sur la page Moov Money",
     ligdi_open_moov: "Ouvrir la page Moov Money",
     ligdi_wait_push_title: "Validez sur votre téléphone",
-    ligdi_wait_push_moov: "Un message Moov Money va s'afficher sur votre téléphone : tapez votre code secret pour confirmer. Restez sur Sounsouni, nous vérifions automatiquement.",
+    ligdi_wait_push_moov: "Un message Moov Money va s'afficher sur votre téléphone : tapez votre code secret pour confirmer. Si rien ne s'affiche, vous recevrez un SMS avec un code à composer : suivez-le. Restez sur Sounsouni, nous vérifions automatiquement.",
     ligdi_wait_push_om: "Un message Orange Money va s'afficher sur votre téléphone : tapez votre code secret pour confirmer. Restez sur Sounsouni, nous vérifions automatiquement.",
     ligdi_secured_by: "Paiement sécurisé par",
     wallet_topup_btn: "Recharger par Orange / Moov Money",
