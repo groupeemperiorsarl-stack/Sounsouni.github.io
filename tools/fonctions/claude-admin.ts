@@ -92,7 +92,7 @@ async function productSave(input: any) {
     images = [];
     for (let i = 0; i < Math.min(input.images.length, 8); i++) { const v = String(input.images[i]); images.push(v.startsWith("data:") ? await uploadImage(v, id, i) : v.slice(0, 600)); }
   }
-  const allowed = ["description", "category", "stock", "oldPrice", "sizes", "colors", "emoji", "itemType", "tieredPricing", "isQuantifiable", "nameByLang", "fieldsByLang", "fitNote", "video"];
+  const allowed = ["description", "category", "stock", "oldPrice", "sizes", "colors", "colorPrices", "emoji", "itemType", "tieredPricing", "isQuantifiable", "nameByLang", "fieldsByLang", "fitNote", "video"];
   const doc: any = { ...(cur || {}) };
   for (const k of allowed) if (k in input) doc[k] = scrub(input[k]);
   Object.assign(doc, { id, name, price, images, sellerId: OFFICIAL_ID, sellerName: shop.name, shopName: shop.shopName, sellerType: shop.sellerType || "entreprise", sellerSector: shop.sellerSector || "boutique", sellerPhone: shop.shopPhone || shop.phone || "", createdAt: cur?.createdAt || Date.now(), updatedAt: Date.now(), postedBy: "claude" });

@@ -474,6 +474,12 @@ function deleteRemoteDocDirect(collectionName, docId) {
 // Supprime pour de vrai le(s) fichier(s) correspondant à une ou plusieurs
 // URL publiques Supabase Storage — sans ça, supprimer un produit ne
 // retirait que sa fiche, jamais les photos/vidéo réellement stockées.
+// Supprime des photos ET leurs vignettes.
+function deleteStorageFilesWithThumbs(urls) {
+  var all = [];
+  (urls || []).forEach(function(u) { all.push(u); var tU = snsThumb(u); if (tU !== u) all.push(tU); });
+  deleteStorageFiles(all);
+}
 function deleteStorageFiles(urls) {
   if (!FIREBASE_ENABLED || !urls || urls.length === 0) return;
   var marker = "/storage/v1/object/public/photo/";
@@ -5154,16 +5160,39 @@ function itemVariant(it) {
   return parts.length ? " (" + parts.map(esc).join(", ") + ")" : "";
 }
 
-// ---------- PRIX DÉGRESSIF ----------
-function getTieredPrice(product, qty) {
-  if (!product.tieredPricing || product.tieredPricing.length === 0) {
-    return product.price;
+// ---------- PRIX PAR COULEUR ----------
+// Le vendeur peut donner un prix différent à certaines couleurs
+// (product.colorPrices = { "Rouge": 9000 }). Une couleur absente de la
+// liste garde le prix normal de l'article.
+function colorBasePrice(product, color) {
+  var cp = product && product.colorPrices;
+  if (color && cp && typeof cp === "object") {
+    var v = Number(cp[color]);
+    if (isFinite(v) && v > 0) return v;
   }
+  return product.price;
+}
+function hasColorPrices(product) {
+  var cp = product && product.colorPrices;
+  if (!cp || typeof cp !== "object" || !Array.isArray(product.colors)) return false;
+  return product.colors.some(function(c) { var v = Number(cp[c]); return isFinite(v) && v > 0 && v !== product.price; });
+}
+
+// ---------- PRIX DÉGRESSIF ----------
+// color : couleur choisie (sinon celle de la ligne de panier, product.color).
+// Un écart de prix dû à la couleur s'applique aussi aux paliers dégressifs.
+function getTieredPrice(product, qty, color) {
+  var col = color !== undefined ? color : product.color;
+  var base = colorBasePrice(product, col);
+  if (!product.tieredPricing || product.tieredPricing.length === 0) {
+    return base;
+  }
+  var delta = base - product.price;
   var sorted = product.tieredPricing.slice().sort(function(a, b) { return a.minQty - b.minQty; });
-  var price = product.price;
+  var price = base;
   for (var i = 0; i < sorted.length; i++) {
     if (qty >= sorted[i].minQty) {
-      price = sorted[i].price;
+      price = Math.max(1, sorted[i].price + delta);
     }
   }
   return price;
@@ -5555,6 +5584,7 @@ function registerAccount() {
           : res.error === "phone_already_seller" ? "Ce numéro a déjà un compte vendeur."
           : res.error === "login_required_for_phone" ? "Ce numéro a déjà un compte. Connectez-vous d'abord avec ce numéro, puis ajoutez votre boutique."
           : res.error === "invalid_phone" ? "Numéro de téléphone invalide."
+          : res.error === "too_many_attempts" ? "Trop de comptes créés depuis cette connexion. Réessayez dans une heure."
           : "Impossible de créer le compte, réessayez.";
         showToast("❌ " + reasonMsg);
         save();
@@ -5850,8 +5880,10 @@ function isLikelyBot(key, draft) {
   var tooFast = shownAt && (Date.now() - shownAt < 1500);
   if (!filled && !tooFast) return false;
   try {
-    var sig = { id: "bot-" + uid(), at: Date.now(), type: "formulaire", detail: (filled ? "Champ invisible rempli" : "Formulaire envoyé en moins de 1,5 s") + " — " + key, userAgent: (navigator.userAgent || "").slice(0, 200) };
-    saveDoc("botSignals", sig);
+    // Enregistré par le serveur (le téléphone n'a pas le droit d'écrire
+    // dans le journal de sécurité — c'est ce qui bloquait ces alertes).
+    fetch(supabaseConfig.url + "/functions/v1/create-account", { method: "POST", headers: authHeaders(),
+      body: JSON.stringify({ botSignal: { detail: (filled ? "Champ invisible rempli" : "Formulaire envoyé en moins de 1,5 s") + " — " + key } }) }).catch(function() {});
   } catch (e) {}
   // On relance le chronomètre : un humain très rapide peut simplement réessayer.
   if (window._snsFormShownAt) window._snsFormShownAt[key] = Date.now();
@@ -6829,7 +6861,7 @@ function placeInternationalOrder() {
     orderDraft.items.push({
       productId: it.id,
       name: it.name,
-      price: it.price,
+      price: getTieredPrice(it, it.qty),
       qty: it.qty,
       color: it.color || null,
       size: it.size || null,
@@ -6976,7 +7008,7 @@ function placeOrder() {
     orderDraft.items.push({
       productId: it.id,
       name: it.name,
-      price: it.price,
+      price: getTieredPrice(it, it.qty),
       qty: it.qty,
       color: it.color || null,
       size: it.size || null,
@@ -12861,6 +12893,7 @@ function buildHTML() {
   if (state.showSellerSectorModal) html += renderSellerSectorModal();
   if (state.showBoostModal) html += renderBoostModal();
   if (state.showAdminProductEdit) html += renderAdminProductEditModal();
+  if (state.colorPriceEdit) html += renderColorPricesModal();
   if (state.showAdminOrdersList) html += renderAdminOrdersListModal();
   if (state.showAdminProductsList) html += renderAdminProductsListModal();
   if (state.showLivreurRefuseModal) html += renderLivreurRefuseModal();
@@ -15398,7 +15431,7 @@ function createAccountSecurely(account) {
     // Le jeton de session (si on est déjà connecté) prouve que ce numéro
     // est bien le nôtre quand on ajoute une boutique sur le même numéro.
     headers: authHeaders(),
-    body: JSON.stringify({ account: account })
+    body: JSON.stringify({ account: account, hp: (state.onboardDraft && state.onboardDraft.hpFax) || "", formMs: (window._snsFormShownAt && window._snsFormShownAt.inscription) ? Date.now() - window._snsFormShownAt.inscription : null })
   })
     .then(function(r) { return r.json(); })
     .catch(function() { return { success: false, error: "network_error" }; });
@@ -16353,6 +16386,28 @@ function renderAdminOrdersListModal() {
   return html;
 }
 
+// Fenêtre « Prix selon la couleur » (formulaire de publication).
+function renderColorPricesModal() {
+  var e = state.colorPriceEdit, d = state.productDraft || {};
+  if (!e) return '';
+  var base = parseFloat(d.price);
+  var html = '<div class="modal-overlay" id="color-prices-overlay" data-action="close-color-prices">';
+  html += '<div class="modal-sheet" style="max-height:80vh;">';
+  html += '<button class="modal-close" data-action="close-color-prices"><i class="fa-solid fa-xmark"></i></button>';
+  html += '<div class="section-title" style="margin-bottom:4px;"><i class="fa-solid fa-tags"></i> Prix selon la couleur</div>';
+  html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">Mettez un prix seulement pour les couleurs qui coûtent plus cher ou moins cher. Laissez vide : la couleur garde le prix normal' + (isFinite(base) && base > 0 ? ' (' + money(base) + ')' : '') + '.</div>';
+  for (var i = 0; i < e.colors.length; i++) {
+    var cn = e.colors[i], hx = colorHex(cn);
+    html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">';
+    html += '<div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;">' + (hx ? '<span class="color-dot" style="background:' + hx + ';flex-shrink:0;"></span>' : '') + '<span style="overflow:hidden;text-overflow:ellipsis;">' + esc(translateColorName(cn)) + '</span></div>';
+    html += '<input class="input" type="number" inputmode="numeric" min="1" style="width:46%;max-width:170px;margin:0;" placeholder="Même prix" value="' + esc(e.v["c" + i] || '') + '" data-bind="colorPriceEdit.v.c' + i + '" />';
+    html += '</div>';
+  }
+  html += '<button class="btn-primary" style="margin-top:12px;" data-action="save-color-prices">Valider</button>';
+  html += '</div></div>';
+  return html;
+}
+
 function renderAdminProductEditModal() {
   var d = state.adminProductEditDraft;
   if (!d) return '';
@@ -16360,7 +16415,30 @@ function renderAdminProductEditModal() {
   html += '<div class="modal-sheet">';
   html += '<button class="modal-close" data-action="close-admin-product-edit"><i class="fa-solid fa-xmark"></i></button>';
   html += '<div class="section-title" style="margin-bottom:4px;"><i class="fa-solid fa-pen"></i> Modifier (Admin)</div>';
-  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:14px;">Modification directe des champs essentiels — pour les photos et options avancées, le vendeur doit passer par son propre espace.</div>';
+  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:14px;">Modification directe des champs essentiels et des photos. Les options avancées restent dans l\'espace du vendeur.</div>';
+  var aImgs = d.images || [];
+  html += '<label class="field-label" style="margin-top:0;">Photos (' + aImgs.length + '/' + MAX_IMAGES_COUNT + ')</label>';
+  if (aImgs.length) {
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">';
+    for (var ai = 0; ai < aImgs.length; ai++) {
+      html += '<div style="position:relative;width:70px;height:70px;border-radius:10px;overflow:hidden;background:var(--bg-body);border:' + (ai === 0 ? '2px solid var(--accent)' : '1.5px solid var(--border-color)') + ';flex-shrink:0;">';
+      html += '<img loading="lazy" ' + snsThumbSrc(aImgs[ai]) + ' alt="" style="width:100%;height:100%;object-fit:cover;object-position:' + imagePositionCss(d.imagePositions, ai) + ';" />';
+      html += '<button data-action="admin-remove-product-image" data-value="' + ai + '" title="Supprimer" style="position:absolute;top:3px;right:3px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.65);color:white;border:none;font-size:10px;display:flex;align-items:center;justify-content:center;"><i class="fa-solid fa-xmark"></i></button>';
+      if (ai > 0) html += '<button data-action="admin-main-product-image" data-value="' + ai + '" title="Mettre en photo principale" style="position:absolute;bottom:3px;left:3px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.65);color:#ffd54f;border:none;font-size:10px;display:flex;align-items:center;justify-content:center;"><i class="fa-solid fa-star"></i></button>';
+      else html += '<span style="position:absolute;bottom:0;left:0;right:0;background:var(--accent);color:white;font-size:9px;font-weight:700;text-align:center;padding:1px 0;">Principale</span>';
+      html += '</div>';
+    }
+    html += '</div>';
+    html += '<div style="font-size:10.5px;color:var(--text-dim);margin-bottom:8px;"><i class="fa-solid fa-xmark"></i> supprimer · <i class="fa-solid fa-star"></i> mettre en photo principale</div>';
+  } else {
+    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:8px;">Aucune photo.</div>';
+  }
+  if (aImgs.length < MAX_IMAGES_COUNT) {
+    html += '<div style="position:relative;margin-bottom:6px;">';
+    html += '<div class="file-upload-btn" style="display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px dashed var(--border-color);background:var(--bg-body);color:var(--text-secondary);font-size:13px;font-weight:700;padding:11px;border-radius:12px;"><i class="fa-solid fa-camera"></i> Ajouter des photos</div>';
+    html += '<input type="file" accept="image/*" multiple data-action-file="admin-product-images" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;" />';
+    html += '</div>';
+  }
   html += '<label class="field-label" style="margin-top:0;">Nom</label>';
   html += '<input class="input" value="' + esc(d.name) + '" data-bind="adminProductEditDraft.name" />';
   html += '<label class="field-label">Prix (FCFA)</label>';
@@ -19165,6 +19243,11 @@ function renderSellerProducts() {
       html += '</button>';
     }
     html += '</div>';
+    if (d.colors.length > 0) {
+      var cpSet = d.colorPrices || {}, cpList = [];
+      for (var cpi = 0; cpi < d.colors.length; cpi++) { var cpv = Number(cpSet[d.colors[cpi]]); if (isFinite(cpv) && cpv > 0) cpList.push(translateColorName(d.colors[cpi]) + ' ' + money(cpv)); }
+      html += '<button class="link-btn" style="margin-top:8px;font-size:12.5px;text-align:left;white-space:normal;" data-action="open-color-prices"><i class="fa-solid fa-tags"></i> ' + (cpList.length ? 'Prix selon la couleur : ' + esc(cpList.join(' · ')) + ' — modifier' : 'Une couleur a un prix différent ? Cliquez ici') + '</button>';
+    }
     var sizeType = sizeTypeForCategory(d.category);
     if (sizeType !== "none") {
       html += '<label class="field-label">' + t("publish_sizes") + '</label>';
@@ -23517,7 +23600,7 @@ function renderAdminSecurity() {
     html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;">Champs et collections pièges dans la base, champs invisibles et chronomètre dans les formulaires. Chaque tentative est bloquée puis listée ici.</div>';
     html += '<div style="font-size:12.5px;margin-bottom:8px;">' + (alerts.length ? '<strong>' + last24 + '</strong> alerte(s) ces dernières 24 h · ' + alerts.length + ' au total (200 dernières)' : '✅ Aucune tentative détectée.') + '</div>';
     alerts.slice(0, 30).forEach(function(a) {
-      var icon = a.type === "formulaire" ? "fa-keyboard" : (a.type === "collection_piege" ? "fa-box-open" : "fa-user-secret");
+      var icon = a.type === "formulaire" ? "fa-keyboard" : (a.type === "limite" ? "fa-gauge-high" : (a.type === "collection_piege" ? "fa-box-open" : "fa-user-secret"));
       html += '<div style="border-left:3px solid var(--danger);padding:6px 10px;margin-bottom:6px;background:var(--bg-body);border-radius:6px;">';
       html += '<div style="font-size:11px;color:var(--text-dim);"><i class="fa-solid ' + icon + '"></i> ' + fmtDateTime(a.at) + (a.ip && a.ip !== '?' ? ' · IP ' + esc(a.ip) : '') + '</div>';
       html += '<div style="font-size:12px;">' + esc(a.detail || a.type || '') + '</div>';
@@ -24355,7 +24438,7 @@ function renderProductModal() {
   var mainImage = hasImages ? p.images[Math.min(state.activeImageIndex, p.images.length - 1)] : null;
   var avgRating = getProductAverageRating(p.id);
   var reviews = getProductReviews(p.id);
-  var tieredPrice = getTieredPrice(p, state.selectedQty);
+  var tieredPrice = getTieredPrice(p, state.selectedQty, state.selectedColor || null);
   var tieredTotal = getTieredTotal(p, state.selectedQty);
   
   var html = '<div class="modal-overlay ' + (isFreshOpen ? '' : 'no-anim') + '" id="modal-overlay" data-action="close-product">';
@@ -24447,7 +24530,7 @@ function renderProductModal() {
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0;">';
   html += '<span style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">';
   html += '<span style="font-size:22px;font-weight:800;color:var(--accent);">' + money(tieredPrice, p.country, state.profile ? state.profile.country : null) + '</span>';
-  if (p.oldPrice) {
+  if (p.oldPrice && p.oldPrice > tieredPrice) {
     html += '<span class="price-old" style="font-size:13px;">' + money(p.oldPrice, p.country, state.profile ? state.profile.country : null) + '</span>';
   }
   var disc = discountPercent(p);
@@ -24478,7 +24561,9 @@ function renderProductModal() {
       var hex = colorHex(col);
       html += '<button class="option-pill color-pill ' + (state.selectedColor === col ? 'active' : '') + '" data-action="select-color" data-value="' + esc(col) + '">';
       if (hex) html += '<span class="color-dot" style="background:' + hex + '"></span>';
-      html += esc(translateColorName(col)) + '</button>';
+      html += esc(translateColorName(col));
+      if (hasColorPrices(p)) html += ' <span style="font-size:10.5px;opacity:0.75;">· ' + money(colorBasePrice(p, col), p.country, state.profile ? state.profile.country : null) + '</span>';
+      html += '</button>';
     }
     html += '</div>';
   }
@@ -25274,6 +25359,26 @@ function handleFileInput(el) {
       return;
     }
 
+    if (action === "admin-product-images") {
+      var apdU = state.adminProductEditDraft;
+      if (!apdU) return;
+      var roomU = MAX_IMAGES_COUNT - apdU.images.length;
+      if (roomU <= 0) { showToast(t("dt_already_have_max_photos") + MAX_IMAGES_COUNT + t("dt_photos_max")); return; }
+      var listU = Array.prototype.slice.call(files, 0, roomU).filter(function(f) { return f.type.startsWith('image/') && f.size <= MAX_IMAGE_BYTES; });
+      if (!listU.length) { showToast(t("toast_select_image")); return; }
+      var leftU = listU.length, okU = 0;
+      showToast(t("dt_sending_photos") + listU.length + t("dt_photos_in_progress"));
+      listU.forEach(function(fU) {
+        uploadToStorage(fU, "products/images", function(errU, urlU) {
+          leftU--;
+          if (!errU && state.adminProductEditDraft === apdU) { apdU.images.push(urlU); apdU.imagePositions.push({ x: 50, y: 50 }); apdU.uploadedImages.push(urlU); okU++; }
+          if (leftU <= 0) { if (okU) showToast(okU + t("dt_photos_added")); render(); }
+        });
+      });
+      try { el.value = ""; } catch (eU) {}
+      return;
+    }
+
     if (action === "images") {
       var currentImages = state.productDraft.images || [];
       var max = MAX_IMAGES_COUNT - currentImages.length;
@@ -25546,6 +25651,20 @@ function submitProductDraft() {
       }
     }
 
+    // Prix par couleur : seules les couleurs encore cochées, avec un prix
+    // valide ET différent du prix normal, sont gardées. En mode commission
+    // « ajoutée », le vendeur saisit son montant net comme pour le prix normal.
+    var colorPricesOut = null, colorPricesNetOut = null;
+    var cpDraft = d.colorPrices || {};
+    (d.colors || []).forEach(function(cname) {
+      var net = parseFloat(cpDraft[cname]);
+      if (!isFinite(net) || net <= 0 || net === sellerNetPriceEntered) return;
+      var gross = (commissionCfgAtPublish.commissionMode === "add" && state.profile.sellerType !== "international") ? Math.round(net * (1 + commissionCfgAtPublish.totalCommissionRate)) : net;
+      if (gross === price) return;
+      colorPricesOut = colorPricesOut || {}; colorPricesNetOut = colorPricesNetOut || {};
+      colorPricesOut[cname] = gross; colorPricesNetOut[cname] = net;
+    });
+
     var editing = !!state.editingProductId;
     var isService = isServiceSeller(state.profile);
     var existingCreatedAt = null;
@@ -25575,6 +25694,8 @@ function submitProductDraft() {
       imagePositions: d.imagePositions || [],
       video: d.video || null,
       colors: d.colors || [],
+      colorPrices: colorPricesOut,
+      colorPricesNet: colorPricesNetOut,
       sizes: d.sizes || [],
       fitNote: d.fitNote || "",
       tieredPricing: tieredPricing,
@@ -25775,6 +25896,7 @@ function startEditProduct(productId) {
     imagePositions: product.images ? product.images.map(function(img, imgIdx) { return getImagePosition(product.imagePositions, imgIdx); }) : [],
     video: product.video || null,
     colors: product.colors ? product.colors.slice() : [],
+    colorPrices: (function() { var src = product.colorPricesNet || product.colorPrices || {}, o = {}; Object.keys(src).forEach(function(k) { o[k] = String(src[k]); }); return o; })(),
     sizes: product.sizes ? product.sizes.slice() : [],
     fitNote: product.fitNote || "",
     tieredPricing: product.tieredPricing ? product.tieredPricing.map(function(t) { return { minQty: t.minQty, price: t.price }; }) : []
@@ -29137,8 +29259,31 @@ root.addEventListener("click", function(e) {
     case "toggle-draft-color": {
       var idx = state.productDraft.colors.indexOf(value);
       if (idx === -1) state.productDraft.colors.push(value);
-      else state.productDraft.colors.splice(idx, 1);
+      else { state.productDraft.colors.splice(idx, 1); if (state.productDraft.colorPrices) delete state.productDraft.colorPrices[value]; }
       render(); break;
+    }
+    case "open-color-prices": {
+      var cpd = state.productDraft || {};
+      var cpe = { colors: (cpd.colors || []).slice(), v: {} };
+      cpe.colors.forEach(function(cn, ci) { var pv = (cpd.colorPrices || {})[cn]; cpe.v["c" + ci] = pv ? String(pv) : ""; });
+      state.colorPriceEdit = cpe; render(); break;
+    }
+    case "close-color-prices": state.colorPriceEdit = null; render(); break;
+    case "save-color-prices": {
+      var cpe2 = state.colorPriceEdit;
+      if (cpe2 && state.productDraft) {
+        var outCp = {};
+        for (var cpk = 0; cpk < cpe2.colors.length; cpk++) {
+          var raw = String(cpe2.v["c" + cpk] || "").replace(/[^\d.]/g, "");
+          if (!raw) continue;
+          var num = parseFloat(raw);
+          if (!isFinite(num) || num <= 0) { showToast("Le prix de la couleur " + translateColorName(cpe2.colors[cpk]) + " n'est pas valide."); return; }
+          outCp[cpe2.colors[cpk]] = String(Math.round(num));
+        }
+        state.productDraft.colorPrices = outCp;
+        save();
+      }
+      state.colorPriceEdit = null; render(); break;
     }
     case "toggle-draft-size": {
       var idx2 = state.productDraft.sizes.indexOf(value);
@@ -29928,13 +30073,35 @@ root.addEventListener("click", function(e) {
       var prodToEdit = null;
       for (var pei = 0; pei < state.products.length; pei++) { if (state.products[pei].id === value) { prodToEdit = state.products[pei]; break; } }
       if (prodToEdit) {
-        state.adminProductEditDraft = { id: prodToEdit.id, name: prodToEdit.name, price: prodToEdit.price, stock: prodToEdit.stock, description: prodToEdit.description || "" };
+        state.adminProductEditDraft = { id: prodToEdit.id, name: prodToEdit.name, price: prodToEdit.price, stock: prodToEdit.stock, description: prodToEdit.description || "",
+          images: (prodToEdit.images || []).slice(),
+          imagePositions: (prodToEdit.images || []).map(function(img, ii) { return getImagePosition(prodToEdit.imagePositions, ii); }),
+          originalImages: (prodToEdit.images || []).slice(), uploadedImages: [] };
         state.showAdminProductEdit = true;
         render();
       }
       break;
     }
-    case "close-admin-product-edit": state.showAdminProductEdit = false; state.adminProductEditDraft = null; render(); break;
+    case "close-admin-product-edit": {
+      // Photos envoyées pendant cette modification mais jamais enregistrées : on les efface.
+      var apd = state.adminProductEditDraft;
+      if (apd && apd.uploadedImages && apd.uploadedImages.length) deleteStorageFilesWithThumbs(apd.uploadedImages);
+      state.showAdminProductEdit = false; state.adminProductEditDraft = null; render(); break;
+    }
+    case "admin-remove-product-image": {
+      var apd2 = state.adminProductEditDraft, ri2 = Number(value);
+      if (apd2 && apd2.images && ri2 >= 0 && ri2 < apd2.images.length) { apd2.images.splice(ri2, 1); apd2.imagePositions.splice(ri2, 1); render(); }
+      break;
+    }
+    case "admin-main-product-image": {
+      var apd3 = state.adminProductEditDraft, mi3 = Number(value);
+      if (apd3 && apd3.images && mi3 > 0 && mi3 < apd3.images.length) {
+        apd3.images.unshift(apd3.images.splice(mi3, 1)[0]);
+        apd3.imagePositions.unshift(apd3.imagePositions.splice(mi3, 1)[0]);
+        render();
+      }
+      break;
+    }
     case "open-admin-conversation-view": state.adminViewingConversationId = value; render(); break;
     case "close-admin-conversation-view": state.adminViewingConversationId = null; render(); break;
     case "save-admin-product-edit": {
@@ -29947,6 +30114,12 @@ root.addEventListener("click", function(e) {
         prodToUpdate.price = parseFloat(draftToSave.price) || 0;
         prodToUpdate.stock = parseInt(draftToSave.stock, 10) || 0;
         prodToUpdate.description = draftToSave.description || "";
+        if (Array.isArray(draftToSave.images)) {
+          var removedImgs = (draftToSave.originalImages || []).filter(function(u) { return draftToSave.images.indexOf(u) === -1; });
+          prodToUpdate.images = draftToSave.images.slice();
+          prodToUpdate.imagePositions = draftToSave.imagePositions.slice();
+          if (removedImgs.length) deleteStorageFilesWithThumbs(removedImgs);
+        }
         save();
         saveDoc("products", prodToUpdate);
         showToast(t("toast_product_updated"));
