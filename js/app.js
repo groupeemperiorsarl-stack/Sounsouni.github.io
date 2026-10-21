@@ -1254,7 +1254,9 @@ function isTranslationGarbage(txt) {
 function splitForTranslation(text) {
   var bytes = function(x) { try { return new TextEncoder().encode(x).length; } catch (e) { return x.length * 2; } };
   if (bytes(text) <= 450) return [text];
-  var parts = text.split(/(?<=[.!?\n])\s+/), chunks = [], cur = "";
+  // Sans « lookbehind » (regard en arrière) : les iPhone avant iOS 16.4 ne le comprennent pas
+  // et TOUT le programme refusait alors de démarrer (écran noir).
+  var parts = text.replace(/([.!?\n])\s+/g, "$1\u0000").split("\u0000"), chunks = [], cur = "";
   parts.forEach(function(part) {
     if (bytes(cur + " " + part) > 450 && cur) { chunks.push(cur); cur = part; }
     else cur = cur ? cur + " " + part : part;

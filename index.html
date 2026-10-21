@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-10-21-a";
+    window.SOUNSOUNI_VERSION = "2026-10-21-b";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -55,16 +55,23 @@
       window.__earlyErrors.push("Promesse rejetée : " + (r && r.message ? r.message : String(r)) + (r && r.stack ? "\n  " + String(r.stack).split("\n").slice(1, 3).join("\n  ") : ""));
     });
     setTimeout(function () {
-      if (!document.querySelector(".splash-screen")) return;
+      // Bloqué si l'écran de chargement est encore là, OU si rien n'a jamais
+      // été affiché (programme principal refusé par un navigateur trop
+      // ancien : sans ce cas, l'écran restait tout noir, sans message).
+      var rootEl = document.getElementById("root");
+      if (!document.querySelector(".splash-screen") && rootEl && rootEl.children.length) return;
+      var tooOld = (window.__earlyErrors || []).some(function (m) { return /SyntaxError|Invalid regular expression|Unexpected token|Unexpected identifier/i.test(m); });
       var diagOn2 = false;
       try { diagOn2 = localStorage.getItem("sns_diag_enabled") === "1"; } catch (e) {}
       if (!diagOn2) {
         // Utilisateur ordinaire : message simple, sans détails techniques.
         var simple = document.createElement("div");
         simple.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;font-family:sans-serif;color:#1a1a2e;text-align:center;";
-        simple.innerHTML = '<div style="font-size:34px;margin-bottom:10px;">⏳</div><div style="font-weight:800;font-size:16px;margin-bottom:6px;">Le chargement prend plus de temps que prévu</div><div style="font-size:13px;color:#666;margin-bottom:18px;">Vérifiez votre connexion internet, puis réessayez.</div><button id="simple-reload" style="background:#7bcb3a;color:#fff;border:none;padding:12px 24px;border-radius:12px;font-weight:700;font-size:14px;">Recharger</button>';
+        simple.innerHTML = tooOld
+          ? '<div style="font-size:34px;margin-bottom:10px;">📱</div><div style="font-weight:800;font-size:16px;margin-bottom:6px;">Votre téléphone doit être mis à jour</div><div style="font-size:13px;color:#666;margin-bottom:18px;">Votre navigateur est trop ancien pour afficher Sounsouni. Sur iPhone : Réglages › Général › Mise à jour logicielle. Sur Android : mettez à jour Chrome dans le Play Store.</div>'
+          : '<div style="font-size:34px;margin-bottom:10px;">⏳</div><div style="font-weight:800;font-size:16px;margin-bottom:6px;">Le chargement prend plus de temps que prévu</div><div style="font-size:13px;color:#666;margin-bottom:18px;">Vérifiez votre connexion internet, puis réessayez.</div><button id="simple-reload" style="background:#7bcb3a;color:#fff;border:none;padding:12px 24px;border-radius:12px;font-weight:700;font-size:14px;">Recharger</button>';
         document.body.appendChild(simple);
-        document.getElementById("simple-reload").onclick = function () { location.reload(); };
+        var sr = document.getElementById("simple-reload"); if (sr) sr.onclick = function () { location.reload(); };
         return;
       }
       var report = "Version chargée : " + window.SOUNSOUNI_VERSION + "\nAdresse : " + location.href + "\nNavigateur : " + navigator.userAgent + "\nErreurs (" + window.__earlyErrors.length + ") :\n" + (window.__earlyErrors.length ? window.__earlyErrors.slice(0, 8).join("\n") : "aucune");
@@ -123,7 +130,7 @@
          (voir snsLoadLib dans js/app.js) — plus rien à télécharger au démarrage. -->
 
     <!-- CSS principal -->
-    <link rel="stylesheet" href="css/app.css?v=2026-10-21-a">
+    <link rel="stylesheet" href="css/app.css?v=2026-10-21-b">
 </head>
 <body>
 <div id="su-upload-loader" role="status" aria-live="polite">
@@ -167,11 +174,11 @@
 
     <!-- JavaScript principal -->
     <!-- Textes : le français toujours (langue de secours), et la langue choisie si c'est une autre -->
-    <script src="js/lang-fr.js?v=2026-10-21-a"></script>
+    <script src="js/lang-fr.js?v=2026-10-21-b"></script>
     <script>(function () { var l = null; try { l = localStorage.getItem("sounsouni_language"); } catch (e) {}
       if (!l) { var n = (navigator.language || navigator.userLanguage || "fr").toLowerCase(); l = n.indexOf("hi") === 0 ? "hi" : (n.indexOf("en") === 0 ? "en" : "fr"); }
-      if (l === "en" || l === "hi") document.write('<script src="js/lang-' + l + '.js?v=2026-10-21-a"><\/script>'); })();</script>
-    <script src="js/app.js?v=2026-10-21-a"></script>
-    <script src="js/sns3d.js?v=2026-10-21-a" defer></script>
+      if (l === "en" || l === "hi") document.write('<script src="js/lang-' + l + '.js?v=2026-10-21-b"><\/script>'); })();</script>
+    <script src="js/app.js?v=2026-10-21-b"></script>
+    <script src="js/sns3d.js?v=2026-10-21-b" defer></script>
 </body>
 </html>
