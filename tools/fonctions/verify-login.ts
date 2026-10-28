@@ -1,5 +1,5 @@
 // ============================================================
-// Fonction serveur : verify-login (version 2026-10-21, sécurité)
+// Fonction serveur : verify-login (version 2026-10-28, sécurité)
 // Reçoit { accountId, password } ou { accountId, recoveryCode }.
 // - Après 8 essais ratés en 15 minutes sur un même compte, le compte est
 //   bloqué 15 minutes (empêche de deviner le mot de passe).
@@ -47,6 +47,14 @@ Deno.serve(async (req) => {
   try {
     const { accountId, password, recoveryCode } = await req.json().catch(() => ({}));
     if (!accountId || typeof accountId !== "string" || (!password && !recoveryCode)) return json({ success: false, error: "missing_fields" }, 400);
+    // Défense en plus (audit 28/10/2026) : un identifiant d'admin national ou de
+    // partenaire n'ouvre une session que si sa fiche existe vraiment.
+    if (/^(national_admin_|dashboard_partner_)/.test(accountId)) {
+      const coll = accountId.startsWith("national_admin_") ? "nationalAdmins" : "dashboardPartners";
+      const dbc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: doc } = await dbc.from("app_data").select("id").eq("collection", coll).eq("id", accountId.replace(/^(national_admin_|dashboard_partner_)/, "")).maybeSingle();
+      if (!doc) return json({ success: false });
+    }
     const field = password ? "password_hash" : "recovery_code_hash";
     const plain = String(password || recoveryCode).slice(0, 200);
     const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
