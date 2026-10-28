@@ -712,7 +712,7 @@ function snsMakeThumb(file, path) {
           c.toBlob(function(b) {
             if (!b) return;
             if (b.size > 12000 && q > 0.3) return tryQ(Math.round((q - 0.1) * 10) / 10);
-            sb.storage.from("photo").upload("thumbs/" + path + ".webp", b, { cacheControl: "31536000", contentType: "image/webp", upsert: true });
+            sb.storage.from("photo").upload("thumbs/" + path + ".webp", b, { cacheControl: "31536000", contentType: "image/webp", upsert: false });
           }, "image/webp", q);
         };
         tryQ(0.7);
@@ -733,7 +733,33 @@ function uploadToStorage(file, folder, onDone) {
   });
 }
 
+// Pièces d'identité et selfies (audit 28/10/2026) : jamais dans le stockage
+// public. Envoyés à la fonction serveur verif-upload, qui les range dans le
+// coffre privé « verif » et renvoie une référence « verif:<chemin> ».
+// Pour l'aperçu sur le téléphone, on garde une copie locale (objectURL).
+window._snsVerifPreview = window._snsVerifPreview || {};
+function verifSrc(u) {
+  if (typeof u === "string" && u.indexOf("verif:") === 0) return window._snsVerifPreview[u] || "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
+  return u;
+}
+function uploadVerificationFile(file, folder, onDone) {
+  var kind = folder.indexOf("selfies") !== -1 ? "selfies" : "docs";
+  var reader = new FileReader();
+  reader.onerror = function() { onDone(reader.error || new Error("Lecture du fichier impossible")); };
+  reader.onload = function(e) {
+    fetch(supabaseConfig.url + "/functions/v1/verif-upload", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey }, body: JSON.stringify({ kind: kind, data: e.target.result }) })
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        if (!res || !res.success || !res.ref) { onDone(new Error((res && res.error) || "envoi_refuse")); return; }
+        try { window._snsVerifPreview[res.ref] = URL.createObjectURL(file); } catch (e2) { window._snsVerifPreview[res.ref] = e.target.result; }
+        onDone(null, res.ref);
+      })
+      .catch(function(err) { onDone(err); });
+  };
+  reader.readAsDataURL(file);
+}
 function uploadToStorageRaw(file, folder, onDone) {
+  if (FIREBASE_ENABLED && /^verification\//.test(folder)) { uploadVerificationFile(file, folder, onDone); return; }
   if (!FIREBASE_ENABLED) {
     try {
       var reader = new FileReader();
@@ -10137,7 +10163,7 @@ function renderGpsPasteField(latPath, lngPath) {
 function renderVerificationDocsFields(docs) {
   var html = '<div>';
   for (var i = 0; i < docs.length; i++) {
-    html += '<div style="position:relative;width:100%;height:110px;border-radius:10px;overflow:hidden;margin-top:8px;"><img loading="lazy" src="' + docs[i] + '" style="width:100%;height:100%;object-fit:cover;" /><button type="button" data-action="remove-verification-doc" data-value="' + i + '" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:10px;"><i class="fa-solid fa-xmark"></i></button></div>';
+    html += '<div style="position:relative;width:100%;height:110px;border-radius:10px;overflow:hidden;margin-top:8px;"><img loading="lazy" src="' + verifSrc(docs[i]) + '" style="width:100%;height:100%;object-fit:cover;" /><button type="button" data-action="remove-verification-doc" data-value="' + i + '" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:10px;"><i class="fa-solid fa-xmark"></i></button></div>';
   }
   html += '<div style="position:relative;margin-top:8px;"><div class="file-upload-btn" style="display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px dashed var(--border-color);background:var(--bg-body);color:var(--text-secondary);font-size:13px;font-weight:700;padding:12px;border-radius:12px;"><i class="fa-solid fa-plus"></i> ' + (docs.length === 0 ? 'Ajouter un document' : 'Ajouter un autre document') + '</div><input type="file" accept="image/*" data-action-file="verification-doc-add" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;" /></div>';
   html += '</div>';
@@ -13704,7 +13730,7 @@ function renderBecomeRelais() {
     renderGpsPasteField("relaisApplyDraft.shopLat", "relaisApplyDraft.shopLng") +
     '<label class="field-label">' + t("relais_apply_photo_label") + '</label>' +
     (d.selfiePhotoUri
-      ? '<div style="position:relative;width:100%;height:110px;border-radius:10px;overflow:hidden;margin-top:4px;"><img loading="lazy" src="' + d.selfiePhotoUri + '" style="width:100%;height:100%;object-fit:cover;" /><button type="button" data-action="remove-relais-apply-selfie" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:10px;"><i class="fa-solid fa-xmark"></i></button></div>'
+      ? '<div style="position:relative;width:100%;height:110px;border-radius:10px;overflow:hidden;margin-top:4px;"><img loading="lazy" src="' + verifSrc(d.selfiePhotoUri) + '" style="width:100%;height:100%;object-fit:cover;" /><button type="button" data-action="remove-relais-apply-selfie" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:10px;"><i class="fa-solid fa-xmark"></i></button></div>'
       : '<div style="position:relative;margin-top:4px;"><div class="file-upload-btn" style="display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px dashed var(--border-color);background:var(--bg-body);color:var(--text-secondary);font-size:13px;font-weight:700;padding:12px;border-radius:12px;"><i class="fa-solid fa-user"></i> ' + t("relais_apply_photo_upload") + '</div><input type="file" accept="image/*" data-action-file="relais-apply-selfie" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;" /></div>') +
     '<label class="field-label">' + t("relais_apply_docs_label") + '</label>' +
     renderRelaisApplyDocsFields(d.verificationDocs || []) +
@@ -13716,7 +13742,7 @@ function renderBecomeRelais() {
 function renderRelaisApplyDocsFields(docs) {
   var html = '<div>';
   for (var i = 0; i < docs.length; i++) {
-    html += '<div style="position:relative;width:100%;height:110px;border-radius:10px;overflow:hidden;margin-top:8px;"><img loading="lazy" src="' + docs[i] + '" style="width:100%;height:100%;object-fit:cover;" /><button type="button" data-action="remove-relais-apply-doc" data-value="' + i + '" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:10px;"><i class="fa-solid fa-xmark"></i></button></div>';
+    html += '<div style="position:relative;width:100%;height:110px;border-radius:10px;overflow:hidden;margin-top:8px;"><img loading="lazy" src="' + verifSrc(docs[i]) + '" style="width:100%;height:100%;object-fit:cover;" /><button type="button" data-action="remove-relais-apply-doc" data-value="' + i + '" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:10px;"><i class="fa-solid fa-xmark"></i></button></div>';
   }
   html += '<div style="position:relative;margin-top:8px;"><div class="file-upload-btn" style="display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px dashed var(--border-color);background:var(--bg-body);color:var(--text-secondary);font-size:13px;font-weight:700;padding:12px;border-radius:12px;"><i class="fa-solid fa-plus"></i> ' + (docs.length === 0 ? t("relais_apply_add_doc") : t("relais_apply_add_another_doc")) + '</div><input type="file" accept="image/*" data-action-file="relais-apply-doc-add" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;" /></div>';
   html += '</div>';
@@ -13830,7 +13856,7 @@ function renderOnboardStepRelais(d) {
     renderGpsPasteField("onboardDraft.shopLat", "onboardDraft.shopLng") +
     '<label class="field-label">' + t("relais_apply_photo_label") + '</label>' +
     (d.selfiePhotoUri
-      ? '<div style="position:relative;width:100%;height:110px;border-radius:10px;overflow:hidden;margin-top:4px;"><img loading="lazy" src="' + d.selfiePhotoUri + '" style="width:100%;height:100%;object-fit:cover;" /><button type="button" data-action="remove-selfie-photo" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:10px;"><i class="fa-solid fa-xmark"></i></button></div>'
+      ? '<div style="position:relative;width:100%;height:110px;border-radius:10px;overflow:hidden;margin-top:4px;"><img loading="lazy" src="' + verifSrc(d.selfiePhotoUri) + '" style="width:100%;height:100%;object-fit:cover;" /><button type="button" data-action="remove-selfie-photo" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.6);color:white;border:none;font-size:10px;"><i class="fa-solid fa-xmark"></i></button></div>'
       : '<div style="position:relative;margin-top:4px;"><div class="file-upload-btn" style="display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px dashed var(--border-color);background:var(--bg-body);color:var(--text-secondary);font-size:13px;font-weight:700;padding:12px;border-radius:12px;"><i class="fa-solid fa-user"></i> ' + t("relais_apply_photo_upload") + '</div><input type="file" accept="image/*" data-action-file="selfie-photo" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;" /></div>') +
     '<label class="field-label">' + t("relais_apply_docs_label") + '</label>' +
     renderVerificationDocsFields(d.verificationDocs || []) +
