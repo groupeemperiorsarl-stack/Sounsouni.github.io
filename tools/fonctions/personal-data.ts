@@ -2,6 +2,10 @@
 // Fonction serveur : personal-data (version 2026-10-29)
 // Renvoie à chacun SES commandes, notifications et conversations.
 // Nouveau : codes de livraison masqués pour tous sauf l'acheteur (voir maskCodes).
+// Version 2026-10-30 (audit BDD-3/4) : les collections privées (candidatures,
+// demandes, litiges, conversations Admin, jetons push, colis externes) ne
+// sont plus lisibles par tous ; elles arrivent ici dans « privates » :
+// tout pour l'Admin, seulement ses propres fiches pour les autres.
 // ============================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
@@ -55,6 +59,11 @@ const courierOk = ids.includes(o.livreurId) || (isCourier && !o.livreurId);
 if (o.codeDepot && !courierOk) o.codeDepot = MASK;
 return o;
 }
+const PRIVATE_OWNER: Record<string, string | null> = {
+verificationRequests: "accountId", livreurApplications: "accountId", relaisApplications: "accountId", relaisEditRequests: "accountId",
+autreQuartierApplications: "accountId", adminConversations: "accountId", fcmTokens: "accountId", pushSubscriptions: "accountId",
+externalParcelChangeRequests: "requestedByAccountId", passwordRecoveryRequests: null, pendingPayments: null, disputes: null, externalParcels: null,
+};
 const COURIER_INACTIVE_STATUSES = ["Annulée", "Non livrable", "Refusée au retrait", "Livrée", "En boutique"];
 Deno.serve(async (req) => {
 if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -115,7 +124,12 @@ const c = ctc[o.id];
 if (c) for (const f of ["buyerPhone", "contactPhone", "buyerLat", "buyerLng", "repere"]) if (c[f] !== undefined && c[f] !== null) o[f] = c[f];
 });
 if (hideCodes) orders.forEach((o: any) => maskCodes(o, [callerId], false));
-return json({ success: true, full: true, orders, notifications, conversations, securityAlerts, accounts });
+const privates: Record<string, any[]> = {};
+if (!hideCodes) {
+const lists = await Promise.all(Object.keys(PRIVATE_OWNER).map((c) => all(() => q().eq("collection", c))));
+Object.keys(PRIVATE_OWNER).forEach((c, i) => { privates[c] = lists[i]; });
+}
+return json({ success: true, full: true, orders, notifications, conversations, securityAlerts, accounts, privates });
 }
 if (callerId === "admin_owner" || callerId.startsWith("national_admin_")) return await returnEverything();
 if (callerId.startsWith("dashboard_partner_")) return json({ success: false, error: "not_applicable" }, 403);
@@ -203,7 +217,23 @@ if (r) o.relaisShopInfo = { name: r.shopName || r.name || "", phone: r.shopPhone
 });
 }
 orders.forEach((o: any) => maskCodes(o, idList, me.role === "livreur"));
-return json({ success: true, full: false, role: me.role || null, orders, notifications, conversations, accounts: myAccounts });
+// Fiches privées : seulement les siennes.
+const privates: Record<string, any[]> = {};
+const ownCols = Object.keys(PRIVATE_OWNER).filter((c) => PRIVATE_OWNER[c]);
+const ownLists = await Promise.all(ownCols.map((c) => all(() => q().eq("collection", c).in("data->>" + PRIVATE_OWNER[c], idList))));
+ownCols.forEach((c, i) => { privates[c] = ownLists[i]; });
+const [dBuyer, ...dSellers] = await Promise.all([
+all(() => q().eq("collection", "disputes").in("data->>buyerId", idList)),
+...idList.map((id) => all(() => q().eq("collection", "disputes").contains("data", { sellerIds: [id] }))),
+]);
+privates.disputes = dedupe([dBuyer, ...dSellers]);
+const pLists = await Promise.all([
+all(() => q().eq("collection", "externalParcels").in("data->>relaisShopId", idList)),
+all(() => q().eq("collection", "externalParcels").in("data->>livreurId", idList)),
+...(isCourier ? [all(() => q().eq("collection", "externalParcels").eq("data->>status", "Créé"))] : []),
+]);
+privates.externalParcels = dedupe(pLists);
+return json({ success: true, full: false, role: me.role || null, orders, notifications, conversations, accounts: myAccounts, privates });
 } catch (e) {
 return json({ success: false, error: String(e) }, 500);
 }

@@ -68,7 +68,11 @@ const SHARED_KEYS = [
 // "secure-write", qui vérifie l'identité et applique les règles (chacun ne
 // modifie que ce qu'il a le droit de modifier). Tant que la fonction n'est
 // pas déployée, repli sur l'écriture directe.
-var SECURE_WRITE_COLLECTIONS = ["accounts", "products", "boosts", "cagnottes", "bookings", "settings", "nationalAdmins", "sourcingAgentWhitelist", "group2GlobalWhitelist", "apiPartners", "webhookPartners", "dashboardPartners", "platformCommissions", "vipAds"];
+// Audit 30/10/2026 (BDD-3/4/5, CMD-4) : collections privées — plus lisibles
+// ni modifiables directement ; lues via personal-data (« privates »),
+// écrites via secure-write (chacun ne touche qu'à ses propres fiches).
+var PRIVATE_KEYS = ["verificationRequests", "livreurApplications", "relaisApplications", "relaisEditRequests", "autreQuartierApplications", "adminConversations", "fcmTokens", "pushSubscriptions", "externalParcelChangeRequests", "passwordRecoveryRequests", "pendingPayments", "disputes", "externalParcels"];
+var SECURE_WRITE_COLLECTIONS = ["accounts", "products", "boosts", "cagnottes", "bookings", "reviews"].concat(PRIVATE_KEYS, ["settings", "nationalAdmins", "sourcingAgentWhitelist", "group2GlobalWhitelist", "apiPartners", "webhookPartners", "dashboardPartners", "platformCommissions", "vipAds"]);
 // Lit la réponse d'une fonction serveur. Si ce n'est pas du JSON (fonction
 // plantée, limite atteinte...), on garde le vrai code HTTP et le début du
 // texte, au lieu d'un simple "network_error" qui ne dit rien.
@@ -193,8 +197,8 @@ function renderReconnectSheet() {
   if (!state.showReconnectSheet || !state.profile) return "";
   var lang = state.language === "en" ? "en" : (state.language === "hi" ? "hi" : "fr");
   var T = {
-    fr: { title: "Reconnectez-vous", text: "Pour votre sécurité, votre connexion doit être renouvelée. Vos commandes en attente partiront juste après.", pw: "Votre mot de passe", btn: "Me reconnecter", forgot: "Mot de passe oublié", help: "Ce compte a une boutique ou des gains. Pour le protéger, appelez Sounsouni au +223 93 01 01 23 pour le récupérer.", later: "Plus tard", bad: "Mot de passe incorrect." },
-    en: { title: "Please sign in again", text: "For your security, your connection must be renewed. Your waiting orders will be sent right after.", pw: "Your password", btn: "Sign in", forgot: "Forgot password", help: "This account has a shop or earnings. To protect it, call Sounsouni on +223 93 01 01 23 to recover it.", later: "Later", bad: "Wrong password." },
+    fr: { title: "Reconnectez-vous", text: "Pour votre sécurité, votre connexion doit être renouvelée. Vos commandes en attente partiront juste après.", pw: "Votre mot de passe", btn: "Me reconnecter", forgot: "Mot de passe oublié", help: "Pour protéger ce compte, il faut un mot de passe. Appelez Sounsouni au +223 93 01 01 23 pour le récupérer.", later: "Plus tard", bad: "Mot de passe incorrect." },
+    en: { title: "Please sign in again", text: "For your security, your connection must be renewed. Your waiting orders will be sent right after.", pw: "Your password", btn: "Sign in", forgot: "Forgot password", help: "To protect this account, a password is needed. Call Sounsouni on +223 93 01 01 23 to recover it.", later: "Later", bad: "Wrong password." },
     hi: { title: "फिर से लॉग इन करें", text: "आपकी सुरक्षा के लिए, आपका कनेक्शन नवीनीकृत होना चाहिए। आपके रुके हुए ऑर्डर तुरंत बाद भेजे जाएँगे।", pw: "आपका पासवर्ड", btn: "लॉग इन करें", forgot: "पासवर्ड भूल गए", help: "इस खाते में दुकान या कमाई है। इसे सुरक्षित रखने के लिए Sounsouni को +223 93 01 01 23 पर कॉल करें।", later: "बाद में", bad: "गलत पासवर्ड।" }
   }[lang];
   var html = '<div class="modal-overlay" style="z-index:9100;"><div class="modal-sheet">';
@@ -640,7 +644,7 @@ function runBackgroundResync() {
         var accountsFromPublic = byCollection.accounts.length === 0 && publicProfileRows.length > 0;
         // Même règle qu'au démarrage : les articles ne sont pas dans cette
         // requête, on ne remplace donc jamais leur liste par du vide.
-        SHARED_KEYS.forEach(function(name) { if (name === "products" || PERSONAL_KEYS.indexOf(name) !== -1 || (name === "accounts" && accountsFromPublic)) return; state[name] = byCollection[name]; });
+        SHARED_KEYS.forEach(function(name) { if (name === "products" || PERSONAL_KEYS.indexOf(name) !== -1 || PRIVATE_KEYS.indexOf(name) !== -1 || (name === "accounts" && accountsFromPublic)) return; state[name] = byCollection[name]; });
           if (accountsFromPublic) applyPublicProfiles(publicProfileRows, true);
       } else {
         res.data.forEach(function(row) {
@@ -2514,7 +2518,8 @@ function submitBecomeRelais() {
   // La vraie photo (selfie + pièce d'identité) ne transite jamais par
   // app_data — elle part directement vers la table protégée, jamais
   // visible que par un Admin qui confirme son mot de passe pour la voir.
-  submitVerificationDocuments("relais_app_" + application.id, d.selfiePhotoUri, d.verificationDocs).then(function(ok) {
+  // Après l'enregistrement de la candidature : le serveur vérifie qu'elle est bien à nous.
+  (relaisSavePromise || Promise.resolve()).then(function() { return submitVerificationDocuments("relais_app_" + application.id, d.selfiePhotoUri, d.verificationDocs); }).then(function(ok) {
     if (!ok) {
       application.hasVerificationDocs = false;
       saveDoc("relaisApplications", application);
@@ -5005,28 +5010,31 @@ function addNotification(channel, message, userId, target) {
   var notif = { id: uid(), channel: channel, message: message, userId: userId || null, time: Date.now(), read: false, target: target || null };
   state.notifications.unshift(notif);
   save();
-  secureSocialWrite({ operation: "create_notification", notification: notif }, function() { queuePendingSync("notifications", notif); });
-  triggerPushNotification(userId, message);
+  secureSocialWrite({ operation: "create_notification", notification: notif }, function() { queuePendingSync("notifications", notif); })
+    .then(function(res) { if (res && res.success) triggerPushNotification(userId, message, notif.id); });
 }
 
 // Déclenche une VRAIE notification (même app fermée) pour ce compte, en
 // appelant la fonction Supabase dédiée — best-effort, jamais bloquant :
 // si ça échoue (pas de connexion, fonction pas encore déployée...), la
 // notification simulée dans l'app reste quand même créée normalement.
-function triggerPushNotification(userId, message) {
+// Audit 30/10/2026 (ADM-2) : le serveur n'envoie plus une notification
+// anonyme ; on lui donne l'identifiant de la notification déjà enregistrée,
+// et il envoie SON texte à elle.
+function triggerPushNotification(userId, message, notificationId) {
   if (!userId || !FIREBASE_ENABLED) return;
   // Envoie sur les deux systèmes à la fois — chaque compte peut avoir des
   // appareils des deux types (navigateur classique + app Capacitor), best-
   // effort sur chacun, jamais bloquant l'un pour l'autre.
   fetch(supabaseConfig.url + "/functions/v1/send-push", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
-    body: JSON.stringify({ userId: userId, title: "Sounsouni", body: message })
+    headers: authHeaders(),
+    body: JSON.stringify({ userId: userId, title: "Sounsouni", body: message, notificationId: notificationId || null })
   }).catch(function() { /* échec silencieux, best-effort */ });
   fetch(supabaseConfig.url + "/functions/v1/send-push-fcm", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
-    body: JSON.stringify({ userId: userId, title: "Sounsouni", body: message })
+    headers: authHeaders(),
+    body: JSON.stringify({ userId: userId, title: "Sounsouni", body: message, notificationId: notificationId || null })
   }).catch(function() { /* échec silencieux, best-effort */ });
 }
 
@@ -5506,10 +5514,10 @@ function registerAccount() {
       createdAt: Date.now()
     };
     state.relaisApplications.push(application);
-    saveDoc("relaisApplications", application);
+    var relaisSavePromise2 = saveDoc("relaisApplications", application);
     // La vraie photo ne transite jamais par app_data — voir
     // submitVerificationDocuments et get-verification-docs.
-    submitVerificationDocuments("relais_app_" + application.id, d.selfiePhotoUri, d.verificationDocs).then(function(ok) {
+    (relaisSavePromise2 || Promise.resolve()).then(function() { return submitVerificationDocuments("relais_app_" + application.id, d.selfiePhotoUri, d.verificationDocs); }).then(function(ok) {
       if (!ok) {
         application.hasVerificationDocs = false;
         saveDoc("relaisApplications", application);
@@ -8377,22 +8385,16 @@ var FILATURE_ACTION_LABELS = {
 // désormais autorisé pour écrire dans "filatureLogs" (voir migration 08).
 function secureFilatureSaveDoc(log) {
   if (!FIREBASE_ENABLED) return;
+  if (!state.sessionToken) return;
+  // Le serveur ajoute seulement les nouveaux événements (best-effort, sans file d'attente).
   fetch(supabaseConfig.url + "/functions/v1/filature-write", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+    headers: authHeaders(),
     body: JSON.stringify({ docId: log.id, data: log })
   })
     .then(function(r) { return r.json(); })
-    .then(function(res) {
-      if (!res.success) {
-        console.error("Erreur filature-write :", res.error);
-        queuePendingSync("filatureLogs", log);
-      }
-    })
-    .catch(function(err) {
-      console.error("Erreur réseau filature-write :", err);
-      queuePendingSync("filatureLogs", log);
-    });
+    .then(function(res) { if (!res.success) console.error("Erreur filature-write :", res.error); })
+    .catch(function(err) { console.error("Erreur réseau filature-write :", err); });
 }
 
 function logFilatureEvent(type, detail) {
@@ -15651,7 +15653,7 @@ function setAccountPassword(accountId, newPassword, newRecoveryCode, birthDate) 
 function setPartnerSecret(partnerId, type, value) {
   return fetch(supabaseConfig.url + "/functions/v1/set-partner-secret", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+    headers: authHeaders(null, true),
     body: JSON.stringify({ partnerId: partnerId, type: type, value: value })
   })
     .then(function(r) { return r.json(); })
@@ -15702,7 +15704,7 @@ function fetchPartnerSecret(partnerId, type) {
 function submitVerificationDocuments(docKey, selfiePhoto, verificationDocs) {
   return fetch(supabaseConfig.url + "/functions/v1/submit-verification-docs", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+    headers: authHeaders(),
     body: JSON.stringify({ docKey: docKey, selfiePhoto: selfiePhoto, verificationDocs: verificationDocs })
   })
     .then(function(r) { return r.json(); })
@@ -28916,7 +28918,7 @@ root.addEventListener("click", function(e) {
       var P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications;
       var tasks = [];
       var post = function(fn) {
-        return fetch(supabaseConfig.url + "/functions/v1/" + fn, { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+        return fetch(supabaseConfig.url + "/functions/v1/" + fn, { method: "POST", headers: authHeaders(null, !!state.adminSessionToken),
           body: JSON.stringify({ userId: diagAccId, title: "Sounsouni — Diagnostic", body: "Test du diagnostic complet (" + fn + ")" }) })
           .then(function(r) { return r.text().then(function(txt) { return "HTTP " + r.status + " — " + txt.slice(0, 700); }); })
           .catch(function(e) { return "ERREUR RÉSEAU : " + e; });
@@ -28946,7 +28948,7 @@ root.addEventListener("click", function(e) {
       var sendSelfTest = function() {
         fetch(supabaseConfig.url + "/functions/v1/send-push-fcm", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+          headers: authHeaders(null, !!state.adminSessionToken),
           body: JSON.stringify({ userId: state.profile.id, title: "Sounsouni — Test", body: "Si vous lisez ceci, les notifications fonctionnent ✅" })
         }).then(function(r) { return r.json(); }).then(function(data) {
           window._lastSelfPushResult = data;
@@ -29691,7 +29693,7 @@ root.addEventListener("click", function(e) {
       showToast(t("toast_test_notif"));
       fetch(supabaseConfig.url + "/functions/v1/send-push", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+        headers: authHeaders(null, !!state.adminSessionToken),
         body: JSON.stringify({ userId: value, title: "Sounsouni — Test", body: "Ceci est une notification test envoyée depuis l'administration." })
       })
         .then(function(res) { return res.json(); })
@@ -29709,7 +29711,7 @@ root.addEventListener("click", function(e) {
       showToast(t("toast_test_no_content"));
       fetch(supabaseConfig.url + "/functions/v1/send-push", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+        headers: authHeaders(null, !!state.adminSessionToken),
         body: JSON.stringify({ userId: value, noPayload: true })
       })
         .then(function(res) { return res.json(); })
@@ -29725,7 +29727,7 @@ root.addEventListener("click", function(e) {
       showToast(t("toast_test_notif_native"));
       fetch(supabaseConfig.url + "/functions/v1/send-push-fcm", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey },
+        headers: authHeaders(null, !!state.adminSessionToken),
         body: JSON.stringify({ userId: value, title: "Sounsouni — Test Firebase", body: "Ceci est une notification test envoyée via Firebase natif." })
       })
         .then(function(res) { return res.json(); })
@@ -32998,6 +33000,7 @@ function syncPersonalCollections() {
         if (res && res.success) {
           if (Array.isArray(res.securityAlerts)) state.securityAlerts = res.securityAlerts;
           if (Array.isArray(res.accounts)) { applyFullAccounts(res.accounts, !res.full); refreshProfileFromAccounts(); }
+          if (res.privates && typeof res.privates === "object") applyPrivateCollections(res.privates);
           var rows = [];
           ["orders", "notifications", "conversations"].forEach(function(k) {
             (res[k] || []).forEach(function(d) { rows.push({ collection: k, data: d }); });
@@ -33013,6 +33016,25 @@ function syncPersonalCollections() {
   }
 }
 
+// Fiches privées reçues du serveur : on garde aussi celles créées sur ce
+// téléphone il y a moins de 2 minutes ou encore en attente d'envoi.
+function applyPrivateCollections(privates) {
+  var pendingIds = {};
+  (state.pendingSyncQueue || []).forEach(function(it) { if (it && it.id) pendingIds[it.collection + "/" + it.id] = true; });
+  PRIVATE_KEYS.forEach(function(key) {
+    if (!Array.isArray(privates[key])) return;
+    var byId = {};
+    privates[key].forEach(function(d) { if (d && d.id) byId[d.id] = d; });
+    (state[key] || []).forEach(function(local) {
+      if (!local || !local.id || byId[local.id]) return;
+      var recent = (Date.now() - (local.createdAt || 0)) < 2 * 60 * 1000;
+      if (recent || pendingIds[key + "/" + local.id]) byId[local.id] = local;
+    });
+    state[key] = Object.keys(byId).map(function(id) { return byId[id]; });
+  });
+  save();
+  renderOrDefer();
+}
 function applyPersonalResults(results, seq, via) {
   if (window.__bootMark) window.__bootMark("chargement ciblé : réponse (" + via + ")");
     if (seq !== _personalSyncSeq) return; // une synchro plus récente a pris le relais
@@ -33607,7 +33629,7 @@ function bootAppWithLocalData() {
           // state.products par la liste vide reçue ici effaçait les articles
           // déjà arrivés : marché vide pour tout nouveau visiteur, et
           // "je ne vois que mes propres articles" après plus de 24 h.
-          SHARED_KEYS.forEach(function(name) { if (name === "products" || PERSONAL_KEYS.indexOf(name) !== -1 || (name === "accounts" && accountsFromPublic)) return; state[name] = byCollection[name]; });
+          SHARED_KEYS.forEach(function(name) { if (name === "products" || PERSONAL_KEYS.indexOf(name) !== -1 || PRIVATE_KEYS.indexOf(name) !== -1 || (name === "accounts" && accountsFromPublic)) return; state[name] = byCollection[name]; });
           if (accountsFromPublic) applyPublicProfiles(publicProfileRows, true);
         } else {
           // Incrémental : on met seulement à jour/ajoute les lignes reçues,

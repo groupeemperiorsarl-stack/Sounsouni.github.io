@@ -1,3 +1,4 @@
 Tests des fonctions argent et commandes (audit du 28/10/2026), sans toucher la vraie base :
   cd tools/tests && npx deno run --no-check --import-map=import-map.json --allow-env --allow-read --no-lock test-argent-commandes.ts
 Résultat attendu : « 52 réussis, 0 échoués ».
+Deuxième fichier (comptes, données privées, push, avis) : test-comptes-donnees.ts (même commande).

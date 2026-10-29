@@ -3,6 +3,11 @@
 // Écritures protégées (comptes, articles, boosts, réglages…).
 // Nouveau (audit) : cagnottes et réservations passent ici ; le stock d'un
 // article ne peut plus être changé par un autre que son vendeur.
+// Version 2026-10-30 : collections privées (candidatures, demandes, litiges,
+// conversations Admin, jetons push, colis externes) et avis passent ici ;
+// find_account limité (20/h par adresse IP) et ne donne plus de clé sur
+// simple nom + numéro ; le numéro de téléphone d'un compte ne peut plus
+// prendre celui d'un autre compte.
 // ============================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
@@ -14,7 +19,7 @@ const ACCOUNT_PROTECTED = ["verified", "verificationStatus", "banned", "isSourci
 const ACCOUNT_SERVER_MANAGED = ["affiliateBalance", "affiliateReferrals", "affiliateEarnings", "verifiedSalesTotal", "verifiedSalesCount"];
 const ACCOUNT_CROSS_BOOL = ["hasNewBuyerStatusAlert", "hasNewSellerOrderAlert", "hasRefusalAlert"];
 const ACCOUNT_CROSS_COUNT = ["livreurRefusalCount", "unclaimedParcelCount"];
-interface Ctx { isAdmin: boolean; isEmployee: boolean; callerIds: string[]; onSourcingList: boolean; affiliateCodeTaken?: boolean; }
+interface Ctx { isAdmin: boolean; isEmployee: boolean; callerIds: string[]; onSourcingList: boolean; affiliateCodeTaken?: boolean; phoneTaken?: boolean; me?: any; }
 function sameJson(a: unknown, b: unknown) { return JSON.stringify(a === undefined ? null : a) === JSON.stringify(b === undefined ? null : b); }
 function keepServerManaged(current: any, out: any) {
 if (!current) return out;
@@ -33,6 +38,8 @@ for (const f of ACCOUNT_PROTECTED) {
 if (f in current) out[f] = current[f]; else delete out[f];
 }
 keepServerManaged(current, out);
+// Audit CPT-3 : on ne peut pas prendre le numéro d'un autre compte.
+if (ctx.phoneTaken) out.phone = current.phone;
 if (incoming.verificationStatus === "pending" && current.verificationStatus !== "approved") out.verificationStatus = "pending";
 if (incoming.livreurApplicationStatus === "pending" && current.livreurApplicationStatus !== "approved") out.livreurApplicationStatus = "pending";
 if (incoming.relaisApplicationStatus === "pending" && current.relaisApplicationStatus !== "approved") out.relaisApplicationStatus = "pending";
@@ -154,6 +161,91 @@ for (const f of BOOKING_PAYMENT) { if (f in current) out[f] = current[f]; else d
 for (const f of ["buyerId", "sellerId", "productId", "price", "createdAt"]) { if (f in current) out[f] = current[f]; }
 return out;
 }
+// ---- Collections privées (audit BDD-3/4/5) : chacun ne touche qu'à ses propres fiches ----
+const PRIVATE: Record<string, { owner: string | null; staffOnly: string[] }> = {
+verificationRequests: { owner: "accountId", staffOnly: ["status", "resolvedAt"] },
+livreurApplications: { owner: "accountId", staffOnly: ["status", "resolvedAt"] },
+relaisApplications: { owner: "accountId", staffOnly: ["status", "resolvedAt"] },
+relaisEditRequests: { owner: "accountId", staffOnly: ["status", "resolvedAt"] },
+autreQuartierApplications: { owner: "accountId", staffOnly: ["status", "resolvedAt", "suggestedCommune"] },
+adminConversations: { owner: "accountId", staffOnly: [] },
+fcmTokens: { owner: "accountId", staffOnly: [] },
+pushSubscriptions: { owner: "accountId", staffOnly: [] },
+externalParcelChangeRequests: { owner: "requestedByAccountId", staffOnly: ["status", "resolvedAt"] },
+passwordRecoveryRequests: { owner: null, staffOnly: [] },
+pendingPayments: { owner: null, staffOnly: [] },
+};
+const SPECIAL = ["disputes", "externalParcels", "reviews"];
+const isStaffCtx = (ctx: Ctx) => ctx.isAdmin || ctx.isEmployee;
+function rulePrivate(collection: string, current: any, incoming: any, ctx: Ctx): any {
+const r = PRIVATE[collection];
+if (isStaffCtx(ctx)) return { ...(current || {}), ...incoming };
+if (!r.owner) return null;
+if (!current) {
+if (!ctx.callerIds.includes(String(incoming[r.owner] || ""))) return null;
+const out: any = { ...incoming };
+for (const f of r.staffOnly) { if (f === "status") out.status = "pending"; else delete out[f]; }
+return out;
+}
+if (!ctx.callerIds.includes(String(current[r.owner] || ""))) return null;
+const out: any = { ...current, ...incoming, id: current.id, [r.owner]: current[r.owner] };
+for (const f of r.staffOnly) { if (f in current) out[f] = current[f]; else delete out[f]; }
+return out;
+}
+async function ruleDispute(current: any, incoming: any, ctx: Ctx, getDoc: (c: string, id: string) => Promise<any>): Promise<any> {
+if (isStaffCtx(ctx)) return { ...(current || {}), ...incoming };
+const orderId = String((current && current.orderId) || incoming.orderId || "");
+const order = orderId ? await getDoc("orders", orderId) : null;
+if (!order) return null;
+const parties = [order.buyerId, order.livreurId, order.relaisShopId, ...(Array.isArray(order.sellerIds) ? order.sellerIds : [])].filter(Boolean);
+if (!parties.some((p: string) => ctx.callerIds.includes(p))) return null;
+const locked = { orderId, buyerId: order.buyerId, buyerName: order.buyerName || incoming.buyerName || "", sellerIds: Array.isArray(order.sellerIds) ? order.sellerIds : [] };
+if (!current) return { ...incoming, ...locked, status: "En litige", createdAt: Date.now() };
+const out: any = { ...current, ...incoming, id: current.id, ...locked };
+for (const f of ["status", "resolvedAt", "createdAt"]) { if (f in current) out[f] = current[f]; else delete out[f]; }
+return out;
+}
+function ruleParcel(current: any, incoming: any, ctx: Ctx): any {
+if (isStaffCtx(ctx)) return { ...(current || {}), ...incoming };
+if (!current) {
+if (!ctx.callerIds.includes(String(incoming.relaisShopId || ""))) return null;
+return { ...incoming, livreurId: null, livreurName: null };
+}
+const isShop = ctx.callerIds.includes(current.relaisShopId);
+const isLiv = !!current.livreurId && ctx.callerIds.includes(current.livreurId);
+const canTake = !current.livreurId && ctx.me && ctx.me.livreurApplicationStatus === "approved" && ctx.callerIds.includes(String(incoming.livreurId || ""));
+if (!isShop && !isLiv && !canTake) return null;
+const out: any = { ...current, ...incoming, id: current.id };
+for (const f of ["relaisShopId", "relaisShopName", "codeDepot", "codeRetrait", "createdAt", "createdByAccountId", "platform", "trackingNumber"]) { if (f in current) out[f] = current[f]; }
+if (!canTake && !isShop) { out.livreurId = current.livreurId; out.livreurName = current.livreurName; }
+return out;
+}
+// ---- Avis (audit CMD-4) : seulement l'acheteur d'une commande livrée, un avis par article ----
+async function ruleReview(current: any, incoming: any, ctx: Ctx, db: any, getDoc: (c: string, id: string) => Promise<any>): Promise<any> {
+if (isStaffCtx(ctx)) return { ...(current || {}), ...incoming };
+const rating = Math.round(Number(incoming.rating));
+if (!(rating >= 1 && rating <= 5)) return null;
+const comment = String(incoming.comment || "").slice(0, 1000);
+if (current) {
+if (!ctx.callerIds.includes(current.userId)) return null;
+return { ...current, rating, comment, updatedAt: Date.now() };
+}
+const productId = String(incoming.productId || "");
+if (!productId || !ctx.callerIds.includes(String(incoming.userId || ""))) return null;
+const { data: rows } = await db.from("app_data").select("data").eq("collection", "orders").in("data->>buyerId", ctx.callerIds).eq("data->>status", "Livrée");
+let bought = false;
+for (const r of (rows || []) as any[]) {
+const o = r.data; if (!o) continue;
+const det = await getDoc("orderDetails", o.id);
+const items = det && Array.isArray(det.items) ? det.items : (Array.isArray(o.items) ? o.items : []);
+if (items.some((it: any) => it && it.productId === productId && !it.refused)) { bought = true; break; }
+}
+if (!bought) return null;
+const { data: mine } = await db.from("app_data").select("id").eq("collection", "reviews").eq("data->>productId", productId).in("data->>userId", ctx.callerIds).limit(1);
+if (mine && mine.length) return null;
+const acc = ctx.me || {};
+return { id: String(incoming.id), productId, userId: String(incoming.userId), userName: String(acc.name || incoming.userName || "").slice(0, 80), rating, comment, verified: true, createdAt: Date.now() };
+}
 function ruleDelete(collection: string, current: any, ctx: Ctx): boolean {
 if (ctx.isAdmin) return true;
 if (ADMIN_ONLY.includes(collection)) return false;
@@ -163,6 +255,10 @@ if (collection === "accounts") return ctx.callerIds.includes(current.id);
 if (collection === "products") return ctx.callerIds.includes(current.sellerId) || current.sellerId === "seed";
 if (collection === "boosts") return ctx.callerIds.includes(current.sellerId);
 if (collection === "cagnottes" || collection === "bookings") return ctx.isEmployee;
+if (ctx.isEmployee && (PRIVATE[collection] || SPECIAL.includes(collection))) return true;
+if (collection === "fcmTokens" || collection === "pushSubscriptions") return ctx.callerIds.includes(current.accountId);
+if (collection === "reviews") return ctx.callerIds.includes(current.userId);
+if (collection === "externalParcels") return ctx.callerIds.includes(current.relaisShopId);
 return false;
 }
 function fromBase64Url(b64url: string): Uint8Array {
@@ -222,7 +318,9 @@ function json(body: Record<string, unknown>, status = 200) {
 return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
 const norm = (p: unknown) => String(p || "").replace(/[\s.\-()]/g, "");
-const SECURE = ["accounts", "products", "boosts", "cagnottes", "bookings", ...ADMIN_ONLY];
+const SECURE = ["accounts", "products", "boosts", "cagnottes", "bookings", ...Object.keys(PRIVATE), ...SPECIAL, ...ADMIN_ONLY];
+const clientIp = (req: Request) => (req.headers.get("cf-connecting-ip") || (req.headers.get("x-forwarded-for") || "").split(",")[0] || "?").trim().slice(0, 64);
+async function sha32(s: string) { const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)); return Array.from(new Uint8Array(h)).map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32); }
 Deno.serve(async (req) => {
 if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 try {
@@ -230,6 +328,14 @@ const body = await req.json();
 const op = body.operation, collection = String(body.collection || "");
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 if (op === "find_account") {
+// Audit CPT-5 : 20 recherches par heure et par adresse IP.
+{
+const now = Date.now(), lid = "findacc:" + (await sha32(clientIp(req)));
+const { data: lr } = await db.from("app_data").select("data").eq("collection", "loginHistory").eq("id", lid).maybeSingle();
+const hits: number[] = (lr && (lr as any).data && Array.isArray((lr as any).data.hits) ? (lr as any).data.hits : []).filter((t: number) => now - t < 3600000);
+if (hits.length >= 20) return json({ success: false, error: "too_many_attempts" }, 429);
+await db.from("app_data").upsert({ collection: "loginHistory", id: lid, data: { id: lid, kind: "findacc", hits: [...hits, now] }, updated_at: new Date().toISOString() }, { onConflict: "collection,id" });
+}
 const name = String(body.name || "").trim().toLowerCase();
 const digits = String(body.phone || "").replace(/\D/g, "");
 const full = String(body.fullPhone || "").replace(/\D/g, "");
@@ -241,7 +347,11 @@ return (ad === full || ad.endsWith(digits)) && String(a.name || "").trim().toLow
 });
 if (!match) return json({ success: true, found: false });
 const out: Record<string, unknown> = { success: true, found: true, accountId: match.id, hasPassword: !!match.hasPassword };
-if (!match.hasPassword && isLowRiskAccount(match)) out.sessionToken = await signSession(match.id);
+// Audit CPT-2 : une nouvelle clé seulement si le téléphone a déjà eu une clé
+// de CE compte (même ancienne de moins d'un an). Sinon : appeler Sounsouni.
+const oldTok = await readSignedToken(req.headers.get("X-Session-Token"));
+const ownsOld = !!oldTok && oldTok.accountId === match.id && Date.now() - oldTok.expiresAt < 365 * 24 * 3600 * 1000;
+if (!match.hasPassword && isLowRiskAccount(match) && ownsOld) out.sessionToken = await signSession(match.id);
 else if (!match.hasPassword) out.needsHelp = true;
 return json(out);
 }
@@ -341,8 +451,9 @@ if (!session) return json({ success: false, error: "session_required" }, 401);
 const callerId: string = session.accountId;
 const isAdmin = callerId === "admin_owner" || callerId.startsWith("national_admin_");
 let callerIds = [callerId], isEmployee = false, onSourcingList = false;
+let me: any = null;
 if (!isAdmin) {
-const me = await getDoc("accounts", callerId);
+me = await getDoc("accounts", callerId);
 if (!me) return json({ success: false, error: "account_not_found" }, 404);
 if (me.phone) {
 const { data: sib } = await db.from("app_data").select("data").eq("collection", "accounts").eq("data->>phone", me.phone);
@@ -359,7 +470,7 @@ isEmployee = onList(g2) || nationalEmployee;
 onSourcingList = onList(sa);
 }
 }
-const ctx: Ctx = { isAdmin, isEmployee, callerIds, onSourcingList };
+const ctx: Ctx = { isAdmin, isEmployee, callerIds, onSourcingList, me };
 if (op === "delete") {
 const id = String(body.id || "");
 if (!id) return json({ success: false, error: "invalid_id" }, 400);
@@ -383,10 +494,18 @@ if (collection === "accounts" && incoming && typeof incoming.affiliateCode === "
 const { data: sameCode } = await db.from("app_data").select("id").eq("collection", "accounts").eq("data->>affiliateCode", incoming.affiliateCode).neq("id", String(incoming.id)).limit(1);
 ctx.affiliateCodeTaken = !!(sameCode && sameCode.length);
 }
+if (collection === "accounts" && current && !isAdmin && !isEmployee && typeof incoming.phone === "string" && norm(incoming.phone) !== norm(current.phone)) {
+const { data: allAcc } = await db.from("app_data").select("id, data").eq("collection", "accounts").limit(20000);
+ctx.phoneTaken = !norm(incoming.phone) || (allAcc || []).some((r: any) => r.id !== current.id && !callerIds.includes(r.id) && r.data && norm(r.data.phone) === norm(incoming.phone));
+}
 if (collection === "accounts") toSave = ruleAccount(current, incoming, ctx);
 else if (collection === "products") toSave = ruleProduct(current, incoming, ctx);
 else if (collection === "cagnottes") toSave = ruleCagnotte(current, incoming, ctx);
 else if (collection === "bookings") toSave = await ruleBooking(current, incoming, ctx, getDoc);
+else if (PRIVATE[collection]) toSave = rulePrivate(collection, current, incoming, ctx);
+else if (collection === "disputes") toSave = await ruleDispute(current, incoming, ctx, getDoc);
+else if (collection === "externalParcels") toSave = ruleParcel(current, incoming, ctx);
+else if (collection === "reviews") toSave = await ruleReview(current, incoming, ctx, db, getDoc);
 else if (collection === "boosts") {
 if (ctx.isAdmin || ctx.isEmployee) toSave = { ...(current || {}), ...incoming };
 else if (current) toSave = null; // seule l'administration valide ou refuse un boost
