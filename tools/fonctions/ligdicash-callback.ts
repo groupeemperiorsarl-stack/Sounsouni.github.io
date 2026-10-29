@@ -1,5 +1,7 @@
 // ============================================================
-// Fonction serveur : ligdicash-callback (appelée par LigdiCash)
+// Fonction serveur : ligdicash-callback (appelée par LigdiCash) — version 2026-10-29
+// (audit : recharges et gains crédités de façon atomique, une seule fois ;
+// seuls les champs du paiement sont modifiés sur les commandes et réservations)
 // Règles LigdiCash : retrouver NOTRE transaction_id dans custom_data,
 // ignorer toute transaction inconnue, revérifier avec "confirm" (avec le
 // token gardé à la création), n'agir que sur la réponse de confirm,
@@ -47,6 +49,8 @@ async function applyConfirmed(db: any, txn: any, conf: any): Promise<string> {
   if (!claimed || !claimed.length) return "already";
   const get = async (c: string, id: string) => { const { data } = await db.from("app_data").select("data").eq("collection", c).eq("id", id).maybeSingle(); return data ? data.data : null; };
   const put = (c: string, d: any) => db.from("app_data").update({ data: d, updated_at: new Date().toISOString() }).eq("collection", c).eq("id", d.id);
+  // Audit 29/10/2026 : on ne modifie plus que les champs du paiement (jamais tout le document).
+  const patch = (c: string, id: string, fields: any) => db.rpc("sns_doc_patch", { p_collection: c, p_id: id, p_patch: fields, p_expect: null });
   const ref = String(txn.refId);
   const ref2 = " (réf. LigdiCash " + newTxn.requestId + ", transaction " + txn.transactionId + ")";
   if (txn.kind === "wallet") {
@@ -54,11 +58,10 @@ async function applyConfirmed(db: any, txn: any, conf: any): Promise<string> {
     const wid = String(txn.walletPhone || "").replace(/[\s.\-()]/g, "");
     if (!wid) return status;
     if (status === "completed") {
-      const w = (await get("wallets", wid)) || { id: wid, phone: txn.walletPhone, balance: 0, transactions: [] };
-      w.balance = num(w.balance) + Math.round(num(txn.amount));
-      w.transactions = Array.isArray(w.transactions) ? w.transactions : [];
-      w.transactions.push({ id: crypto.randomUUID(), type: "credit", amount: Math.round(num(txn.amount)), reason: "recharge_mobile", accountId: txn.buyerId || null, accountName: newTxn.operator || "Mobile money", orderId: null, message: null, ref: txn.transactionId, createdAt: now });
-      await db.from("app_data").upsert({ collection: "wallets", id: wid, data: w, updated_at: new Date().toISOString() }, { onConflict: "collection,id" });
+      // Crédit atomique, une seule fois par transaction (clé unique).
+      const { error: we } = await db.rpc("sns_wallet_batch", { p_ops: [{ coll: "wallets", phone: String(txn.walletPhone), delta: Math.round(num(txn.amount)), key: "recharge:" + txn.transactionId,
+        txn: { id: crypto.randomUUID(), type: "credit", amount: Math.round(num(txn.amount)), reason: "recharge_mobile", accountId: txn.buyerId || null, accountName: newTxn.operator || "Mobile money", orderId: null, message: null, ref: txn.transactionId, createdAt: now } }] });
+      if (we && !String(we.message || "").includes("duplicate")) { console.error("recharge non créditée", we); await notify(db, "ntf_" + txn.transactionId + "_err", null as any, "⚠️ Recharge payée mais PAS créditée (erreur serveur)" + ref2 + ". À créditer à la main.", "admin"); return status; }
       await notify(db, "ntf_" + txn.transactionId, txn.buyerId, "💰 Votre portefeuille a été rechargé de " + Math.round(num(txn.amount)).toLocaleString("fr-FR") + " F.", "wallet");
     } else if (status === "amount_mismatch") {
       await notify(db, "ntf_" + txn.transactionId + "_adm", null as any, "⚠️ Recharge portefeuille : montant LigdiCash différent" + ref2 + ". À vérifier (rien n'a été crédité).", "admin");
@@ -69,7 +72,7 @@ async function applyConfirmed(db: any, txn: any, conf: any): Promise<string> {
     const bk = await get("bookings", ref);
     if (!bk) return status;
     if (status === "completed") {
-      await put("bookings", { ...bk, paymentStatus: "paid", paidAt: now, paymentRef: txn.transactionId, paidAmount: Math.round(num(txn.amount)), paymentOperator: newTxn.operator });
+      await patch("bookings", bk.id, { paymentStatus: "paid", paidAt: now, paymentRef: txn.transactionId, paidAmount: Math.round(num(txn.amount)), paymentOperator: newTxn.operator });
       // Part du prestataire (après commission) notée dans ses gains, versée par Sounsouni.
       const { data: cfgRow } = await db.from("app_data").select("data").eq("collection", "settings").eq("id", "commission_config").maybeSingle();
       const cfg = cfgRow ? (cfgRow as any).data : null;
@@ -77,13 +80,13 @@ async function applyConfirmed(db: any, txn: any, conf: any): Promise<string> {
       const seller = await get("accounts", String(bk.sellerId || ""));
       if (seller && seller.phone) {
         const eid = String(seller.phone).replace(/[\s.\-()]/g, "");
-        const led = (await get("earningsLedgers", eid)) || { id: eid, phone: seller.phone, total: 0, transactions: [] };
-        led.transactions = Array.isArray(led.transactions) ? led.transactions : [];
-        if (!led.transactions.some((x: any) => x && x.orderId === bk.id && x.reason === "vente")) {
+        const led = await get("earningsLedgers", eid);
+        const lt = led && Array.isArray(led.transactions) ? led.transactions : [];
+        if (!lt.some((x: any) => x && x.orderId === bk.id && x.reason === "vente")) {
           const net = Math.round(num(txn.amount) * (cfg && cfg.commissionMode === "add" ? 1 : 1 - rate));
-          led.total = num(led.total) + net;
-          led.transactions.push({ id: crypto.randomUUID(), amount: net, reason: "vente", accountId: bk.buyerId || null, accountName: String(bk.productName || "Réservation"), orderId: bk.id, createdAt: now });
-          await db.from("app_data").upsert({ collection: "earningsLedgers", id: eid, data: led, updated_at: new Date().toISOString() }, { onConflict: "collection,id" });
+          const { error: le } = await db.rpc("sns_wallet_batch", { p_ops: [{ coll: "earningsLedgers", phone: String(seller.phone), delta: net, key: "vente:" + bk.id,
+            txn: { id: crypto.randomUUID(), amount: net, reason: "vente", accountId: bk.buyerId || null, accountName: String(bk.productName || "Réservation"), orderId: bk.id, createdAt: now } }] });
+          if (le && !String(le.message || "").includes("duplicate")) { console.error("gain réservation non noté", le); await notify(db, "ntf_" + txn.transactionId + "_err", null as any, "⚠️ Réservation payée : gain du prestataire PAS noté (erreur serveur)" + ref2 + ".", "admin"); }
         }
       }
       await notify(db, "ntf_" + txn.transactionId + "_s", bk.sellerId, "💰 Réservation payée en ligne : " + String(bk.productName || "") + " — " + Math.round(num(txn.amount)).toLocaleString("fr-FR") + " F (" + String(bk.buyerName || "") + ").", "seller");
@@ -112,7 +115,7 @@ async function applyConfirmed(db: any, txn: any, conf: any): Promise<string> {
       await notify(db, "ntf_" + txn.transactionId + "_adm", null as any, "⚠️ Commande " + short + " payée deux fois" + ref2 + " — à rembourser au client.", "admin");
     } else if (o.status === "Annulée") {
       // Paiement confirmé après l'annulation automatique (délai dépassé).
-      await put("orders", { ...o, paymentStatus: "paid_after_cancel", paidAt: now, paymentRef: txn.transactionId, paymentOperator: newTxn.operator });
+      await patch("orders", o.id, { paymentStatus: "paid_after_cancel", paidAt: now, paymentRef: txn.transactionId, paymentOperator: newTxn.operator });
       await notify(db, "ntf_" + txn.transactionId + "_adm", null as any, "⚠️ Commande " + short + " payée APRÈS son annulation" + ref2 + " — réactiver ou rembourser.", "admin");
       await notify(db, "ntf_" + txn.transactionId + "_b", o.buyerId, "Nous avons bien reçu votre paiement pour la commande " + short + ". Sounsouni vous contacte pour la suite.", "orders");
     } else {
@@ -122,13 +125,13 @@ async function applyConfirmed(db: any, txn: any, conf: any): Promise<string> {
         const vs: Record<string, string> = {};
         for (const sid of (Array.isArray(o.sellerIds) ? o.sellerIds : [])) vs[sid] = "Prête";
         const hist = Array.isArray(o.statusHistory) ? o.statusHistory : [];
-        await put("orders", { ...o, paymentStatus: "paid", paidAt: now, paymentRef: txn.transactionId, paymentOperator: newTxn.operator, status: "Livrée", deliveredAt: now, vendorStatuses: vs, statusHistory: [...hist, { status: "Livrée", at: now, note: "Produit numérique payé" }] });
+        await patch("orders", o.id, { paymentStatus: "paid", paidAt: now, paymentRef: txn.transactionId, paymentOperator: newTxn.operator, status: "Livrée", deliveredAt: now, deliveryVerified: true, deliveryVerifiedAt: now, deliveryVerifiedBy: "ligdicash", vendorStatuses: vs, statusHistory: [...hist, { status: "Livrée", at: now, note: "Produit numérique payé" }] });
         await notify(db, "ntf_" + txn.transactionId + "_b", o.buyerId, "📥 Paiement reçu (commande " + short + ") : votre achat est prêt, téléchargez-le dans « Mes achats ».", "orders");
         for (const sid of (Array.isArray(o.sellerIds) ? o.sellerIds : [])) {
           await notify(db, "ntf_" + txn.transactionId + "_" + sid, sid, "💰 Vente numérique " + short + " payée — le client a reçu son accès.", "seller-orders");
         }
       } else {
-      await put("orders", { ...o, paymentStatus: "paid", paidAt: now, paymentRef: txn.transactionId, paymentOperator: newTxn.operator });
+      await patch("orders", o.id, { paymentStatus: "paid", paidAt: now, paymentRef: txn.transactionId, paymentOperator: newTxn.operator });
       await notify(db, "ntf_" + txn.transactionId + "_b", o.buyerId, "✅ Paiement reçu pour votre commande " + short + ". Merci !", "orders");
       for (const sid of (Array.isArray(o.sellerIds) ? o.sellerIds : [])) {
         await notify(db, "ntf_" + txn.transactionId + "_" + sid, sid, "🛍️ Nouvelle commande " + short + " payée — préparez-la.", "seller-orders");
@@ -144,12 +147,18 @@ async function applyConfirmed(db: any, txn: any, conf: any): Promise<string> {
 }
 async function cancelOrder(db: any, o: any, note: string, get: any, put: any) {
   const now = Date.now(), ref = String(o.id), hist = Array.isArray(o.statusHistory) ? o.statusHistory : [];
-  await put("orders", { ...o, status: "Annulée", paymentStatus: "failed", cancelledAt: now, statusHistory: [...hist, { status: "Annulée", at: now, note }] });
   const det = await get("orderDetails", ref);
-  for (const it of (det && Array.isArray(det.items) ? det.items : [])) {
-    if (it.refused) continue;
-    const p = await get("products", String(it.productId || ""));
-    if (p) await put("products", { ...p, stock: num(p.stock) + Math.max(0, Math.round(num(it.qty))) });
+  const released: string[] = Array.isArray(o.stockReleased) ? o.stockReleased : [];
+  const back: any[] = [];
+  (det && Array.isArray(det.items) ? det.items : []).forEach((it: any, i: number) => { if (it && !it.refused && !released.includes(String(i))) back.push({ it, key: String(i) }); });
+  await db.rpc("sns_doc_patch", { p_collection: "orders", p_id: ref, p_patch: { status: "Annulée", paymentStatus: "failed", cancelledAt: now, statusHistory: [...hist, { status: "Annulée", at: now, note }], stockReleased: [...released, ...back.map((b) => b.key)] }, p_expect: null });
+  for (const { it } of back) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const p = await get("products", String(it.productId || ""));
+      if (!p || typeof p.stock !== "number") break;
+      const { data: okp } = await db.rpc("sns_doc_patch", { p_collection: "products", p_id: p.id, p_patch: { stock: p.stock + Math.max(0, Math.round(num(it.qty))) }, p_expect: { stock: p.stock } });
+      if (okp) break;
+    }
   }
   await notify(db, "ntf_cancel_" + ref, o.buyerId, "❌ Le paiement de la commande #" + ref.slice(-5).toUpperCase() + " n'a pas été effectué : la commande est annulée. Vous pouvez recommander quand vous voulez.", "orders");
 }

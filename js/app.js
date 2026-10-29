@@ -68,7 +68,7 @@ const SHARED_KEYS = [
 // "secure-write", qui vérifie l'identité et applique les règles (chacun ne
 // modifie que ce qu'il a le droit de modifier). Tant que la fonction n'est
 // pas déployée, repli sur l'écriture directe.
-var SECURE_WRITE_COLLECTIONS = ["accounts", "products", "boosts", "settings", "nationalAdmins", "sourcingAgentWhitelist", "group2GlobalWhitelist", "apiPartners", "webhookPartners", "dashboardPartners", "platformCommissions", "vipAds"];
+var SECURE_WRITE_COLLECTIONS = ["accounts", "products", "boosts", "cagnottes", "bookings", "settings", "nationalAdmins", "sourcingAgentWhitelist", "group2GlobalWhitelist", "apiPartners", "webhookPartners", "dashboardPartners", "platformCommissions", "vipAds"];
 // Lit la réponse d'une fonction serveur. Si ce n'est pas du JSON (fonction
 // plantée, limite atteinte...), on garde le vrai code HTTP et le début du
 // texte, au lieu d'un simple "network_error" qui ne dit rien.
@@ -331,7 +331,7 @@ function queuePendingSync(collectionName, docData, type) {
 // Refus que renvoyer ne changera pas (sauf après une nouvelle clé) : on
 // arrête d'insister toutes les 20 s, mais l'entrée reste visible dans le
 // rapport de test avec sa raison, et le bouton « Renvoyer maintenant ».
-var PERMANENT_QUEUE_ERRORS = ["not_your_order", "not_linked_to_order", "missing_fields", "forbidden", "invalid_doc", "invalid_id", "admin_only"];
+var PERMANENT_QUEUE_ERRORS = ["not_your_order", "not_linked_to_order", "missing_fields", "forbidden", "invalid_doc", "invalid_id", "admin_only", "price_changed", "product_missing", "own_product", "out_of_stock", "payment_not_supported", "not_paid", "insufficient_balance", "bad_code", "not_allowed", "empty_order", "no_wallet_phone"];
 var _queueFlushing = false;
 function flushPendingSyncQueue(manual) {
   if (!FIREBASE_ENABLED || !state.pendingSyncQueue || state.pendingSyncQueue.length === 0) return;
@@ -6613,11 +6613,11 @@ function digitalBuyWith(method) {
   // Portefeuille : débit réel vérifié par le serveur, puis accès immédiat.
   var order = createDigitalOrder(p, "portefeuille", true);
   state.digitalBuying = true; render();
-  callWalletOperation({ operation: "debit", amount: price, reason: "achat_boutique", meta: { orderId: order.id, accountName: "Commande #" + order.id.slice(-5).toUpperCase() } }).then(function(res) {
+  createOrderOnServerFirst(order).then(function(res) {
     state.digitalBuying = false;
-    if (!res || !res.success) { state.quickBuyItem = null; render(); showToast(t("toast_wallet_insufficient_order")); return; }
+    if (!res || !res.success) { state.quickBuyItem = null; render(); showOrderCreateError(res); return; }
     fetchMyWalletState();
-    finalizeOrder(order, { simulated: false });
+    finalizeOrder(order, { simulated: false, alreadyOnServer: true });
     Promise.resolve(window.__lastOrderSaved).then(function() { setTimeout(function() { digitalOpen(order.id, p.id); }, 1200); });
   });
 }
@@ -7067,17 +7067,14 @@ function placeOrder() {
   }
 
   if (form.payment === "portefeuille") {
-    // Débit réel — le serveur relit le vrai solde et refuse si
-    // insuffisant, on ne finalise la commande que si le débit a
-    // vraiment réussi.
-    callWalletOperation({ operation: "debit", amount: orderDraft.total, reason: "achat_boutique", meta: { orderId: orderDraft.id, accountName: "Commande #" + orderId.slice(-5).toUpperCase() } }).then(function(res) {
-      if (!res.success) {
-        showToast(t("toast_wallet_insufficient_order"));
-        return;
-      }
+    // Audit 29/10/2026 : c'est le serveur qui crée la commande ET débite le
+    // portefeuille du vrai montant, en une seule fois (order-write, walletPay).
+    // On ne finalise ici que si le serveur a vraiment accepté.
+    orderDraft.paymentStatus = "paid";
+    createOrderOnServerFirst(orderDraft).then(function(res) {
+      if (!res || !res.success) { showOrderCreateError(res); return; }
       fetchMyWalletState();
-      orderDraft.paymentStatus = "paid";
-      finalizeOrder(orderDraft, { simulated: false });
+      finalizeOrder(orderDraft, { simulated: false, alreadyOnServer: true });
     });
     return;
   }
@@ -7258,18 +7255,19 @@ function finalizeOrder(order, opts) {
     buyerLat: order.buyerLat != null ? order.buyerLat : null,
     buyerLng: order.buyerLng != null ? order.buyerLng : null
   } : null;
-  var orderSaved = secureOrderSaveDoc(order);
+  var orderSaved = (opts && opts.alreadyOnServer) ? Promise.resolve(true) : secureOrderSaveDoc(order, false, { isNew: true });
   window.__lastOrderSaved = orderSaved;
   if (awaitingPayment) {
     Promise.resolve(orderSaved).then(function(okSaved) {
+      if (okSaved === "rejected") return;
       if (okSaved === false) { showToast(t("ligdi_saved_offline")); return; }
       startLigdicashPayment({ kind: "order", orderId: order.id });
     });
   }
   if (contactPayload) {
-    Promise.resolve(orderSaved).then(function() { saveOrderContactReliably(contactPayload, 0); });
+    Promise.resolve(orderSaved).then(function(okSaved) { if (okSaved === "rejected") return; saveOrderContactReliably(contactPayload, 0); });
   }
-  affectedProducts.forEach(function(p) { saveDoc("products", p); });
+  // Le stock est désormais retiré par le serveur (order-write) : rien à envoyer ici.
   render();
   pushDebugLog("info", "finalizeOrder() terminé", "view après=" + state.view + " taille panier après=" + state.cart.length);
   // Une commande internationale n'a ni code de retrait ni code OTP (ces
@@ -7554,7 +7552,7 @@ function sellerRefuseItems(orderId, reason, sellerIdForAdmin) {
       for (var k = 0; k < state.products.length; k++) {
         if (state.products[k].id === order.items[j].productId) {
           state.products[k].stock += order.items[j].qty;
-          saveDoc("products", state.products[k]);
+          if (!order.stockReserved) saveDoc("products", state.products[k]); // sinon le serveur remet le stock lui-même
           break;
         }
       }
@@ -7625,82 +7623,84 @@ function sellerRefuseItems(orderId, reason, sellerIdForAdmin) {
   showToast(allRefused ? "Commande annulée — le client a été prévenu." : "Votre part a été retirée de la commande — le client a été prévenu.");
 }
 
-function verifyDeliveryOTP(orderId, inputOTP) {
-  var order = null;
-  for (var i = 0; i < state.orders.length; i++) {
-    if (state.orders[i].id === orderId) {
-      order = state.orders[i];
-      break;
+// Audit 29/10/2026 (faille CMD-2) : les codes (OTP, code de dépôt, code de
+// retrait) ne sont plus vérifiés sur ce téléphone — seul le serveur les
+// connaît encore (les autres ne voient que « •••• »). On envoie le code saisi
+// avec le nouveau statut ; le serveur accepte ou refuse.
+function findOrderById(orderId) {
+  for (var i = 0; i < state.orders.length; i++) { if (state.orders[i].id === orderId) return state.orders[i]; }
+  return null;
+}
+function submitOrderCode(order, newStatus, code) {
+  var draft = JSON.parse(JSON.stringify(order));
+  logOrderStatusChange(draft, newStatus);
+  if (newStatus === "Livrée") draft.deliveredAt = Date.now();
+  if (newStatus === "En boutique") draft.depotConfirmedAt = Date.now();
+  return orderWriteRequest(draft, { deliveryCode: String(code || "").trim() }).then(function(res) {
+    if (res && res.success && res.status === newStatus) {
+      order.status = draft.status;
+      order.statusHistory = draft.statusHistory;
+      if (draft.deliveredAt && newStatus === "Livrée") order.deliveredAt = draft.deliveredAt;
+      if (newStatus === "En boutique") order.depotConfirmedAt = draft.depotConfirmedAt;
+      if (newStatus === "Livrée") order.deliveryVerified = true;
+      save();
+      render();
+      return "ok";
     }
-  }
+    if (res && res.error === "too_many_attempts") return "locked";
+    if (res && (res.error === "bad_code" || res.error === "not_allowed")) return "bad";
+    if (res && res.success) return "bad";
+    return "network";
+  });
+}
+function codeErrorToast(result, badKey) {
+  if (result === "locked") showToast("⛔ Trop de codes faux. Réessayez dans 1 heure.");
+  else if (result === "network") showToast("❌ Pas de connexion au serveur. Réessayez.");
+  else showToast(t(badKey));
+}
+function verifyDeliveryOTP(orderId, inputOTP) {
+  var order = findOrderById(orderId);
   if (!order) return false;
-  if (order.otp === inputOTP) {
-    logOrderStatusChange(order, "Livrée");
-    order.deliveredAt = Date.now();
+  submitOrderCode(order, "Livrée", inputOTP).then(function(r) {
+    if (r !== "ok") { codeErrorToast(r, "toast_incorrect_otp"); return; }
     settleOrderPayouts(order);
-    save();
-    secureOrderSaveDoc(order);
-    render();
     showToast(t("toast_delivery_confirmed"));
-    return true;
-  }
-  showToast(t("toast_incorrect_otp"));
-  return false;
+  });
+  return true;
 }
 
 // Le livreur vient de déposer le colis en boutique : la boutique saisit le
-// Code Dépôt (reçu par le client, transmis au livreur) pour confirmer la
-// bonne réception du colis.
+// Code Dépôt (montré par le livreur) pour confirmer la bonne réception du colis.
 function confirmRelaisDepot(orderId, inputCode) {
-  var order = null;
-  for (var i = 0; i < state.orders.length; i++) {
-    if (state.orders[i].id === orderId) { order = state.orders[i]; break; }
-  }
+  var order = findOrderById(orderId);
   if (!order) return false;
   if (order.status !== "En route") {
     showToast(t("toast_parcel_not_awaiting_depot1"));
     return false;
   }
-  if (order.codeDepot === inputCode) {
-    logOrderStatusChange(order, "En boutique");
-    order.depotConfirmedAt = Date.now();
+  submitOrderCode(order, "En boutique", inputCode).then(function(r) {
+    if (r !== "ok") { codeErrorToast(r, "toast_incorrect_deposit_code"); return; }
     addNotification("whatsapp", "📦 Votre commande #" + orderId.slice(-5).toUpperCase() + " est arrivée chez " + order.relaisShopName + " — vous pouvez venir la récupérer.", order.buyerId, "orders");
-    save();
-    secureOrderSaveDoc(order);
-    render();
     showToast(t("toast_deposit_confirmed_awaiting"));
-    return true;
-  }
-  showToast(t("toast_incorrect_deposit_code"));
-  return false;
+  });
+  return true;
 }
 
 // Le client vient récupérer son colis : la boutique saisit le Code Retrait,
-// ce qui confirme à la fois la remise du colis ET l'encaissement du paiement
-// (le montant collecté sert ensuite au calcul de la commission GEMS due par
-// cette boutique — voir renderAdminPointsVente).
+// ce qui confirme à la fois la remise du colis ET l'encaissement du paiement.
 function confirmRelaisRetrait(orderId, inputCode) {
-  var order = null;
-  for (var i = 0; i < state.orders.length; i++) {
-    if (state.orders[i].id === orderId) { order = state.orders[i]; break; }
-  }
+  var order = findOrderById(orderId);
   if (!order) return false;
   if (order.status !== "En boutique") {
     showToast(t("toast_parcel_not_ready_pickup"));
     return false;
   }
-  if (order.codeRetrait === inputCode) {
-    logOrderStatusChange(order, "Livrée");
-    order.deliveredAt = Date.now();
+  submitOrderCode(order, "Livrée", inputCode).then(function(r) {
+    if (r !== "ok") { codeErrorToast(r, "toast_incorrect_pickup_code"); return; }
     settleOrderPayouts(order);
-    save();
-    secureOrderSaveDoc(order);
-    render();
     showToast(t("dt_parcel_delivered_paid") + orderMoney(order.total, order) + t("dt_close_paren_excl"));
-    return true;
-  }
-  showToast(t("toast_incorrect_pickup_code"));
-  return false;
+  });
+  return true;
 }
 
 // ---------- COLIS EXTERNES (plateformes internationales) ----------
@@ -7931,7 +7931,7 @@ function livreurRefuseVendorItems(orderId, sellerId, reason) {
     for (var k = 0; k < state.products.length; k++) {
       if (state.products[k].id === it.productId) {
         state.products[k].stock += it.qty;
-        saveDoc("products", state.products[k]);
+        if (!order.stockReserved) saveDoc("products", state.products[k]); // sinon le serveur remet le stock lui-même
         break;
       }
     }
@@ -8251,7 +8251,7 @@ function cancelOrder(orderId) {
     for (var k = 0; k < state.products.length; k++) {
       if (state.products[k].id === it.productId) {
         state.products[k].stock += it.qty;
-        saveDoc("products", state.products[k]);
+        if (!order.stockReserved) saveDoc("products", state.products[k]); // sinon le serveur remet le stock lui-même
         break;
       }
     }
@@ -8504,9 +8504,62 @@ function getWallet(phone) {
 // Même principe que secureWalletSaveDoc, pour les commandes — voir
 // migration 05. Un seul point d'entrée, réutilisé partout où une
 // commande est créée ou modifiée (il y en avait 18, dispersés).
-function secureOrderSaveDoc(order, asAdmin) {
+// Copie envoyée au serveur : sans les 5 coordonnées sensibles (envoyées à
+// part, vers order-contact).
+function cleanOrderForServer(order) {
+  var cleaned = { ...order };
+  delete cleaned.buyerLat;
+  delete cleaned.buyerLng;
+  delete cleaned.repere;
+  delete cleaned.buyerPhone;
+  delete cleaned.contactPhone;
+  return cleaned;
+}
+// Un seul envoi à order-write, sans file d'attente : la réponse décide.
+function orderWriteRequest(order, extra, asAdmin) {
+  if (!FIREBASE_ENABLED) return Promise.resolve({ success: false, error: "offline" });
+  var cleaned = cleanOrderForServer(order);
+  var body = Object.assign({ docId: cleaned.id, data: cleaned, referralCode: currentReferralCode() }, extra || {});
+  return fetch(supabaseConfig.url + "/functions/v1/order-write", { method: "POST", headers: authHeaders(null, !!(asAdmin && state.adminSessionToken)), body: JSON.stringify(body) })
+    .then(readServerJson)
+    .then(function(res) { if (res && res.error === "session_required") noteSessionRejected(); return res; })
+    .catch(function(err) { return { success: false, error: "network_error", detail: String((err && err.message) || err) }; });
+}
+// Paiement par portefeuille : le serveur crée la commande et débite le bon
+// montant en même temps. Rien n'est débité si la commande est refusée.
+function createOrderOnServerFirst(order) {
+  return orderWriteRequest(order, { walletPay: true }).then(function(res) {
+    if (res && res.success) applyOrderServerAnswer(order, res);
+    return res;
+  });
+}
+function applyOrderServerAnswer(order, res) {
+  if (!order || !res) return;
+  if (typeof res.newTotal === "number") order.total = res.newTotal;
+  if (res.paymentStatus) order.paymentStatus = res.paymentStatus;
+  if (res.codes) { ["otp", "codeRetrait", "codeDepot"].forEach(function(k) { if (res.codes[k]) order[k] = res.codes[k]; }); }
+  if (res.created) order.stockReserved = !order.isDigital;
+}
+var ORDER_CREATE_ERRORS = {
+  price_changed: "❌ Le prix d'un article a changé. Ouvrez à nouveau votre panier pour voir le nouveau prix.",
+  product_missing: "❌ Un article de votre panier n'existe plus.",
+  own_product: "❌ Vous ne pouvez pas commander votre propre article.",
+  out_of_stock: "❌ Un article n'a plus assez de stock.",
+  payment_not_supported: "❌ Ce moyen de paiement n'est pas disponible pour cette commande.",
+  insufficient_balance: null,
+  not_paid: "❌ Le paiement n'a pas été trouvé. Réessayez.",
+  empty_order: "❌ Votre panier est vide."
+};
+function showOrderCreateError(res) {
+  var e = res && res.error;
+  if (e === "insufficient_balance" || e === "no_wallet_phone") { showToast(t("toast_wallet_insufficient_order")); return; }
+  if (e === "network_error" || e === "offline") { showToast("❌ Pas de connexion au serveur. Votre portefeuille n'a pas été débité. Réessayez."); return; }
+  showToast(ORDER_CREATE_ERRORS[e] || ("❌ Commande refusée (" + (e || "erreur") + ")."));
+}
+function secureOrderSaveDoc(order, asAdmin, opts) {
   if (!FIREBASE_ENABLED) return;
   var useAdminKey = !!(asAdmin && state.adminSessionToken);
+  var isNew = !!(opts && opts.isNew);
   // Les 5 champs sensibles (GPS exact, repère, téléphones) ne partent
   // jamais dans "orders" — collection largement synchronisée avec tout
   // le monde. On envoie une COPIE nettoyée au serveur ; la copie locale
@@ -8535,6 +8588,26 @@ function secureOrderSaveDoc(order, asAdmin) {
       if (res.success && typeof res.newTotal === "number") {
         var nt = (state.orders || []).find(function(x) { return x.id === cleaned.id; });
         if (nt) { nt.total = res.newTotal; save(); renderOrDefer(); }
+      }
+      if (!res.success && isNew && ORDER_CREATE_ERRORS.hasOwnProperty(res.error)) {
+        // Commande refusée à la création (prix changé, article supprimé…) :
+        // on la retire de « Mes commandes » et on explique pourquoi.
+        state.orders = (state.orders || []).filter(function(x) { return x.id !== cleaned.id; });
+        save(); renderOrDefer();
+        showOrderCreateError(res);
+        return "rejected";
+      }
+      if (res.success) {
+        var so = (state.orders || []).find(function(x) { return x.id === cleaned.id; });
+        if (so) {
+          applyOrderServerAnswer(so, res);
+          // Statut refusé par le serveur (ex. « Livrée » sans code) : on reprend le sien.
+          if (res.status && res.statusKept && !res.promotedReady && so.status !== res.status) {
+            so.status = res.status;
+            if (cleaned.status === "Livrée") { try { showToast("ℹ️ Pour « Livrée », il faut saisir le bon code."); } catch (e) {} }
+          }
+          save(); renderOrDefer();
+        }
       }
       if (!res.success) {
         console.error("Erreur order-write :", res.error);
@@ -19579,8 +19652,8 @@ function renderSellerOrders() {
     }
     html += '<div style="display:flex;gap:8px;margin-top:6px;">';
     html += '<button class="link-btn" style="font-size:12px;" data-action="chat-with-buyer" data-value="' + o2.id + '"><i class="fa-solid fa-comment"></i> ' + t("seller_chat") + '</button>';
-    if (o2.otp && o2.status !== "Livrée") {
-      html += '<span style="font-size:11px;color:var(--text-dim);">OTP: ' + o2.otp + '</span>';
+    if (o2.otp && o2.otp !== "••••" && o2.status !== "Livrée") {
+      html += '<span style="font-size:11px;color:var(--text-dim);">OTP: ' + esc(o2.otp) + '</span>';
     }
     html += '</div>';
     if (o2.isInternational) {
