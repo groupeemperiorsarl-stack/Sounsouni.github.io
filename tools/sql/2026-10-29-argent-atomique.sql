@@ -1,3 +1,4 @@
+-- Déjà appliqué le 29/10/2026 (migration argent_atomique_2026_10_29).
 -- Audit de sécurité du 28/10/2026 — faille ARG-2 (double versement par
 -- demandes simultanées). Deux petites fonctions SQL utilisées UNIQUEMENT par
 -- les fonctions serveur (clé service) :
