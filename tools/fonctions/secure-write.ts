@@ -351,7 +351,20 @@ const out: Record<string, unknown> = { success: true, found: true, accountId: ma
 // de CE compte (même ancienne de moins d'un an). Sinon : appeler Sounsouni.
 const oldTok = await readSignedToken(req.headers.get("X-Session-Token"));
 const ownsOld = !!oldTok && oldTok.accountId === match.id && Date.now() - oldTok.expiresAt < 365 * 24 * 3600 * 1000;
-if (!match.hasPassword && isLowRiskAccount(match) && ownsOld) out.sessionToken = await signSession(match.id);
+// Compte VIDE (simple acheteur : aucune commande, aucun argent, aucun
+// article, pas de boutique) : on le rouvre tout de suite et l'app lui fait
+// créer son mot de passe — il n'y a rien à voler dedans (30/10/2026).
+let empty = false;
+if (!match.hasPassword && isLowRiskAccount(match)) {
+const [{ data: o1 }, { data: p1 }, { data: w1 }] = await Promise.all([
+db.from("app_data").select("id").eq("collection", "orders").eq("data->>buyerId", match.id).limit(1),
+db.from("app_data").select("id").eq("collection", "products").eq("data->>sellerId", match.id).limit(1),
+db.from("app_data").select("data").eq("collection", "wallets").eq("id", norm(match.phone)).maybeSingle(),
+]);
+const bal = w1 && (w1 as any).data ? Number((w1 as any).data.balance) || 0 : 0;
+empty = !(o1 && o1.length) && !(p1 && p1.length) && bal === 0;
+}
+if (!match.hasPassword && isLowRiskAccount(match) && (ownsOld || empty)) { out.sessionToken = await signSession(match.id); out.mustSetPassword = true; }
 else if (!match.hasPassword) out.needsHelp = true;
 return json(out);
 }

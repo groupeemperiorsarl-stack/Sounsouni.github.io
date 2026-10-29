@@ -136,6 +136,19 @@ function sessionHealth() {
   if (p.expiresAt - Date.now() < 5 * 86400000) return "expiring";
   return "ok";
 }
+// Compte qui a une boutique, des commandes ou un rôle, mais pas encore de mot
+// de passe : on lui propose de le créer (une fois par jour), pour qu'il
+// puisse un jour se reconnecter sur un autre téléphone.
+function maybeAskPasswordForValuableAccount() {
+  var p = state.profile;
+  if (!p || p.hasPassword || !state.sessionToken || state.showCreatePasswordGate) return;
+  var valuable = !!(p.shopName || (p.role && p.role !== "acheteur") || p.livreurApplicationStatus === "approved" || p.relaisApplicationStatus === "approved" || p.isSourcingAgent || (state.orders || []).some(function(o) { return o && o.buyerId === p.id; }));
+  if (!valuable) return;
+  var day = new Date().toISOString().slice(0, 10), key = "sns_pw_prompt_" + p.id;
+  try { if (localStorage.getItem(key) === day) return; localStorage.setItem(key, day); } catch (e) {}
+  requirePasswordSetup("secureAccount");
+}
+setTimeout(function() { try { maybeAskPasswordForValuableAccount(); } catch (e) {} }, 15000);
 function afterSessionRestored() {
   state.showReconnectSheet = false;
   (state.pendingSyncQueue || []).forEach(function(e) { e.blocked = false; e.attempts = 0; });
@@ -197,9 +210,9 @@ function renderReconnectSheet() {
   if (!state.showReconnectSheet || !state.profile) return "";
   var lang = state.language === "en" ? "en" : (state.language === "hi" ? "hi" : "fr");
   var T = {
-    fr: { title: "Reconnectez-vous", text: "Pour votre sécurité, votre connexion doit être renouvelée. Vos commandes en attente partiront juste après.", pw: "Votre mot de passe", btn: "Me reconnecter", forgot: "Mot de passe oublié", help: "Pour protéger ce compte, il faut un mot de passe. Appelez Sounsouni au +223 93 01 01 23 pour le récupérer.", later: "Plus tard", bad: "Mot de passe incorrect." },
-    en: { title: "Please sign in again", text: "For your security, your connection must be renewed. Your waiting orders will be sent right after.", pw: "Your password", btn: "Sign in", forgot: "Forgot password", help: "To protect this account, a password is needed. Call Sounsouni on +223 93 01 01 23 to recover it.", later: "Later", bad: "Wrong password." },
-    hi: { title: "फिर से लॉग इन करें", text: "आपकी सुरक्षा के लिए, आपका कनेक्शन नवीनीकृत होना चाहिए। आपके रुके हुए ऑर्डर तुरंत बाद भेजे जाएँगे।", pw: "आपका पासवर्ड", btn: "लॉग इन करें", forgot: "पासवर्ड भूल गए", help: "इस खाते में दुकान या कमाई है। इसे सुरक्षित रखने के लिए Sounsouni को +223 93 01 01 23 पर कॉल करें।", later: "बाद में", bad: "गलत पासवर्ड।" }
+    fr: { title: "Reconnectez-vous", text: "Pour votre sécurité, votre connexion doit être renouvelée. Vos commandes en attente partiront juste après.", pw: "Votre mot de passe", btn: "Me reconnecter", forgot: "Mot de passe oublié", help: "Ce compte a une boutique ou des commandes. Ouvrez-le sur le téléphone où vous l'utilisez d'habitude et créez votre mot de passe dans votre profil.", later: "Plus tard", bad: "Mot de passe incorrect." },
+    en: { title: "Please sign in again", text: "For your security, your connection must be renewed. Your waiting orders will be sent right after.", pw: "Your password", btn: "Sign in", forgot: "Forgot password", help: "This account has a shop or orders. Open it on the phone you usually use and create your password in your profile.", later: "Later", bad: "Wrong password." },
+    hi: { title: "फिर से लॉग इन करें", text: "आपकी सुरक्षा के लिए, आपका कनेक्शन नवीनीकृत होना चाहिए। आपके रुके हुए ऑर्डर तुरंत बाद भेजे जाएँगे।", pw: "आपका पासवर्ड", btn: "लॉग इन करें", forgot: "पासवर्ड भूल गए", help: "इस खाते में दुकान या ऑर्डर हैं। इसे अपने सामान्य फ़ोन पर खोलें और अपनी प्रोफ़ाइल में पासवर्ड बनाएँ।", later: "बाद में", bad: "गलत पासवर्ड।" }
   }[lang];
   var html = '<div class="modal-overlay" style="z-index:9100;"><div class="modal-sheet">';
   html += '<div style="font-weight:800;font-size:16px;margin-bottom:6px;"><i class="fa-solid fa-key"></i> ' + T.title + '</div>';

@@ -35,8 +35,13 @@ put("products", "P", { name: "Article", price: 1000, sellerId: "S" });
 put("settings", "filature_watchlist", { phones: ["+22370000006"] });
 
 console.log("== find_account (CPT-2, CPT-5)");
-let r = await call("secure-write", null, { operation: "find_account", name: "Awa", phone: "70000001", fullPhone: "+22370000001" });
-check("compte trouvé mais PAS de clé sans ancienne clé", r.found && !r.sessionToken && r.needsHelp, r);
+put("accounts", "E", { name: "Vide", phone: "+22370000007", role: "acheteur" });
+let r = await call("secure-write", null, { operation: "find_account", name: "Vide", phone: "70000007", fullPhone: "+22370000007" });
+check("compte vide : clé donnée + créer un mot de passe", r.found && !!r.sessionToken && r.mustSetPassword === true, r);
+r = await call("secure-write", null, { operation: "find_account", name: "Awa", phone: "70000001", fullPhone: "+22370000001" });
+check("compte avec une commande : PAS de clé sans ancienne clé", r.found && !r.sessionToken && r.needsHelp, r);
+r = await call("secure-write", null, { operation: "find_account", name: "Vendeur", phone: "70000002", fullPhone: "+22370000002" });
+check("compte avec boutique : PAS de clé", r.found && !r.sessionToken, r);
 r = await call("secure-write", null, { operation: "find_account", name: "Awa", phone: "70000001", fullPhone: "+22370000001" }, { "X-Session-Token": await token("B", true) });
 check("ancienne clé du même compte : nouvelle clé donnée", r.found && !!r.sessionToken, r);
 r = await call("secure-write", null, { operation: "find_account", name: "Awa", phone: "70000001", fullPhone: "+22370000001" }, { "X-Session-Token": await token("A", true) });
