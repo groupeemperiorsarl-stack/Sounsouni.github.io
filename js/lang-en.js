@@ -2064,4 +2064,5 @@
     g_new: "Just add your phone number.",
     g_expired: "Google sign-in did not complete. Please try again.",
     pw_wallet_pay: "Pay with the wallet",
+    email_optional: "Email (optional)",
   };

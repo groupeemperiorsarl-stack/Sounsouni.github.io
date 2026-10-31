@@ -2064,4 +2064,5 @@
     g_new: "Il reste juste votre numéro de téléphone.",
     g_expired: "La connexion Google n'a pas abouti. Réessayez.",
     pw_wallet_pay: "Payer avec le portefeuille",
+    email_optional: "E-mail (facultatif)",
   };

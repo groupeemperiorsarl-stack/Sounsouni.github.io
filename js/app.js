@@ -2453,10 +2453,7 @@ function submitBecomeRelais() {
     showToast(t("relais_apply_already_pending") || "Vous avez déjà une candidature Point de Retrait en attente d'examen.");
     return;
   }
-  if (!state.profile.email && (!d.email || !d.email.trim())) {
-    showToast(t("toast_email_required_pickup"));
-    return;
-  }
+  if (d.email && d.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.email.trim())) { showToast(t("toast_email_invalid_example")); return; }
   if (!d.shopName || !d.shopName.trim()) {
     showToast(t("toast_shopname_required2"));
     return;
@@ -6936,11 +6933,6 @@ function placeOrder() {
   var items = checkoutItems();
   if (items.length === 0) {
     showToast(t("toast_cart_not_found"));
-    return;
-  }
-  if (!state.profile.email || !state.profile.email.trim()) {
-    state.showEmailRequiredModal = true;
-    render();
     return;
   }
   var form = state.checkoutForm;
@@ -13784,9 +13776,8 @@ function renderVendorContactFields(d) {
   var quartierListVc = resolveQuartierListForCommune(d.commune, d.communeProche);
   var html = '';
   if (!d.email || d.isSecondAccountFlow) {
-    html += '<label class="field-label">' + t("email_required") + '</label>';
+    html += '<label class="field-label">' + t("email_optional") + '</label>';
     html += '<input class="input" type="text" inputmode="email" autocomplete="email" placeholder="exemple@email.com" value="' + esc(d.email || '') + '" data-bind="onboardDraft.email" />';
-    html += '<div style="font-size:10.5px;color:var(--text-dim);margin-bottom:10px;">' + t("vo_email_required_note") + (d.isSecondAccountFlow ? t("vo_email_reused_note") : '') + '.</div>';
   }
   html += '<label class="field-label">' + t("shop_customize_commune") + ' *</label>';
   html += '<select class="input" data-bind="onboardDraft.commune" data-action-change="commune-changed">' + communeOptionsVc + '</select>';
@@ -13936,9 +13927,8 @@ function renderBecomeRelais() {
   var html = '<button class="link-btn" style="margin-bottom:14px" data-action="close-become-relais"><i class="fa-solid fa-arrow-left"></i> ' + t("relais_apply_back") + '</button>';
   html += '<div class="section-title" style="margin-bottom:14px;">' + t("relais_apply_title") + '</div>';
   if (!state.profile.email) {
-    html += '<label class="field-label">' + t("email_required") + '</label>';
+    html += '<label class="field-label">' + t("email_optional") + '</label>';
     html += '<input class="input" type="text" inputmode="email" autocomplete="email" placeholder="exemple@email.com" value="' + esc(d.email || '') + '" data-bind="relaisApplyDraft.email" />';
-    html += '<div style="font-size:10.5px;color:var(--text-dim);margin-bottom:10px;">' + t("relais_apply_email_required") + '</div>';
   }
   html += '<label class="field-label">' + t("relais_apply_shop_name") + '</label>' +
     '<input class="input" placeholder="' + t("relais_apply_shop_name_placeholder") + '" value="' + esc(d.shopName || '') + '" data-bind="relaisApplyDraft.shopName" />' +
@@ -14062,9 +14052,8 @@ function renderOnboardStepRelais(d) {
   var html = '<button class="link-btn" style="margin-bottom:14px" data-action="onboard-back-step" data-value="identity"><i class="fa-solid fa-arrow-left"></i> ' + t("relais_apply_back") + '</button>';
   html += '<div class="section-title" style="margin-bottom:14px;">' + t("vo_relais_title") + '</div>';
   if (!d.email) {
-    html += '<label class="field-label">' + t("email_required") + '</label>';
+    html += '<label class="field-label">' + t("email_optional") + '</label>';
     html += '<input class="input" type="text" inputmode="email" autocomplete="email" placeholder="exemple@email.com" value="' + esc(d.email || '') + '" data-bind="onboardDraft.email" />';
-    html += '<div style="font-size:10.5px;color:var(--text-dim);margin-bottom:10px;">' + t("vo_relais_email_note") + '</div>';
   }
   html += '<label class="field-label">' + t("relais_apply_shop_name") + '</label>' +
     '<input class="input" placeholder="' + t("relais_apply_shop_name_placeholder") + '" value="' + esc(d.shopName || '') + '" data-bind="onboardDraft.shopName" />' +
@@ -27212,7 +27201,7 @@ root.addEventListener("click", function(e) {
       var d0 = state.onboardDraft;
       if (!d0.name || !d0.name.trim()) { showToast(t("toast_fullname_required")); break; }
       if (!d0.phone || !d0.phone.trim()) { showToast(t("toast_phone_required2")); break; }
-      if (!d0.isSecondAccountFlow && !d0.googleLoginId && String(d0.password || "").length < 4) { showToast(t("toast_password_min_4_chars")); break; }
+      if (!d0.isSecondAccountFlow && !d0.isFirstShopEver && !d0.googleLoginId && String(d0.password || "").length < 4) { showToast(t("toast_password_min_4_chars")); break; }
       if (d0.role === "acheteur") {
         registerAccount();
       } else if (d0.role === "vendeur") {
@@ -27267,12 +27256,6 @@ root.addEventListener("click", function(e) {
     }
     case "set-onboard-vendor-type": {
       state.onboardDraft.sellerType = value;
-      if (!state.onboardDraft.email || !state.onboardDraft.email.trim()) {
-        state.onboardStep = "identity";
-        render();
-        showToast(t("toast_email_required_seller"));
-        break;
-      }
       if (value === "particulier") {
         // Même vérification que partout ailleurs — "Particulier" est le
         // seul type qui n'a pas d'étape de détails après, il appelait donc
@@ -29730,12 +29713,12 @@ root.addEventListener("click", function(e) {
     case "toggle-show-all-executed": state.showAllExecuted = !state.showAllExecuted; render(); break;
     case "toggle-show-all-seller-orders": state.showAllSellerOrders = !state.showAllSellerOrders; render(); break;
     case "add-cart": {
-      if (state.profile && state.profile.hasPassword) flyToCart(btn);
+      if (state.profile) flyToCart(btn);
       requirePasswordSetup("addCart", { productId: value, qty: state.selectedQty, color: state.selectedColor, size: state.selectedSize });
       break;
     }
     case "quick-add-cart": {
-      if (state.profile && state.profile.hasPassword) flyToCart(btn);
+      if (state.profile) flyToCart(btn);
       requirePasswordSetup("addCart", { productId: value, qty: 1, color: null, size: null });
       break;
     }
