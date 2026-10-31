@@ -2054,4 +2054,13 @@
     meta_pixel_text: "अपना Pixel ID यहां चिपकाएं (Meta Events Manager)। Facebook जानेगा किसने आपके आइटम देखे, कार्ट में डाले या खरीदे: आपके विज्ञापन बेहतर काम करेंगे।",
     meta_pixel_bad: "अमान्य Pixel ID (केवल अंक)।",
     meta_copied: "लिंक कॉपी हुआ",
+    pw_label: "पासवर्ड",
+    pw_ph: "कम से कम 4 अक्षर",
+    g_continue: "Google से जारी रखें",
+    g_login: "Google से साइन इन करें",
+    g_or: "या",
+    g_wait: "Google साइन-इन जारी है… (रद्द करने के लिए टैप करें)",
+    g_connected_as: "Google से जुड़े:",
+    g_new: "बस अपना फ़ोन नंबर और एक पासवर्ड जोड़ें।",
+    g_expired: "Google साइन-इन पूरा नहीं हुआ। फिर से कोशिश करें।",
   };

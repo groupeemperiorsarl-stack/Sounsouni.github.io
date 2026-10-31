@@ -15,7 +15,7 @@ const corsHeaders = {
 "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-session-token, x-app-secret"
 };
 const ADMIN_ONLY = ["settings", "nationalAdmins", "sourcingAgentWhitelist", "group2GlobalWhitelist", "apiPartners", "webhookPartners", "dashboardPartners", "platformCommissions", "vipAds"];
-const ACCOUNT_PROTECTED = ["verified", "verificationStatus", "banned", "isSourcingAgent", "testModeEnabled", "livreurApplicationStatus", "relaisApplicationStatus", "role", "affiliateCode", "referredBy"];
+const ACCOUNT_PROTECTED = ["verified", "verificationStatus", "banned", "isSourcingAgent", "testModeEnabled", "livreurApplicationStatus", "relaisApplicationStatus", "role", "affiliateCode", "referredBy", "googleSub"];
 const ACCOUNT_SERVER_MANAGED = ["affiliateBalance", "affiliateReferrals", "affiliateEarnings", "verifiedSalesTotal", "verifiedSalesCount"];
 const ACCOUNT_CROSS_BOOL = ["hasNewBuyerStatusAlert", "hasNewSellerOrderAlert", "hasRefusalAlert"];
 const ACCOUNT_CROSS_COUNT = ["livreurRefusalCount", "unclaimedParcelCount"];

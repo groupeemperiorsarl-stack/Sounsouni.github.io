@@ -61,3 +61,8 @@ grant execute on function public.sns_gestion_extend(text, text, int) to service_
 -- Pixel Meta des boutiques : metaPixelId ajouté aux champs publics
 -- (migration public_profile_meta_pixel_2026_10_31 ; fonction
 -- sounsouni_public_profile, liste blanche + 'metaPixelId').
+
+-- Connexion Google (fonction social-login) : collection socialLogins fermée
+-- à internet (migration social_logins_private_2026_10_31).
+-- create policy "social_logins_no_direct_access" on public.app_data as restrictive for all to anon, authenticated
+--   using (collection <> 'socialLogins') with check (collection <> 'socialLogins');

@@ -2054,4 +2054,13 @@
     meta_pixel_text: "Collez ici l'identifiant de votre Pixel (Gestionnaire d'événements Meta). Facebook saura qui a vu, mis au panier ou acheté vos articles : vos publicités seront plus efficaces.",
     meta_pixel_bad: "Identifiant de Pixel invalide (seulement des chiffres).",
     meta_copied: "Lien copié",
+    pw_label: "Mot de passe",
+    pw_ph: "Au moins 4 caractères",
+    g_continue: "Continuer avec Google",
+    g_login: "Se connecter avec Google",
+    g_or: "ou",
+    g_wait: "Connexion Google en cours… (appuyez pour annuler)",
+    g_connected_as: "Connecté avec Google :",
+    g_new: "Il reste juste votre numéro de téléphone et un mot de passe.",
+    g_expired: "La connexion Google n'a pas abouti. Réessayez.",
   };

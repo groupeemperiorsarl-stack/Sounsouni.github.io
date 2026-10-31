@@ -5343,12 +5343,9 @@ function registerAccount() {
   }
   console.log("Téléphone valide");
   
-  // 4. Email
+  // 4. Email : facultatif (vient de Google quand la personne passe par Google)
   var email = d.email ? d.email.trim() : "";
-  if (!email) {
-    showToast(t("toast_email_required_generic"));
-    return;
-  }
+  if (!d.isSecondAccountFlow && !(d.isFirstShopEver && state.profile) && String(d.password || "").length < 4) { showToast(t("toast_password_min_4_chars")); return; }
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     showToast(t("toast_email_invalid_example"));
     return;
@@ -5644,6 +5641,7 @@ function registerAccount() {
       save();
       render();
       setTimeout(trackVisit, 1500);
+      afterAccountCreated(account.id, d);
     });
   }
   console.log("Après save()");
@@ -13345,7 +13343,8 @@ function renderOnboarding() {
     return '<div class="onboarding-wrap"><div class="onboarding-fixed-banner onboarding-fixed-banner-compact" style="' + topBannerFrameStyle + '"></div><div class="onboarding-card' + cardBgClass + '" style="' + cardBgStyle + '">' + header +
       '<label class="field-label">' + t("accounts_on_device") + '</label>' +
       '<div class="account-list">' + accountsHtml + '</div>' +
-      '<button class="btn-secondary" style="margin-top:16px" data-action="show-onboard-form"><i class="fa-solid fa-plus"></i> ' + t("new_account") + '</button>' +
+      '<div style="margin-top:16px">' + googleButtonHtml("g_login") + '</div>' +
+      '<button class="btn-secondary" style="margin-top:6px" data-action="show-onboard-form"><i class="fa-solid fa-plus"></i> ' + t("new_account") + '</button>' +
       '<button class="link-btn link-btn-standout" style="width:100%;text-align:center;margin-top:10px;" data-action="open-find-account"><i class="fa-solid fa-user-check"></i> ' + t("already_have_account") + '</button>' +
       '<button class="link-btn link-btn-standout" style="width:100%;text-align:center;margin-top:10px;" data-action="open-forgot-password"><i class="fa-solid fa-key"></i> ' + t("forgot_password") + '</button>' +
       '</div>' + renderLoginBrandBanner() + '</div>' +
@@ -13399,16 +13398,18 @@ function renderOnboardStepIdentity(d) {
     var c = COUNTRY_CODES[k];
     countryOptions += '<option value="' + c.code + '" ' + (d.countryCode === c.code ? 'selected' : '') + '>' + c.label + '</option>';
   }
-  var html = honeypotFieldHtml("onboardDraft") + '<label class="field-label">' + t("full_name") + '</label>' +
+  var html = honeypotFieldHtml("onboardDraft") + (d.isSecondAccountFlow ? '' : googleButtonHtml(d.googleEmail ? "" : "g_continue")) +
+    (d.googleEmail ? '<div style="font-size:12px;background:rgba(46,125,50,.08);border-radius:12px;padding:9px 12px;margin-bottom:10px;"><i class="fa-brands fa-google"></i> ' + t("g_connected_as") + ' <b>' + esc(d.googleEmail) + '</b><br>' + t("g_new") + '</div>' : '') +
+    '<label class="field-label">' + t("full_name") + '</label>' +
     '<div class="field-icon-group"><i class="fa-regular fa-user field-icon"></i><input id="ob-name" class="input" placeholder="' + t("full_name_placeholder") + '" value="' + esc(d.name) + '" data-bind="onboardDraft.name" /></div>' +
     '<label class="field-label">' + t("phone") + '</label>' +
     '<div class="phone-group">' +
     '<div class="field-icon-group" style="width:132px;flex-shrink:0;"><i class="fa-solid fa-phone field-icon"></i><select class="input" data-bind="onboardDraft.countryCode" style="width:100%;">' + countryOptions + '</select></div>' +
     '<input id="ob-phone" class="input" placeholder="' + t("phone_placeholder") + '" value="' + esc(d.phone) + '" data-bind="onboardDraft.phone" />' +
     '</div>' +
-    '<label class="field-label">' + t("email_required") + '</label>' +
-    '<div class="field-icon-group"><i class="fa-regular fa-envelope field-icon"></i><input id="ob-email" class="input" type="text" inputmode="email" autocomplete="email" placeholder="exemple@email.com" value="' + esc(d.email) + '" data-bind="onboardDraft.email" /></div>' +
-    '<label class="field-label">' + t("here_for") + '</label>' +
+    (d.isSecondAccountFlow ? '' : '<label class="field-label">' + t("pw_label") + '</label>' +
+    '<div style="position:relative;"><input id="ob-password" class="input" type="password" autocomplete="new-password" placeholder="' + t("pw_ph") + '" style="padding-right:44px;" value="' + esc(d.password || '') + '" data-bind="onboardDraft.password" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>') +
+'<label class="field-label">' + t("here_for") + '</label>' +
     '<div class="role-cards">' +
     '<button class="role-card ' + (d.role === "acheteur" ? 'active' : '') + (d.isSecondAccountFlow ? ' locked' : '') + '" ' + (d.isSecondAccountFlow ? 'disabled' : 'data-action="set-onboard-role" data-value="acheteur"') + '><span class="role-card-icon"><i class="fa-solid fa-bag-shopping"></i></span>' + t("role_buy") + '</button>' +
     '<button class="role-card ' + (d.role === "vendeur" ? 'active' : '') + (d.isSecondAccountFlow ? ' locked' : '') + '" ' + (d.isSecondAccountFlow ? 'disabled' : 'data-action="set-onboard-role" data-value="vendeur"') + '><span class="role-card-icon"><i class="fa-solid fa-tag"></i></span>' + t("role_sell") + '</button>' +
@@ -13422,6 +13423,125 @@ function renderOnboardStepIdentity(d) {
   return html;
 }
 
+// ---------- « CONTINUER AVEC GOOGLE » (31/10/2026) ----------
+// Sans module à ajouter dans l'APK : la page Google s'ouvre dans le vrai
+// navigateur (fenêtre Chrome du téléphone, fenêtre du navigateur, ou
+// navigateur de l'ordinateur pour l'application Windows). Google renvoie à
+// notre serveur (fonction social-login), qui vérifie et range le résultat ;
+// l'application vient le chercher toutes les 2 secondes.
+var GOOGLE_CLIENT_ID = "779026073520-u3sc7onv671k4ruldqc6jruif2ou4k27.apps.googleusercontent.com";
+function googleButtonHtml(labelKey) {
+  if (!labelKey) return "";
+  var waiting = !!state.gLogin;
+  return '<button type="button" class="g-btn" data-action="' + (waiting ? 'google-cancel' : 'google-login') + '" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;border-radius:14px;border:1.5px solid var(--border-color);background:#fff;color:#1f1f1f;font-weight:700;font-size:14px;margin-bottom:8px;">' +
+    (waiting ? '<i class="fa-solid fa-spinner fa-spin"></i> ' + t("g_wait") : '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.1 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.1 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg> ' + t(labelKey)) +
+    '</button>' + (waiting ? '' : '<div style="display:flex;align-items:center;gap:8px;color:var(--text-dim);font-size:11px;margin:4px 0 10px;"><span style="flex:1;height:1px;background:var(--border-color)"></span>' + t("g_or") + '<span style="flex:1;height:1px;background:var(--border-color)"></span></div>');
+}
+function googleAuthUrl(loginId, mode) {
+  return "https://accounts.google.com/o/oauth2/v2/auth?client_id=" + encodeURIComponent(GOOGLE_CLIENT_ID) +
+    "&redirect_uri=" + encodeURIComponent(supabaseConfig.url + "/functions/v1/social-login") +
+    "&response_type=id_token&response_mode=form_post&scope=" + encodeURIComponent("openid email profile") +
+    "&nonce=" + loginId + "&state=" + loginId + "." + mode + "&prompt=select_account";
+}
+function googleLoginStart() {
+  if (!FIREBASE_ENABLED) { showToast("❌ " + t("gx_offline")); return; }
+  var chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789", id = "";
+  var rnd = new Uint8Array(32); try { crypto.getRandomValues(rnd); } catch (e) { for (var ri = 0; ri < 32; ri++) rnd[ri] = Math.floor(Math.random() * 256); }
+  for (var i = 0; i < 32; i++) id += chars.charAt(rnd[i] % chars.length);
+  var C = window.Capacitor, B = C && C.isNativePlatform && C.isNativePlatform() && C.Plugins && C.Plugins.Browser;
+  state.gLogin = { id: id, started: Date.now() };
+  try { localStorage.setItem("sns_glogin", JSON.stringify(state.gLogin)); } catch (e) {}
+  render();
+  if (B && B.open) { B.open({ url: googleAuthUrl(id, "a"), toolbarColor: "#ffffff", presentationStyle: "fullscreen" }); }
+  else if (window.SnsDesktop) { window.open(googleAuthUrl(id, "a"), "_blank"); }
+  else {
+    var w = null; try { w = window.open(googleAuthUrl(id, "p"), "sns_google", "width=480,height=680"); } catch (e) {}
+    if (!w) { window.location.href = googleAuthUrl(id, "w"); return; }
+  }
+  googlePollTick(id);
+}
+function googleCloseBrowser() { try { var C = window.Capacitor; if (C && C.Plugins && C.Plugins.Browser && C.Plugins.Browser.close) { var r = C.Plugins.Browser.close(); if (r && r.catch) r.catch(function() {}); } } catch (e) {} }
+function googlePollTick(id) {
+  var g = state.gLogin; if (!g || g.id !== id) return;
+  if (Date.now() - g.started > 5 * 60e3) { state.gLogin = null; try { localStorage.removeItem("sns_glogin"); } catch (e) {} showToast(t("g_expired")); render(); return; }
+  fetch(supabaseConfig.url + "/functions/v1/social-login", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + supabaseConfig.anonKey }, body: JSON.stringify({ operation: "poll", loginId: id }) })
+    .then(readServerJson).catch(function() { return { success: false, error: "network_error" }; })
+    .then(function(r) {
+      if (!state.gLogin || state.gLogin.id !== id) return;
+      if (r && r.success && r.status === "pending") { setTimeout(function() { googlePollTick(id); }, 2000); return; }
+      if (r && r.error === "network_error") { setTimeout(function() { googlePollTick(id); }, 4000); return; }
+      state.gLogin = null; try { localStorage.removeItem("sns_glogin"); } catch (e) {}
+      googleCloseBrowser();
+      googleApplyResult(id, r);
+    });
+}
+function googleApplyResult(id, r) {
+  if (r && r.success && r.status === "login" && r.account && r.sessionToken) {
+    var acc = r.account, found = false;
+    for (var i = 0; i < state.accounts.length; i++) { if (state.accounts[i].id === acc.id) { state.accounts[i] = acc; found = true; break; } }
+    if (!found) state.accounts.push(acc);
+    window._ownFullAccountIds = window._ownFullAccountIds || {}; window._ownFullAccountIds[acc.id] = true;
+    state.sessionToken = r.sessionToken;
+    state.showFindAccountModal = false; state.showOnboarding = false;
+    loginAccount(acc.id);
+    showToast(t("dt_welcome_back") + acc.name + t("dt_exclaim"));
+    return;
+  }
+  if (r && r.success && r.status === "new") {
+    state.showFindAccountModal = false;
+    state.onboardMode = "form"; state.onboardStep = "identity";
+    var d = state.onboardDraft || (state.onboardDraft = {});
+    if (r.name && !d.name) d.name = r.name;
+    d.email = r.email || d.email || "";
+    d.googleEmail = r.email || "Google";
+    d.googleLoginId = id;
+    if (!d.role) d.role = "acheteur";
+    if (state.profile) { /* déjà connecté : rien à créer */ }
+    render();
+    setTimeout(function() { var el = document.getElementById("ob-phone"); if (el) el.focus(); }, 300);
+    return;
+  }
+  if (r && r.status === "banned") { showToast(t("toast_account_banned")); render(); return; }
+  showToast("❌ " + t("g_expired")); render();
+}
+// Après une inscription réussie : mot de passe choisi dans le formulaire court
+// (plus de fenêtre « Créez votre mot de passe » au premier achat) et liaison
+// avec le compte Google si la personne est passée par Google.
+function afterAccountCreated(accountId, d) {
+  if (d && d.password && String(d.password).length >= 4) {
+    var code = generateRecoveryCode();
+    setAccountPassword(accountId, String(d.password), code).then(function(ok) {
+      if (!ok || !state.profile || state.profile.id !== accountId) return;
+      state.profile.hasPassword = true; state.profile.hasRecoveryCode = true;
+      persistProfileToAccounts();
+      addNotification("whatsapp", "🔐 Voici votre code secret de récupération, à conserver précieusement : " + code + ". Il vous permettra de récupérer votre compte en cas d'oubli du mot de passe.", accountId);
+      render();
+    });
+    d.password = "";
+  }
+  if (d && d.googleLoginId) {
+    var lid = d.googleLoginId; d.googleLoginId = null;
+    fetch(supabaseConfig.url + "/functions/v1/social-login", { method: "POST", headers: authHeaders(), body: JSON.stringify({ operation: "link", loginId: lid }) })
+      .then(readServerJson).then(function(res) {
+        if (res && res.success && res.patch && state.profile && state.profile.id === accountId) { for (var k in res.patch) state.profile[k] = res.patch[k]; persistProfileToAccounts(); render(); }
+      }).catch(function() {});
+  }
+}
+// Retour de Google quand la fenêtre n'a pas pu s'ouvrir à côté (site web) :
+// https://sounsouni.pro/?social=<code>
+function googleResumeAfterRedirect() {
+  try {
+    var q = new URLSearchParams(window.location.search), sid = q.get("social");
+    var saved = null; try { saved = JSON.parse(localStorage.getItem("sns_glogin") || "null"); } catch (e) {}
+    if (sid && /^[A-Za-z0-9]{24,64}$/.test(sid)) {
+      try { history.replaceState(null, "", window.location.pathname); } catch (e) {}
+      state.gLogin = { id: sid, started: Date.now() }; googlePollTick(sid); return;
+    }
+    if (saved && saved.id && Date.now() - saved.started < 5 * 60e3) { state.gLogin = saved; googlePollTick(saved.id); }
+  } catch (e) {}
+}
+setTimeout(googleResumeAfterRedirect, 1500);
+
 function renderFindAccountModal() {
   markFormShown("connexion");
   var d = state.findAccountDraft;
@@ -13434,6 +13554,7 @@ function renderFindAccountModal() {
   html += '<div class="modal-sheet">';
   html += '<button class="modal-close" data-action="close-find-account"><i class="fa-solid fa-xmark"></i></button>';
   html += '<div class="section-title" style="margin-bottom:6px;"><i class="fa-solid fa-user-check"></i> ' + t("fa_title") + '</div>';
+  html += googleButtonHtml("g_login");
   html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:14px;">' + t("fa_explainer") + '</div>';
   html += '<label class="field-label" style="margin-top:0;">' + t("full_name") + '</label>';
   html += '<input class="input" placeholder="' + t("name_placeholder_generic") + '" value="' + esc(d.name) + '" data-bind="findAccountDraft.name" />';
@@ -27079,11 +27200,13 @@ root.addEventListener("click", function(e) {
       showToast("⏳ Envoi en cours…");
       break;
     }
+    case "google-login": googleLoginStart(); break;
+    case "google-cancel": state.gLogin = null; render(); break;
     case "onboard-continue-identity": {
       var d0 = state.onboardDraft;
       if (!d0.name || !d0.name.trim()) { showToast(t("toast_fullname_required")); break; }
       if (!d0.phone || !d0.phone.trim()) { showToast(t("toast_phone_required2")); break; }
-      if (!d0.email || !d0.email.trim()) { showToast(t("toast_email_required_generic")); break; }
+      if (!d0.isSecondAccountFlow && String(d0.password || "").length < 4) { showToast(t("toast_password_min_4_chars")); break; }
       if (d0.role === "acheteur") {
         registerAccount();
       } else if (d0.role === "vendeur") {

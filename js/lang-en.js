@@ -2054,4 +2054,13 @@
     meta_pixel_text: "Paste your Pixel ID here (Meta Events Manager). Facebook will know who viewed, added to cart or bought your items: your ads will perform better.",
     meta_pixel_bad: "Invalid Pixel ID (digits only).",
     meta_copied: "Link copied",
+    pw_label: "Password",
+    pw_ph: "At least 4 characters",
+    g_continue: "Continue with Google",
+    g_login: "Sign in with Google",
+    g_or: "or",
+    g_wait: "Google sign-in in progress… (tap to cancel)",
+    g_connected_as: "Signed in with Google:",
+    g_new: "Just add your phone number and a password.",
+    g_expired: "Google sign-in did not complete. Please try again.",
   };
