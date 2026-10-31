@@ -141,7 +141,7 @@ function sessionHealth() {
 // puisse un jour se reconnecter sur un autre téléphone.
 function maybeAskPasswordForValuableAccount() {
   var p = state.profile;
-  if (!p || p.hasPassword || !state.sessionToken || state.showCreatePasswordGate) return;
+  if (!p || p.hasPassword || p.googleSub || !state.sessionToken || state.showCreatePasswordGate) return;
   var valuable = !!(p.shopName || (p.role && p.role !== "acheteur") || p.livreurApplicationStatus === "approved" || p.relaisApplicationStatus === "approved" || p.isSourcingAgent || (state.orders || []).some(function(o) { return o && o.buyerId === p.id; }));
   if (!valuable) return;
   var day = new Date().toISOString().slice(0, 10), key = "sns_pw_prompt_" + p.id;
@@ -5345,7 +5345,7 @@ function registerAccount() {
   
   // 4. Email : facultatif (vient de Google quand la personne passe par Google)
   var email = d.email ? d.email.trim() : "";
-  if (!d.isSecondAccountFlow && !(d.isFirstShopEver && state.profile) && String(d.password || "").length < 4) { showToast(t("toast_password_min_4_chars")); return; }
+  if (!d.isSecondAccountFlow && !d.googleLoginId && !(d.isFirstShopEver && state.profile) && String(d.password || "").length < 4) { showToast(t("toast_password_min_4_chars")); return; }
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     showToast(t("toast_email_invalid_example"));
     return;
@@ -13407,7 +13407,7 @@ function renderOnboardStepIdentity(d) {
     '<div class="field-icon-group" style="width:132px;flex-shrink:0;"><i class="fa-solid fa-phone field-icon"></i><select class="input" data-bind="onboardDraft.countryCode" style="width:100%;">' + countryOptions + '</select></div>' +
     '<input id="ob-phone" class="input" placeholder="' + t("phone_placeholder") + '" value="' + esc(d.phone) + '" data-bind="onboardDraft.phone" />' +
     '</div>' +
-    (d.isSecondAccountFlow ? '' : '<label class="field-label">' + t("pw_label") + '</label>' +
+    (d.isSecondAccountFlow || d.googleLoginId ? '' : '<label class="field-label">' + t("pw_label") + '</label>' +
     '<div style="position:relative;"><input id="ob-password" class="input" type="password" autocomplete="new-password" placeholder="' + t("pw_ph") + '" style="padding-right:44px;" value="' + esc(d.password || '') + '" data-bind="onboardDraft.password" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>') +
 '<label class="field-label">' + t("here_for") + '</label>' +
     '<div class="role-cards">' +
@@ -16367,13 +16367,12 @@ function renderCreatePasswordGateModal() {
   html += '<button class="modal-close" data-action="cancel-password-setup"><i class="fa-solid fa-xmark"></i></button>';
   html += '<div class="section-title" style="margin-bottom:6px;"><i class="fa-solid fa-shield-halved"></i> ' + t("pw_gate_title") + '</div>';
   html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:16px;">' + t("pw_gate_explainer") + '</div>';
+  needsEmail = false; // 31/10/2026 : plus d'e-mail ni de date de naissance ici, juste le mot de passe
   if (needsEmail) {
     html += '<label class="field-label" style="margin-top:0;">' + t("pw_gate_email_label") + '</label>';
     html += '<input class="input" id="pw-setup-email" type="text" inputmode="email" autocomplete="email" placeholder="exemple@email.com" value="' + esc(d.email) + '" data-bind="passwordSetupDraft.email" />';
   }
-  html += '<label class="field-label"' + (needsEmail ? '' : ' style="margin-top:0;"') + '>' + t("fp_birthdate") + '</label>';
-  html += '<input class="input" id="pw-setup-birthdate" type="date" value="' + esc(d.birthDate) + '" data-bind="passwordSetupDraft.birthDate" />';
-  html += '<label class="field-label">' + t("pw_gate_create") + '</label>';
+  html += '<label class="field-label" style="margin-top:0;">' + t("pw_gate_create") + '</label>';
   html += '<div style="position:relative;"><input class="input" id="pw-setup-password" type="password" style="padding-right:44px;" value="' + esc(d.password) + '" data-bind="passwordSetupDraft.password" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>';
   html += '<label class="field-label">' + t("pw_gate_confirm") + '</label>';
   html += '<div style="position:relative;"><input class="input" id="pw-setup-password2" type="password" style="padding-right:44px;" value="' + esc(d.password2) + '" data-bind="passwordSetupDraft.password2" /><button type="button" class="pw-eye-btn" data-action="toggle-pw-visibility" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);padding:8px;"><i class="fa-solid fa-eye"></i></button></div>';
@@ -16413,8 +16412,10 @@ function runSensitiveAction(kind, data) {
     });
   } else if (kind === "closeCagnotte") {
     closeCagnotte(data.cagnotteId).then(function() { render(); });
-  } else if (kind === "mobileMoneyPayment") {
+  } else if (kind === "mobileMoneyPayment" || kind === "walletPayment") {
     placeOrder();
+  } else if (kind === "openWallet") {
+    state.showWallet = true; state.showProfileScreen = false; render();
   }
 }
 
@@ -16447,6 +16448,10 @@ function requireSensitiveConfirm(label, kind, data) {
 // (email + date de naissance + mot de passe) ; ensuite, elle ne
 // réapparaît plus jamais pour ça.
 function requirePasswordSetup(kind, data) {
+  // 31/10/2026 (décision d'Issa) : acheter ne demande plus de mot de passe
+  // (Orange Money / Moov ont leur propre code ; paiement à la livraison).
+  // Le mot de passe sert seulement au portefeuille et à l'argent.
+  if (kind === "addCart" || kind === "buyNow" || kind === "buyDigital") { runGatedPurchaseAction(kind, data); return; }
   if (state.profile && state.profile.hasPassword) {
     runGatedPurchaseAction(kind, data);
     return;
@@ -16464,6 +16469,7 @@ function requirePasswordSetup(kind, data) {
 }
 
 function runGatedPurchaseAction(kind, data) {
+  if (kind === "openWallet" || kind === "walletPayment" || kind === "walletTransfer" || kind === "giftCard" || kind === "closeCagnotte" || kind === "mobileMoneyPayment") { runSensitiveAction(kind, data); return; }
   if (kind === "addCart") {
     addToCart(data.productId, data.qty, data.color, data.size);
     if (state.profile && !state.profile.seenAcheterGuide) {
@@ -27206,7 +27212,7 @@ root.addEventListener("click", function(e) {
       var d0 = state.onboardDraft;
       if (!d0.name || !d0.name.trim()) { showToast(t("toast_fullname_required")); break; }
       if (!d0.phone || !d0.phone.trim()) { showToast(t("toast_phone_required2")); break; }
-      if (!d0.isSecondAccountFlow && String(d0.password || "").length < 4) { showToast(t("toast_password_min_4_chars")); break; }
+      if (!d0.isSecondAccountFlow && !d0.googleLoginId && String(d0.password || "").length < 4) { showToast(t("toast_password_min_4_chars")); break; }
       if (d0.role === "acheteur") {
         registerAccount();
       } else if (d0.role === "vendeur") {
@@ -28259,7 +28265,9 @@ root.addEventListener("click", function(e) {
       break;
     }
     case "finance-coming-soon": showToast("✨ Sounsouni " + value + " — accessible bientôt !"); break;
-    case "open-wallet": state.showWallet = true; state.showProfileScreen = false; render(); break;
+    case "open-wallet":
+      if (state.profile && !state.profile.hasPassword) { state.showProfileScreen = false; requirePasswordSetup("openWallet", null); break; }
+      state.showWallet = true; state.showProfileScreen = false; render(); break;
     case "close-wallet": state.showWallet = false; state.showProfileScreen = true; render(); break;
     case "open-wallet-transfer": state.showWallet = false; state.showWalletTransfer = true; render(); break;
     case "open-wallet-topup": state.showWallet = false; state.walletTopup = { amount: "" }; render(); break;
@@ -28311,14 +28319,11 @@ root.addEventListener("click", function(e) {
     }
     case "submit-password-setup": {
       var pd = state.passwordSetupDraft;
-      var needsEmailNow = !state.profile || !state.profile.email;
-      if (needsEmailNow && (!pd.email || !pd.email.trim())) { showToast(t("toast_email_required_generic")); break; }
-      if (needsEmailNow && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(pd.email.trim())) { showToast(t("toast_invalid_email")); break; }
-      if (!pd.birthDate) { showToast(t("toast_birthdate_required")); break; }
+      var needsEmailNow = false;
       if (!pd.password || pd.password.length < 4) { showToast(t("toast_password_min_4_chars")); break; }
       if (pd.password !== pd.password2) { showToast(t("toast_passwords_dont_match")); break; }
       var newRecoveryCodePlain = generateRecoveryCode();
-      setAccountPassword(state.profile.id, pd.password, newRecoveryCodePlain, pd.birthDate).then(function(ok) {
+      setAccountPassword(state.profile.id, pd.password, newRecoveryCodePlain, pd.birthDate || null).then(function(ok) {
         if (!ok) { showToast("❌ Une erreur est survenue, réessayez."); return; }
         if (needsEmailNow) state.profile.email = pd.email.trim();
         state.profile.hasPassword = true;
@@ -29979,7 +29984,9 @@ root.addEventListener("click", function(e) {
       state.showRepereGate = false;
       render();
       if (state.checkoutForm.payment === "orange_money" || state.checkoutForm.payment === "moov_money") {
-        requireSensitiveConfirm("Confirmer le paiement mobile money", "mobileMoneyPayment", null);
+        placeOrder();
+      } else if (state.checkoutForm.payment === "portefeuille") {
+        requireSensitiveConfirm(t("pw_wallet_pay"), "walletPayment", null);
       } else {
         placeOrder();
       }
@@ -29996,7 +30003,9 @@ root.addEventListener("click", function(e) {
       state.showRepereGate = false;
       render();
       if (state.checkoutForm.payment === "orange_money" || state.checkoutForm.payment === "moov_money") {
-        requireSensitiveConfirm("Confirmer le paiement mobile money", "mobileMoneyPayment", null);
+        placeOrder();
+      } else if (state.checkoutForm.payment === "portefeuille") {
+        requireSensitiveConfirm(t("pw_wallet_pay"), "walletPayment", null);
       } else {
         placeOrder();
       }
@@ -30014,7 +30023,9 @@ root.addEventListener("click", function(e) {
         break;
       }
       if (fPlace.payment === "orange_money" || fPlace.payment === "moov_money") {
-        requireSensitiveConfirm("Confirmer le paiement mobile money", "mobileMoneyPayment", null);
+        placeOrder();
+      } else if (state.checkoutForm.payment === "portefeuille") {
+        requireSensitiveConfirm(t("pw_wallet_pay"), "walletPayment", null);
       } else {
         placeOrder();
       }
