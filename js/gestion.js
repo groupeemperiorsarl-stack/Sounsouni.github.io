@@ -66,6 +66,8 @@
     email: "E-mail", rccm: "RCCM", nif: "NIF", logo: "Logo", logoAdd: "Ajouter le logo", logoDel: "Enlever le logo", logoBig: "Image trop lourde, essayez une autre.", rcptNote: "Mention en bas du reçu (facultatif)", rcptNotePh: "Ex. : Les marchandises vendues ne sont ni reprises ni échangées.", rcptCard: "Vos reçus", payMode: "Mode de paiement", hour: "Heure",
     imm: "N° d'immatriculation", bank: "Compte bancaire", bankPh: "Ex. : BDM-SA — ML016 01201 …", show: "Afficher", tvaOn: "Faire des factures avec TVA", tvaRate: "Taux de TVA (%)", tvaMode: "Les prix que vous tapez sont", tvaHT: "Hors taxe (HT)", tvaTTC: "TVA comprise (TTC)",
     askMode: "À chaque vente", askAuto: "Automatique : rien n'est demandé", askAsk: "Me demander quoi mettre sur le reçu", onThisDoc: "Sur ce reçu", invoice: "FACTURE", invoiceShort: "Facture", totalHT: "Total HT", tvaAmt: "TVA", totalTTC: "Total TTC", rcptInfos: "Informations à mettre sur les reçus", rcptInfosHint: "Remplissez une fois. Cochez « Afficher » pour qu'elles apparaissent sur les reçus.",
+    whatNote: "Que voulez-vous noter ?", eSale: "Une vente", eSaleD: "Un client achète. Le stock baisse tout seul.", eExp: "Une dépense", eExpD: "Loyer, transport, électricité, salaire…", ePur: "Un achat de marchandises", ePurD: "Vous achetez pour revendre. Le stock monte.", eItem: "Un nouvel article", eItemD: "Ajouter un produit ou un service à votre liste.",
+    eCPay: "Un client me paie", eCPayD: "Il règle ce qu'il doit (vente à crédit).", eSPay: "Je paie un fournisseur", eSPayD: "Vous réglez ce que vous lui devez.", eOut: "Une sortie de stock", eOutD: "Perte, casse, cadeau : corriger le stock.", eOutHint: "Touchez l'article, puis « Inventaire » pour noter la quantité qui reste.", ePartyHint: "Touchez la personne, puis le bouton de paiement.",
     gDaily: "Chaque jour", gMoney: "Mes comptes", gPeople: "Les personnes", gOther: "Autres",
     dHome: "Les chiffres du jour et du mois", dSales: "Noter ce que vous vendez", dItems: "Vos produits et ce qui reste en stock", dExpenses: "Loyer, transport, salaires…", dPurchases: "Marchandises achetées pour revendre",
     dClients: "Qui vous doit de l'argent", dSuppliers: "À qui vous devez de l'argent", dEmployees: "Votre personnel et les salaires", dReports: "Bénéfice, meilleures ventes, dépenses", dOhada: "Bilan, compte de résultat, journal (faits tout seuls)",
@@ -123,6 +125,8 @@
     email: "Email", rccm: "Trade reg. (RCCM)", nif: "Tax ID (NIF)", logo: "Logo", logoAdd: "Add logo", logoDel: "Remove logo", logoBig: "Image too heavy, try another one.", rcptNote: "Note at the bottom of receipts (optional)", rcptNotePh: "E.g.: Goods sold are neither returned nor exchanged.", rcptCard: "Your receipts", payMode: "Payment method", hour: "Time",
     imm: "Registration no.", bank: "Bank account", bankPh: "E.g.: BDM-SA — ML016 01201 …", show: "Show", tvaOn: "Make invoices with VAT", tvaRate: "VAT rate (%)", tvaMode: "The prices you type are", tvaHT: "Excl. tax", tvaTTC: "VAT included",
     askMode: "On each sale", askAuto: "Automatic: nothing is asked", askAsk: "Ask me what to put on the receipt", onThisDoc: "On this receipt", invoice: "INVOICE", invoiceShort: "Invoice", totalHT: "Total excl. tax", tvaAmt: "VAT", totalTTC: "Total incl. tax", rcptInfos: "Information shown on receipts", rcptInfosHint: "Fill in once. Tick “Show” so it appears on receipts.",
+    whatNote: "What do you want to record?", eSale: "A sale", eSaleD: "A customer buys. Stock goes down automatically.", eExp: "An expense", eExpD: "Rent, transport, electricity, salary…", ePur: "A goods purchase", ePurD: "You buy to resell. Stock goes up.", eItem: "A new item", eItemD: "Add a product or service to your list.",
+    eCPay: "A customer pays me", eCPayD: "They settle what they owe (credit sale).", eSPay: "I pay a supplier", eSPayD: "You settle what you owe them.", eOut: "Stock going out", eOutD: "Loss, breakage, gift: correct the stock.", eOutHint: "Tap the item, then “Stock count” to record what is left.", ePartyHint: "Tap the person, then the payment button.",
     gDaily: "Every day", gMoney: "My accounts", gPeople: "People", gOther: "Other",
     dHome: "Today's and this month's figures", dSales: "Record what you sell", dItems: "Your products and stock left", dExpenses: "Rent, transport, salaries…", dPurchases: "Goods bought to resell",
     dClients: "Who owes you money", dSuppliers: "Who you owe money to", dEmployees: "Your staff and salaries", dReports: "Profit, best sellers, expenses", dOhada: "Balance sheet, income statement, journal (done for you)",
@@ -541,8 +545,7 @@
   }
   function topActions() {
     var h = "";
-    if (S.page === "home" || S.page === "sales") { if (can("sale")) h += '<button class="gx-btn gx-primary" data-a="new" data-v="sale"><i class="fa-solid fa-plus"></i> ' + L("newSale") + '</button>'; }
-    if (S.page === "home" && can("expense")) h += '<button class="gx-btn" data-a="new" data-v="expense"><i class="fa-solid fa-minus"></i> ' + L("newExpense") + '</button>';
+    if (S.page === "sales") { if (can("sale")) h += '<button class="gx-btn gx-primary" data-a="new" data-v="sale"><i class="fa-solid fa-plus"></i> ' + L("newSale") + '</button>'; }
     var map = { purchases: ["purchase", "newPurchase"], expenses: ["expense", "newExpense"], items: ["item", "newItem"], clients: ["client", "newClient"], suppliers: ["supplier", "newSupplier"], employees: ["employee", "newEmployee"] };
     var m = map[S.page];
     if (m && can(m[0] === "client" ? "client" : m[0])) h += '<button class="gx-btn gx-primary" data-a="new" data-v="' + m[0] + '"><i class="fa-solid fa-plus"></i> ' + L(m[1]) + '</button>';
@@ -574,12 +577,29 @@
   function searchBox() { return '<input class="gx-search" id="gx-q" data-f="q" placeholder="' + L("search") + '" value="' + esc(S.q) + '">'; }
   function match(s) { return !S.q || String(s || "").toLowerCase().indexOf(S.q.toLowerCase()) >= 0; }
 
+  // « Que voulez-vous noter ? » : toutes les saisies au même endroit, expliquées simplement.
+  function entryCard() {
+    var E = [
+      ["sale", "eSale", "fa-cash-register", "new", "sale", true],
+      ["expense", "eExp", "fa-money-bill-wave", "new", "expense"],
+      ["purchase", "ePur", "fa-truck-ramp-box", "new", "purchase"],
+      ["item", "eItem", "fa-box-open", "new", "item"],
+      ["cpay", "eCPay", "fa-hand-holding-dollar", "go-party", "clients"],
+      ["payment", "eSPay", "fa-money-check-dollar", "go-party", "suppliers"],
+      ["adjust", "eOut", "fa-clipboard-check", "go-out", "items"]
+    ].filter(function (e) { return can(e[0]); });
+    if (!E.length) return "";
+    var h = '<div class="gx-card gx-entry"><h3>' + L("whatNote") + '</h3><div class="gx-entry-grid">';
+    E.forEach(function (e) { h += '<button class="' + (e[5] ? 'gx-entry-main' : '') + '" data-a="' + e[3] + '" data-v="' + e[4] + '"><i class="fa-solid ' + e[2] + '"></i><span><b>' + L(e[1]) + '</b><small>' + L(e[1] + "D") + '</small></span></button>'; });
+    return h + '</div></div>';
+  }
   function pHome() {
     var h = "", r = periodRange("today"), fT = figures(r), fM = figures(periodRange("month"));
     var st = stockMap(), low = [], neg = [];
     live("item").forEach(function (i) { if (i.type === "service") return; var q = st[i.id] || 0; if (q < 0) neg.push(i); else if (q <= num(i.alertAt)) low.push(i); });
     if (!live("item").length && !live("sale").length && can("sale")) h += '<div class="gx-card gx-hello"><h2>' + L("welcome") + '</h2><p>' + L("startHint") + '</p>' + (S.isOwner && H().myProducts && H().myProducts(S.ownerId).length ? '<button class="gx-btn" data-a="import-items"><i class="fa-solid fa-download"></i> ' + L("importItems") + '</button>' : '') + '</div>';
     if (S.role === "caissier") h += '<div class="gx-banner"><i class="fa-solid fa-cash-register"></i> ' + L("caisseHint") + '</div>';
+    h += entryCard();
     h += '<div class="gx-kpis">';
     h += kpi(L("today") + " — " + L("revenue"), money(fT.revenue), "green", "fa-sun");
     if (S.role !== "caissier") {
@@ -1460,6 +1480,8 @@
           else openForm(v, null, el.getAttribute("data-x"));
           break;
         case "open": S.modal = { t: "view", k: k, id: v }; render(); break;
+        case "go-party": S.page = v; S.q = ""; render(); toast(L("ePartyHint")); break;
+        case "go-out": S.page = "items"; S.q = ""; render(); toast(L("eOutHint")); break;
         case "edit": openForm(k, v); break;
         case "delete": if (confirm(L("confirmDel"))) { write(k, v, null, true); done(); } break;
         case "receipt": S.modal = { t: "receipt", id: v }; render(); break;
@@ -1973,7 +1995,7 @@
       ".gx-picker{border:1px dashed var(--bd);border-radius:14px;padding:8px;margin-bottom:6px}.gx-pick-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;max-height:170px;overflow-y:auto}",
       ".gx-pick-list button{border:1px solid var(--bd);background:var(--bg);color:var(--tx);border-radius:10px;padding:7px 10px;font-size:12.5px;font-weight:700;text-align:left;max-width:100%}.gx-pick-list button small{display:block;font-weight:500;color:var(--dim);font-size:11px}.gx-pick-list .gx-other{color:var(--g)}",
       ".gx-meta{font-size:11.5px;color:var(--dim);margin-top:10px}.gx-hist{font-size:11.5px;color:var(--dim);margin-top:6px}.gx-hist div{padding:3px 0}",
-      ".gx-sub{margin:14px 0 4px;font-size:14px}.gx-info-row{display:flex;align-items:flex-end;gap:8px}.gx-info-row .gx-field{flex:1;min-width:0}.gx-show{flex:0 0 auto;margin-bottom:12px;font-size:12.5px}.gx-tva-box{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:13px;margin-top:6px}.gx-tva-box div{display:flex;gap:10px}.gx-docopts{border:1px solid var(--bd);border-radius:12px;padding:10px;margin:8px 0;display:flex;flex-direction:column;gap:6px;font-size:13.5px}.gx-logo-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.gx-logo-prev{width:56px;height:56px;object-fit:contain;border:1px solid var(--bd);border-radius:10px;background:#fff}.gx-logo-empty{display:flex;align-items:center;justify-content:center;color:#999;font-size:22px}.gx-receipt{border:1px solid var(--bd);border-radius:12px;padding:16px 14px;text-align:left;background:#fff;color:#111;box-shadow:0 2px 10px rgba(0,0,0,.06)}" + RC_CSS + "@media(max-width:380px){.gx-receipt .rc-stamp svg{width:92px;height:92px}}",
+      ".gx-entry h3{margin:0 0 10px}.gx-entry-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.gx-wide .gx-entry-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.gx-entry-grid button{display:flex;align-items:flex-start;gap:8px;text-align:left;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:10px;color:var(--tx);min-width:0}.gx-entry-grid button>i{font-size:18px;color:var(--g);margin-top:2px;flex:0 0 20px;text-align:center}.gx-entry-grid span{display:flex;flex-direction:column;min-width:0}.gx-entry-grid b{font-size:13.5px}.gx-entry-grid small{font-size:11.5px;opacity:.7;line-height:1.25}.gx-entry-grid .gx-entry-main{grid-column:1/-1;background:var(--g);border-color:var(--g);color:#fff}.gx-entry-grid .gx-entry-main>i{color:#fff}.gx-entry-grid .gx-entry-main small{opacity:.9}.gx-sub{margin:14px 0 4px;font-size:14px}.gx-info-row{display:flex;align-items:flex-end;gap:8px}.gx-info-row .gx-field{flex:1;min-width:0}.gx-show{flex:0 0 auto;margin-bottom:12px;font-size:12.5px}.gx-tva-box{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:13px;margin-top:6px}.gx-tva-box div{display:flex;gap:10px}.gx-docopts{border:1px solid var(--bd);border-radius:12px;padding:10px;margin:8px 0;display:flex;flex-direction:column;gap:6px;font-size:13.5px}.gx-logo-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.gx-logo-prev{width:56px;height:56px;object-fit:contain;border:1px solid var(--bd);border-radius:10px;background:#fff}.gx-logo-empty{display:flex;align-items:center;justify-content:center;color:#999;font-size:22px}.gx-receipt{border:1px solid var(--bd);border-radius:12px;padding:16px 14px;text-align:left;background:#fff;color:#111;box-shadow:0 2px 10px rgba(0,0,0,.06)}" + RC_CSS + "@media(max-width:380px){.gx-receipt .rc-stamp svg{width:92px;height:92px}}",
       "@media (max-width:360px){.gx-fgrid{grid-template-columns:1fr}.gx-kpi b{font-size:15px}}"
     ].join("\n");
     var st = document.createElement("style"); st.id = "gx-css"; st.textContent = css; document.head.appendChild(st);
