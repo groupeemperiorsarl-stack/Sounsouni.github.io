@@ -61,6 +61,9 @@
     totals: "Totaux", soldeD: "Solde débiteur", soldeC: "Solde créditeur", charges: "Charges", produits: "Produits", actif: "Actif", passif: "Passif", resultat: "Résultat de l'exercice",
     stockVar: "Variation des stocks", balanced: "Équilibré", notBalanced: "Non équilibré", ohadaNote: "Stock évalué au dernier prix d'achat de chaque article. À faire vérifier par votre expert-comptable avant dépôt officiel.",
     rcptTitle: "REÇU DE VENTE", seller: "Vendeur", walkin: "Client de passage", unitP: "P.U.", amountCol: "Montant", status: "Statut", stPaid: "PAYÉ", stPartial: "ACOMPTE", stCredit: "À CRÉDIT", shareImg: "Envoyer le reçu (image)", waText: "WhatsApp (texte)", clientName: "Nom du client (sur le reçu)", atTime: "à", rcptFoot: "Reçu émis avec Sounsouni Gestion", rcptSetHint: "Ajoutez l'adresse et le téléphone de la boutique dans Réglages : ils seront sur vos reçus.", imgSaved: "Image du reçu enregistrée", tel: "Tél",
+    stampAuto: "Cachet automatique sur les reçus", stampHint: "Décochez si vous préférez poser votre vrai cachet sur le papier : une case vide est laissée pour lui.", stampZone: "Cachet et signature du vendeur", clientSign: "Signature du client",
+    wordDl: "Télécharger en Word", wordSaved: "Fichier Word enregistré", arrete: "Arrêté le présent reçu à la somme de", francsCfa: "francs CFA", design: "Désignation", num: "N°",
+    email: "E-mail", rccm: "RCCM", nif: "NIF", logo: "Logo", logoAdd: "Ajouter le logo", logoDel: "Enlever le logo", logoBig: "Image trop lourde, essayez une autre.", rcptNote: "Mention en bas du reçu (facultatif)", rcptNotePh: "Ex. : Les marchandises vendues ne sont ni reprises ni échangées.", rcptCard: "Vos reçus", payMode: "Mode de paiement", hour: "Heure",
     gDaily: "Chaque jour", gMoney: "Mes comptes", gPeople: "Les personnes", gOther: "Autres",
     dHome: "Les chiffres du jour et du mois", dSales: "Noter ce que vous vendez", dItems: "Vos produits et ce qui reste en stock", dExpenses: "Loyer, transport, salaires…", dPurchases: "Marchandises achetées pour revendre",
     dClients: "Qui vous doit de l'argent", dSuppliers: "À qui vous devez de l'argent", dEmployees: "Votre personnel et les salaires", dReports: "Bénéfice, meilleures ventes, dépenses", dOhada: "Bilan, compte de résultat, journal (faits tout seuls)",
@@ -113,6 +116,9 @@
     totals: "Totals", soldeD: "Debit balance", soldeC: "Credit balance", charges: "Expenses", produits: "Income", actif: "Assets", passif: "Liabilities & equity", resultat: "Profit for the period",
     stockVar: "Change in inventory", balanced: "Balanced", notBalanced: "Not balanced", ohadaNote: "Stock valued at each item's latest purchase price. Have it checked by your accountant before any official filing.",
     rcptTitle: "SALES RECEIPT", seller: "Seller", walkin: "Walk-in customer", unitP: "Unit", amountCol: "Amount", status: "Status", stPaid: "PAID", stPartial: "DEPOSIT", stCredit: "ON CREDIT", shareImg: "Send receipt (image)", waText: "WhatsApp (text)", clientName: "Customer name (on receipt)", atTime: "at", rcptFoot: "Receipt issued with Sounsouni Gestion", rcptSetHint: "Add the shop address and phone in Settings: they will appear on your receipts.", imgSaved: "Receipt image saved", tel: "Tel",
+    stampAuto: "Automatic stamp on receipts", stampHint: "Untick if you prefer to put your real stamp on the paper: an empty box is left for it.", stampZone: "Seller's stamp and signature", clientSign: "Customer's signature",
+    wordDl: "Download as Word", wordSaved: "Word file saved", arrete: "This receipt is closed at the sum of", francsCfa: "CFA francs", design: "Description", num: "No.",
+    email: "Email", rccm: "Trade reg. (RCCM)", nif: "Tax ID (NIF)", logo: "Logo", logoAdd: "Add logo", logoDel: "Remove logo", logoBig: "Image too heavy, try another one.", rcptNote: "Note at the bottom of receipts (optional)", rcptNotePh: "E.g.: Goods sold are neither returned nor exchanged.", rcptCard: "Your receipts", payMode: "Payment method", hour: "Time",
     gDaily: "Every day", gMoney: "My accounts", gPeople: "People", gOther: "Other",
     dHome: "Today's and this month's figures", dSales: "Record what you sell", dItems: "Your products and stock left", dExpenses: "Rent, transport, salaries…", dPurchases: "Goods bought to resell",
     dClients: "Who owes you money", dSuppliers: "Who you owe money to", dEmployees: "Your staff and salaries", dReports: "Profit, best sellers, expenses", dOhada: "Balance sheet, income statement, journal (done for you)",
@@ -769,6 +775,10 @@
     h += '<label class="gx-field">' + L("openingCash") + '<input id="gx-set-cash" inputmode="numeric" value="' + esc(setting("openingCash", 0)) + '"' + (can("settings") ? '' : ' disabled') + '></label>';
     h += '<label class="gx-field">' + L("phone") + '<input id="gx-set-phone" value="' + esc(setting("phone", "")) + '"' + (can("settings") ? '' : ' disabled') + '></label>';
     h += '<label class="gx-field">' + L("address") + '<input id="gx-set-addr" value="' + esc(setting("address", "")) + '"' + (can("settings") ? '' : ' disabled') + '></label>';
+    var dis = can("settings") ? '' : ' disabled';
+    h += '<label class="gx-field">' + L("email") + '<input id="gx-set-email" type="email" value="' + esc(setting("email", "")) + '"' + dis + '></label>';
+    h += '<div class="gx-fgrid"><label class="gx-field">' + L("rccm") + '<input id="gx-set-rccm" value="' + esc(setting("rccm", "")) + '" placeholder="ML-BKO-…"' + dis + '></label><label class="gx-field">' + L("nif") + '<input id="gx-set-nif" value="' + esc(setting("nif", "")) + '"' + dis + '></label></div>';
+    h += '<label class="gx-field">' + L("rcptNote") + '<input id="gx-set-rnote" value="' + esc(setting("rcptNote", "")) + '" placeholder="' + esc(L("rcptNotePh")) + '"' + dis + '></label>';
     if (can("settings") || isChef()) h += '<button class="gx-btn gx-primary" data-a="save-settings">' + L("save") + '</button>';
     h += '</div><div class="gx-card"><h3>' + L("subscription") + '</h3>';
     var cfg = (H().gestionConfig && H().gestionConfig()) || { mode: "free" };
@@ -785,7 +795,7 @@
     h += '</div><div class="gx-card"><h3>' + L("pin") + '</h3>';
     if (localPin()) h += '<button class="gx-btn" data-a="pin-remove">' + L("removePin") + '</button>';
     else h += '<div class="gx-form-inline"><input id="gx-newpin" type="password" inputmode="numeric" maxlength="8" placeholder="1234"><button class="gx-btn" data-a="pin-set">' + L("setPin") + '</button></div>';
-    h += '</div>' + printerCard() + '</div>';
+    h += '</div>' + rcptCard() + printerCard() + '</div>';
     return h;
   }
   function renderPin() {
@@ -977,6 +987,35 @@
   function linesView(lines, pf) {
     return '<div class="gx-list">' + lines.map(function (l) { return '<div class="gx-line"><span>' + qtyFmt(l.qty) + ' × ' + esc(l.name) + ' <small>(' + money(l[pf]) + ')</small></span><b>' + money(num(l.qty) * num(l[pf])) + '</b></div>'; }).join("") + '</div>';
   }
+  // ---------------- Somme en lettres ----------------
+  function wordsFr(n) {
+    n = Math.floor(Math.abs(n)); if (!n) return "zéro";
+    var U = ["", "un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix", "onze", "douze", "treize", "quatorze", "quinze", "seize", "dix-sept", "dix-huit", "dix-neuf"];
+    var T = ["", "", "vingt", "trente", "quarante", "cinquante", "soixante"];
+    var b100 = function (x) {
+      if (x < 20) return U[x];
+      var t = Math.floor(x / 10), u = x % 10;
+      if (t < 7) return T[t] + (u === 1 ? " et un" : u ? "-" + U[u] : "");
+      if (t === 7) return "soixante" + (u === 1 ? " et onze" : "-" + U[10 + u]);
+      if (t === 8) return "quatre-vingt" + (u ? "-" + U[u] : "s");
+      return "quatre-vingt-" + U[10 + u];
+    };
+    var b1000 = function (x) { var h = Math.floor(x / 100), r = x % 100, o = ""; if (h) o = (h > 1 ? U[h] + " " : "") + "cent" + (h > 1 && !r ? "s" : ""); return (o + (r ? (o ? " " : "") + b100(r) : "")).trim(); };
+    var inv = function (w) { return w.replace(/(cent|vingt)s$/, "$1"); };
+    var parts = [], g = [[1e9, "milliard"], [1e6, "million"], [1e3, "mille"]];
+    g.forEach(function (gg) { var q = Math.floor(n / gg[0]); n = n % gg[0]; if (!q) return; if (gg[1] === "mille") parts.push(q === 1 ? "mille" : inv(b1000(q)) + " mille"); else parts.push(b1000(q) + " " + gg[1] + (q > 1 ? "s" : "")); });
+    if (n) parts.push(b1000(n));
+    return parts.join(" ");
+  }
+  function wordsEn(n) {
+    n = Math.floor(Math.abs(n)); if (!n) return "zero";
+    var U = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"], T = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
+    var b1000 = function (x) { var h = Math.floor(x / 100), r = x % 100, o = h ? U[h] + " hundred" : ""; if (r) o += (o ? " " : "") + (r < 20 ? U[r] : T[Math.floor(r / 10)] + (r % 10 ? "-" + U[r % 10] : "")); return o; };
+    var parts = []; [[1e9, "billion"], [1e6, "million"], [1e3, "thousand"]].forEach(function (g) { var q = Math.floor(n / g[0]); n = n % g[0]; if (q) parts.push(b1000(q) + " " + g[1]); });
+    if (n) parts.push(b1000(n)); return parts.join(" ");
+  }
+  function amountWords(n) { var en = (H().lang && H().lang() || "fr") !== "fr", w = en ? wordsEn(n) : wordsFr(n); return w.charAt(0).toUpperCase() + w.slice(1); }
+
   // ---------------- Reçu ----------------
   // Toutes les informations du reçu, partagées par l'écran, le texte WhatsApp, l'image et l'impression.
   function rcpt(r) {
@@ -984,11 +1023,13 @@
     var t = r._at ? new Date(r._at) : null, time = t && r.d === (t.getFullYear() + "-" + pad(t.getMonth() + 1) + "-" + pad(t.getDate())) ? pad(t.getHours()) + ":" + pad(t.getMinutes()) : "";
     return {
       shop: String(S.name || ""), addr: String(setting("address", "") || ""), phone: String(setting("phone", "") || ""),
+      email: String(setting("email", "") || ""), rccm: String(setting("rccm", "") || ""), nif: String(setting("nif", "") || ""), foot: String(setting("rcptNote", "") || ""), logo: logoImg(), stamp: stampOn(),
       no: "R-" + String(r.id).replace(/^s_/, "").slice(-6).toUpperCase(), date: dateFr(r.d), time: time,
       client: c ? c.name : (r.cname || ""), clientPhone: c && c.phone ? String(c.phone) : "", seller: String(r._bn || ""),
       lines: saleLines(r).map(function (l) { return { name: String(l.name || ""), qty: num(l.qty), pu: num(l.price), amt: num(l.qty) * num(l.price) }; }),
       total: num(r.total), paid: num(r.paid), rest: rest, mode: r.mode === "sounsouni" ? "Sounsouni" : (r.mode === "credit" ? "" : modeLabel(r.mode)),
-      st: rest <= 0 ? "stPaid" : num(r.paid) > 0 ? "stPartial" : "stCredit", note: String(r.note || "")
+      st: rest <= 0 ? "stPaid" : num(r.paid) > 0 ? "stPartial" : "stCredit", note: String(r.note || ""),
+      words: amountWords(num(r.total)) + " (" + money(r.total).replace(/ F$/, "") + ") " + L("francsCfa")
     };
   }
   // Cachet rond au nom de la boutique (SVG) : nom en haut, ville/téléphone en bas, statut et date au centre.
@@ -1010,6 +1051,8 @@
     var R = rcpt(r), sep = "━━━━━━━━━━━━━━", t = "*" + R.shop.toUpperCase() + "*\n";
     if (R.addr) t += R.addr + "\n";
     if (R.phone) t += L("tel") + " : " + R.phone + "\n";
+    if (R.email) t += R.email + "\n";
+    if (R.rccm || R.nif) t += [R.rccm ? L("rccm") + " " + R.rccm : "", R.nif ? L("nif") + " " + R.nif : ""].filter(Boolean).join(" · ") + "\n";
     t += sep + "\n*" + L("rcptTitle") + " N° " + R.no + "*\n" + L("date") + " : " + R.date + (R.time ? " " + L("atTime") + " " + R.time : "") + "\n";
     t += L("client") + " : " + (R.client || L("walkin")) + "\n";
     if (R.seller) t += L("seller") + " : " + R.seller + "\n";
@@ -1019,78 +1062,100 @@
     if (R.rest > 0) t += L("rest") + " : *" + money(R.rest) + "*\n";
     t += L("status") + " : " + (R.st === "stPaid" ? "✅ " : "⏳ ") + L(R.st) + "\n";
     if (R.note) t += L("note") + " : " + R.note + "\n";
+    t += "_" + L("arrete") + " : " + R.words + "._\n";
+    if (R.foot) t += R.foot + "\n";
     t += sep + "\n" + L("receiptThanks") + "\n_" + L("rcptFoot") + "_";
     return t;
   }
   // Corps du reçu en HTML (écran, A4, ticket). ink = couleur du cachet.
   function receiptHtml(r, ink, ticket) {
-    var R = rcpt(r), h = '<div class="rc-head"><div class="rc-shop">' + esc(R.shop) + '</div>';
+    var R = rcpt(r), legal = [R.rccm ? L("rccm") + " : " + esc(R.rccm) : "", R.nif ? L("nif") + " : " + esc(R.nif) : ""].filter(Boolean).join(" · ");
+    var h = '<div class="rc-head">' + (R.logo ? '<img class="rc-logo" src="' + R.logo + '" alt="">' : '') + '<div class="rc-id"><div class="rc-shop">' + esc(R.shop) + '</div>';
     if (R.addr) h += '<div class="rc-sub">' + esc(R.addr) + '</div>';
-    if (R.phone) h += '<div class="rc-sub">' + L("tel") + ' : ' + esc(R.phone) + '</div>';
-    h += '</div><div class="rc-title">' + L("rcptTitle") + '</div><div class="rc-meta">';
-    h += '<div><span>N°</span><b>' + esc(R.no) + '</b></div><div><span>' + L("date") + '</span><b>' + R.date + (R.time ? ' ' + R.time : '') + '</b></div>';
+    var ct = [R.phone ? L("tel") + " : " + esc(R.phone) : "", R.email ? esc(R.email) : ""].filter(Boolean).join(" · ");
+    if (ct) h += '<div class="rc-sub">' + ct + '</div>';
+    if (legal) h += '<div class="rc-sub rc-legal">' + legal + '</div>';
+    h += '</div></div><div class="rc-title">' + L("rcptTitle") + '</div><div class="rc-meta">';
+    h += '<div><span>' + L("num") + '</span><b>' + esc(R.no) + '</b></div><div><span>' + L("date") + '</span><b>' + R.date + (R.time ? ' ' + L("atTime") + ' ' + R.time : '') + '</b></div>';
     h += '<div><span>' + L("client") + '</span><b>' + esc(R.client || L("walkin")) + (R.clientPhone ? ' · ' + esc(R.clientPhone) : '') + '</b></div>';
     if (R.seller) h += '<div><span>' + L("seller") + '</span><b>' + esc(R.seller) + '</b></div>';
-    h += '</div><table class="rc-t"><thead><tr><th>' + L("article") + '</th><th class="r">' + L("qtyShort") + '</th>' + (ticket ? '' : '<th class="r">' + L("unitP") + '</th>') + '<th class="r">' + L("amountCol") + '</th></tr></thead><tbody>';
-    R.lines.forEach(function (l) { h += '<tr><td>' + esc(l.name) + (ticket ? '<br><small>' + money(l.pu) + '</small>' : '') + '</td><td class="r">' + qtyFmt(l.qty) + '</td>' + (ticket ? '' : '<td class="r">' + money(l.pu) + '</td>') + '<td class="r">' + money(l.amt) + '</td></tr>'; });
-    h += '</tbody></table><div class="rc-bottom"><div class="rc-stamp">' + stampSvg(R, ink, ticket ? 96 : 116) + '</div><div class="rc-sum">';
+    h += '</div><table class="rc-t"><thead><tr>' + (ticket ? '' : '<th class="c">' + L("num") + '</th>') + '<th>' + L("design") + '</th><th class="r">' + L("qtyShort") + '</th>' + (ticket ? '' : '<th class="r">' + L("unitP") + '</th>') + '<th class="r">' + L("amountCol") + '</th></tr></thead><tbody>';
+    R.lines.forEach(function (l, i) { h += '<tr>' + (ticket ? '' : '<td class="c">' + (i + 1) + '</td>') + '<td>' + esc(l.name) + (ticket ? '<br><small>' + money(l.pu) + '</small>' : '') + '</td><td class="r">' + qtyFmt(l.qty) + '</td>' + (ticket ? '' : '<td class="r">' + money(l.pu) + '</td>') + '<td class="r">' + money(l.amt) + '</td></tr>'; });
+    h += '</tbody></table><div class="rc-sum">';
     h += '<div class="rc-tot"><span>' + L("total") + '</span><b>' + money(R.total) + '</b></div>';
     h += '<div><span>' + L("paid") + (R.mode ? ' (' + esc(R.mode) + ')' : '') + '</span><b>' + money(R.paid) + '</b></div>';
     if (R.rest > 0) h += '<div class="rc-rest"><span>' + L("rest") + '</span><b>' + money(R.rest) + '</b></div>';
-    h += '<div><span>' + L("status") + '</span><b>' + L(R.st) + '</b></div></div></div>';
+    h += '<div><span>' + L("status") + '</span><b>' + L(R.st) + '</b></div></div>';
+    h += '<div class="rc-words">' + L("arrete") + ' : <b>' + esc(R.words) + '</b>.</div>';
     if (R.note) h += '<div class="rc-note">' + L("note") + ' : ' + esc(R.note) + '</div>';
-    return h + '<div class="rc-foot">' + L("receiptThanks") + '<br><small>' + L("rcptFoot") + '</small></div>';
+    h += '<div class="rc-signs">' + (ticket ? '' : '<div class="rc-sign"><span>' + L("clientSign") + '</span></div>') + '<div class="rc-sign rc-sign-v"><span>' + L("stampZone") + '</span>' + (R.stamp ? stampSvg(R, ink, ticket ? 96 : 112) : '') + '</div></div>';
+    return h + '<div class="rc-foot">' + (R.foot ? '<div class="rc-mention">' + esc(R.foot) + '</div>' : '') + L("receiptThanks") + '<br><small>' + L("rcptFoot") + '</small></div>';
   }
-  var RC_CSS = ".rc-head{text-align:center;margin-bottom:6px}.rc-shop{font-size:1.45em;font-weight:900;letter-spacing:.02em;text-transform:uppercase}.rc-sub{font-size:.88em;opacity:.8}" +
+  var RC_CSS = ".rc-head{display:flex;align-items:center;justify-content:center;gap:12px;text-align:center;margin-bottom:6px}.rc-logo{width:64px;height:64px;object-fit:contain;flex:0 0 auto}.rc-id{min-width:0}.rc-shop{font-size:1.45em;font-weight:900;letter-spacing:.02em;text-transform:uppercase;word-break:break-word}.rc-sub{font-size:.86em;opacity:.8;word-break:break-word}.rc-legal{font-size:.78em}" +
     ".rc-title{text-align:center;font-weight:800;letter-spacing:.12em;border-top:2px solid currentColor;border-bottom:2px solid currentColor;padding:5px 0;margin:8px 0}" +
     ".rc-meta{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:.9em;margin-bottom:8px}.rc-meta div{display:flex;flex-direction:column;min-width:0}.rc-meta span{opacity:.65;font-size:.85em}.rc-meta b{word-break:break-word}" +
-    ".rc-t{width:100%;border-collapse:collapse;font-size:.92em}.rc-t th{text-align:left;border-bottom:1.5px solid currentColor;padding:4px 3px;font-size:.85em;text-transform:uppercase}.rc-t td{border-bottom:1px dashed rgba(127,127,127,.5);padding:5px 3px;vertical-align:top;word-break:break-word}.rc-t .r{text-align:right;white-space:nowrap}" +
-    ".rc-bottom{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px}.rc-stamp{flex:0 0 auto;opacity:.88}.rc-sum{flex:1;min-width:0;max-width:240px}.rc-sum div{display:flex;justify-content:space-between;gap:8px;padding:2px 0;font-size:.92em}" +
-    ".rc-sum .rc-tot{font-size:1.2em;border-top:2px solid currentColor;border-bottom:2px solid currentColor;padding:5px 0;margin-bottom:3px}.rc-rest b{color:#c62828}.rc-note{font-size:.85em;margin-top:8px;font-style:italic}.rc-foot{text-align:center;margin-top:12px;font-weight:700}.rc-foot small{font-weight:400;opacity:.65}";
+    ".rc-t{width:100%;border-collapse:collapse;font-size:.92em}.rc-t th{text-align:left;border-bottom:1.5px solid currentColor;padding:4px 3px;font-size:.82em;text-transform:uppercase}.rc-t td{border-bottom:1px dashed rgba(127,127,127,.5);padding:5px 3px;vertical-align:top;word-break:break-word}.rc-t .r{text-align:right;white-space:nowrap}.rc-t .c{text-align:center;width:2.2em}" +
+    ".rc-sum{margin:10px 0 0 auto;max-width:260px}.rc-sum div{display:flex;justify-content:space-between;gap:8px;padding:2px 0;font-size:.92em}" +
+    ".rc-sum .rc-tot{font-size:1.2em;border-top:2px solid currentColor;border-bottom:2px solid currentColor;padding:5px 0;margin-bottom:3px}.rc-rest b{color:#c62828}.rc-words{font-size:.86em;margin-top:10px}.rc-note{font-size:.85em;margin-top:6px;font-style:italic}" +
+    ".rc-signs{display:flex;gap:12px;margin-top:12px}.rc-sign{flex:1;min-width:0;min-height:128px;border:1px dashed rgba(127,127,127,.7);border-radius:6px;padding:6px;display:flex;flex-direction:column;align-items:center;font-size:.78em}.rc-sign span{opacity:.75;text-align:center}.rc-sign svg{margin-top:2px;opacity:.88}" +
+    ".rc-foot{text-align:center;margin-top:12px;font-weight:700}.rc-mention{font-weight:400;font-size:.85em;font-style:italic;margin-bottom:4px}.rc-foot small{font-weight:400;opacity:.65}";
   function vReceipt() {
     var r = getE("sale", S.modal.id); if (!r) return "";
     var c = r.client ? getE("client", r.client) : null;
     var phone = c && c.phone ? String(c.phone).replace(/\D/g, "") : "";
     var h = '<div class="gx-receipt" id="gx-receipt-print">' + receiptHtml(r) + '</div>';
     if (!setting("phone", "") && !setting("address", "")) h += '<p class="gx-hint">' + L("rcptSetHint") + '</p>';
-    h += '<div class="gx-sheet-foot"><button class="gx-btn gx-primary" data-a="receipt-img"><i class="fa-solid fa-image"></i> ' + L("shareImg") + '</button><a class="gx-btn" target="_blank" rel="noopener" href="https://wa.me/' + phone + '?text=' + encodeURIComponent(receiptText(r)) + '"><i class="fa-brands fa-whatsapp"></i> ' + L("waText") + '</a><button class="gx-btn" data-a="print"><i class="fa-solid fa-print"></i> ' + L("print") + '</button></div>';
+    h += '<label class="gx-check" style="margin:8px 0 0"><input type="checkbox" id="gx-stamp2"' + (stampOn() ? ' checked' : '') + '> ' + L("stampAuto") + '</label>';
+    h += '<div class="gx-sheet-foot"><button class="gx-btn gx-primary" data-a="receipt-img"><i class="fa-solid fa-image"></i> ' + L("shareImg") + '</button><a class="gx-btn" target="_blank" rel="noopener" href="https://wa.me/' + phone + '?text=' + encodeURIComponent(receiptText(r)) + '"><i class="fa-brands fa-whatsapp"></i> ' + L("waText") + '</a><button class="gx-btn" data-a="print"><i class="fa-solid fa-print"></i> ' + L("print") + '</button><button class="gx-btn" data-a="receipt-word"><i class="fa-solid fa-file-word"></i> ' + L("wordDl") + '</button></div>';
     return h;
   }
   // Image du reçu (dessinée sur un canvas, sans rien de l'extérieur) pour l'envoyer en photo.
-  function receiptCanvas(r) {
-    var R = rcpt(r), W = 760, P = 44, cv = document.createElement("canvas"), x = cv.getContext("2d"), F = "Arial,Helvetica,sans-serif";
-    var wrap = function (txt, w, font) { x.font = font; var words = String(txt).split(" "), out = [], cur = ""; words.forEach(function (wd) { var t = cur ? cur + " " + wd : wd; if (x.measureText(t).width > w && cur) { out.push(cur); cur = wd; } else cur = t; }); out.push(cur); return out; };
-    var H = 520 + R.lines.reduce(function (a, l) { return a + 34 * wrap(l.name, W - 2 * P - 330, "20px " + F).length + 10; }, 0) + (R.rest > 0 ? 34 : 0) + (R.note ? 36 : 0) + (R.addr ? 28 : 0) + (R.phone ? 28 : 0);
-    H = 3000; cv.width = W; cv.height = H; x.fillStyle = "#fff"; x.fillRect(0, 0, W, H); x.fillStyle = "#2e7d32"; x.fillRect(0, 0, W, 10);
-    var y = 66; x.fillStyle = "#111"; x.textAlign = "center"; x.font = "900 36px " + F; x.fillText(R.shop.toUpperCase().slice(0, 34), W / 2, y);
-    x.font = "20px " + F; x.fillStyle = "#555";
-    if (R.addr) { y += 30; x.fillText(R.addr.slice(0, 70), W / 2, y); }
-    if (R.phone) { y += 28; x.fillText(L("tel") + " : " + R.phone, W / 2, y); }
-    y += 26; x.fillStyle = "#111"; x.fillRect(P, y, W - 2 * P, 3); y += 36; x.font = "800 24px " + F; x.fillText(L("rcptTitle").split("").join(" "), W / 2, y); y += 16; x.fillRect(P, y, W - 2 * P, 3);
-    x.textAlign = "left"; y += 40;
-    var meta = [["N°", R.no], [L("date"), R.date + (R.time ? " " + R.time : "")], [L("client"), (R.client || L("walkin")) + (R.clientPhone ? " · " + R.clientPhone : "")], [L("seller"), R.seller]];
-    meta.forEach(function (m, i) { if (!m[1]) return; var cx = i % 2 ? W / 2 + 10 : P, cy = y + Math.floor(i / 2) * 56; x.fillStyle = "#777"; x.font = "17px " + F; x.fillText(m[0], cx, cy); x.fillStyle = "#111"; x.font = "700 21px " + F; x.fillText(String(m[1]).slice(0, 30), cx, cy + 25); });
-    y += 112; x.font = "700 17px " + F; x.fillStyle = "#111";
-    var cQ = W - P - 300, cU = W - P - 150, cA = W - P;
-    x.fillText(L("article").toUpperCase(), P, y); x.textAlign = "right"; x.fillText(L("qtyShort").toUpperCase(), cQ + 20, y); x.fillText(L("unitP").toUpperCase(), cU + 10, y); x.fillText(L("amountCol").toUpperCase(), cA, y);
-    y += 12; x.fillRect(P, y, W - 2 * P, 2); y += 32;
-    R.lines.forEach(function (l) {
-      var ls = wrap(l.name, cQ - P - 40, "20px " + F); x.textAlign = "left"; x.font = "20px " + F; x.fillStyle = "#111";
-      ls.forEach(function (t, i) { x.fillText(t, P, y + i * 34); });
-      x.textAlign = "right"; x.fillText(qtyFmt(l.qty), cQ + 20, y); x.fillText(money(l.pu), cU + 10, y); x.font = "700 20px " + F; x.fillText(money(l.amt), cA, y);
-      y += 34 * ls.length - 14; x.strokeStyle = "#bbb"; x.setLineDash([5, 5]); x.beginPath(); x.moveTo(P, y); x.lineTo(W - P, y); x.stroke(); x.setLineDash([]); y += 34;
+  function withLogo(R, cb) { if (!R.logo) return cb(null); var im = new Image(); im.onload = function () { cb(im); }; im.onerror = function () { cb(null); }; im.src = R.logo; }
+  function receiptCanvas(r, cb) {
+    var R = rcpt(r);
+    withLogo(R, function (logo) {
+      var W = 760, P = 44, cv = document.createElement("canvas"), x = cv.getContext("2d"), F = "Arial,Helvetica,sans-serif";
+      var wrap = function (txt, w, font) { x.font = font; var words = String(txt).split(" "), out = [], cur = ""; words.forEach(function (wd) { var t = cur ? cur + " " + wd : wd; if (x.measureText(t).width > w && cur) { out.push(cur); cur = wd; } else cur = t; }); out.push(cur); return out; };
+      cv.width = W; cv.height = 4000; x.fillStyle = "#fff"; x.fillRect(0, 0, W, 4000); x.fillStyle = "#2e7d32"; x.fillRect(0, 0, W, 10);
+      var y = 40; x.textAlign = "center";
+      if (logo) { var lh = 90, lw = Math.min(200, logo.width * lh / logo.height); x.drawImage(logo, (W - lw) / 2, y, lw, lh); y += lh + 8; }
+      x.fillStyle = "#111"; x.font = "900 36px " + F; y += 30; x.fillText(R.shop.toUpperCase().slice(0, 34), W / 2, y);
+      x.font = "19px " + F; x.fillStyle = "#555";
+      var info = [R.addr, [R.phone ? L("tel") + " : " + R.phone : "", R.email].filter(Boolean).join(" · "), [R.rccm ? L("rccm") + " : " + R.rccm : "", R.nif ? L("nif") + " : " + R.nif : ""].filter(Boolean).join(" · ")];
+      info.forEach(function (t) { if (t) { y += 27; x.fillText(t.slice(0, 72), W / 2, y); } });
+      y += 24; x.fillStyle = "#111"; x.fillRect(P, y, W - 2 * P, 3); y += 36; x.font = "800 24px " + F; x.fillText(L("rcptTitle").split("").join(" "), W / 2, y); y += 16; x.fillRect(P, y, W - 2 * P, 3);
+      x.textAlign = "left"; y += 40;
+      var meta = [[L("num"), R.no], [L("date"), R.date + (R.time ? " " + L("atTime") + " " + R.time : "")], [L("client"), (R.client || L("walkin")) + (R.clientPhone ? " · " + R.clientPhone : "")], [L("seller"), R.seller]];
+      meta.forEach(function (m, i) { if (!m[1]) return; var cx = i % 2 ? W / 2 + 10 : P, cy = y + Math.floor(i / 2) * 56; x.fillStyle = "#777"; x.font = "17px " + F; x.fillText(m[0], cx, cy); x.fillStyle = "#111"; x.font = "700 21px " + F; x.fillText(String(m[1]).slice(0, 30), cx, cy + 25); });
+      y += 112; x.font = "700 17px " + F; x.fillStyle = "#111";
+      var cN = P, cD = P + 40, cQ = W - P - 300, cU = W - P - 150, cA = W - P;
+      x.fillText(L("num"), cN, y); x.fillText(L("design").toUpperCase(), cD, y); x.textAlign = "right"; x.fillText(L("qtyShort").toUpperCase(), cQ + 20, y); x.fillText(L("unitP").toUpperCase(), cU + 10, y); x.fillText(L("amountCol").toUpperCase(), cA, y);
+      y += 12; x.fillRect(P, y, W - 2 * P, 2); y += 32;
+      R.lines.forEach(function (l, i) {
+        var ls = wrap(l.name, cQ - cD - 40, "20px " + F); x.textAlign = "left"; x.font = "20px " + F; x.fillStyle = "#111";
+        x.fillText(String(i + 1), cN, y); ls.forEach(function (t, j) { x.fillText(t, cD, y + j * 30); });
+        x.textAlign = "right"; x.fillText(qtyFmt(l.qty), cQ + 20, y); x.fillText(money(l.pu), cU + 10, y); x.font = "700 20px " + F; x.fillText(money(l.amt), cA, y);
+        y += 30 * ls.length - 12; x.strokeStyle = "#bbb"; x.setLineDash([5, 5]); x.beginPath(); x.moveTo(P, y); x.lineTo(W - P, y); x.stroke(); x.setLineDash([]); y += 34;
+      });
+      var sx = W / 2 + 20, sy = y + 6, row = function (a, b, bold, col) { x.textAlign = "left"; x.fillStyle = "#333"; x.font = (bold ? "800 25px " : "19px ") + F; x.fillText(a, sx, sy); x.textAlign = "right"; x.fillStyle = col || "#111"; x.font = (bold ? "800 25px " : "700 19px ") + F; x.fillText(b, W - P, sy); sy += bold ? 44 : 32; };
+      x.fillStyle = "#111"; x.fillRect(sx, sy - 6, W - P - sx, 3); sy += 30; row(L("total"), money(R.total), true); x.fillRect(sx, sy - 34, W - P - sx, 3); sy += 6;
+      row(L("paid") + (R.mode ? " (" + R.mode + ")" : ""), money(R.paid)); if (R.rest > 0) row(L("rest"), money(R.rest), false, "#c62828"); row(L("status"), L(R.st), false, R.st === "stPaid" ? "#2e7d32" : "#c62828");
+      y = sy + 6; x.textAlign = "left"; x.fillStyle = "#222";
+      wrap(L("arrete") + " : " + R.words + ".", W - 2 * P, "italic 18px " + F).forEach(function (t) { x.font = "italic 18px " + F; x.fillText(t, P, y); y += 26; });
+      if (R.note) { x.fillStyle = "#444"; wrap(L("note") + " : " + R.note, W - 2 * P, "italic 17px " + F).forEach(function (t) { x.font = "italic 17px " + F; x.fillText(t, P, y); y += 25; }); }
+      // zones de signature
+      y += 10; var bw = (W - 2 * P - 20) / 2, bh = 220;
+      x.strokeStyle = "#999"; x.setLineDash([6, 5]); x.lineWidth = 1.5; x.strokeRect(P, y, bw, bh); x.strokeRect(P + bw + 20, y, bw, bh); x.setLineDash([]); x.lineWidth = 1;
+      x.textAlign = "center"; x.fillStyle = "#666"; x.font = "16px " + F; x.fillText(L("clientSign"), P + bw / 2, y + 24); x.fillText(L("stampZone"), P + bw + 20 + bw / 2, y + 24);
+      if (R.stamp) drawStamp(x, R, P + bw + 20 + bw / 2, y + 122, 86);
+      y += bh + 36;
+      x.textAlign = "center";
+      if (R.foot) { x.fillStyle = "#444"; x.font = "italic 17px " + F; x.fillText(R.foot.slice(0, 80), W / 2, y); y += 30; }
+      x.fillStyle = "#111"; x.font = "700 21px " + F; x.fillText(L("receiptThanks"), W / 2, y + 8); x.fillStyle = "#888"; x.font = "16px " + F; x.fillText(L("rcptFoot"), W / 2, y + 36);
+      var endY = y + 62, out = document.createElement("canvas"); out.width = W; out.height = endY;
+      var o = out.getContext("2d"); o.drawImage(cv, 0, 0); o.fillStyle = "#2e7d32"; o.fillRect(0, endY - 10, W, 10);
+      cb(out);
     });
-    // Totaux à droite, cachet à gauche
-    var sx = W / 2 + 20, sy = y + 6, row = function (a, b, bold, col) { x.textAlign = "left"; x.fillStyle = "#333"; x.font = (bold ? "800 25px " : "19px ") + F; x.fillText(a, sx, sy); x.textAlign = "right"; x.fillStyle = col || "#111"; x.font = (bold ? "800 25px " : "700 19px ") + F; x.fillText(b, W - P, sy); sy += bold ? 44 : 32; };
-    x.fillStyle = "#111"; x.fillRect(sx, sy - 6, W - P - sx, 3); sy += 30; row(L("total"), money(R.total), true); x.fillRect(sx, sy - 34, W - P - sx, 3); sy += 6;
-    row(L("paid") + (R.mode ? " (" + R.mode + ")" : ""), money(R.paid)); if (R.rest > 0) row(L("rest"), money(R.rest), false, "#c62828"); row(L("status"), L(R.st), false, R.st === "stPaid" ? "#2e7d32" : "#c62828");
-    drawStamp(x, R, P + 105, y + 105, 98);
-    y = Math.max(sy, y + 215) + 20;
-    if (R.note) { x.textAlign = "left"; x.fillStyle = "#444"; x.font = "italic 18px " + F; x.fillText((L("note") + " : " + R.note).slice(0, 70), P, y); y += 36; }
-    x.textAlign = "center"; x.fillStyle = "#111"; x.font = "700 21px " + F; x.fillText(L("receiptThanks"), W / 2, y + 8); x.fillStyle = "#888"; x.font = "16px " + F; x.fillText(L("rcptFoot"), W / 2, y + 36);
-    var endY = y + 62, out = document.createElement("canvas"); out.width = W; out.height = endY;
-    var o = out.getContext("2d"); o.drawImage(cv, 0, 0); o.fillStyle = "#2e7d32"; o.fillRect(0, endY - 10, W, 10);
-    return out;
   }
   function drawStamp(x, R, cx, cy, rad) {
     var ink = "#1f3fa8", F = "Arial,Helvetica,sans-serif";
@@ -1109,8 +1174,8 @@
   }
   function shareReceiptImage() {
     var r = S.modal && getE("sale", S.modal.id); if (!r) return;
-    var R = rcpt(r), cv = receiptCanvas(r), fname = "recu-" + R.no + ".png";
-    cv.toBlob(function (blob) {
+    var R = rcpt(r), fname = "recu-" + R.no + ".png";
+    receiptCanvas(r, function (cv) { cv.toBlob(function (blob) {
       if (!blob) return toast("❌ " + L("errGeneric"));
       var file = null; try { file = new File([blob], fname, { type: "image/png" }); } catch (e) {}
       if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -1119,7 +1184,90 @@
       }
       var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fname; document.body.appendChild(a); a.click();
       setTimeout(function () { a.remove(); }, 1500); toast("✅ " + L("imgSaved"));
-    }, "image/png");
+    }, "image/png"); });
+  }
+
+  // ---------------- Fichier Word (.docx) ----------------
+  // Fabriqué ici même (zip « stocké » + XML Word), sans bibliothèque. Logo et cachet en images.
+  var CRC_T = null;
+  function crc32(b) { if (!CRC_T) { CRC_T = []; for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; CRC_T[n] = c >>> 0; } } var crc = 0xFFFFFFFF; for (var i = 0; i < b.length; i++) crc = CRC_T[(crc ^ b[i]) & 0xFF] ^ (crc >>> 8); return (crc ^ 0xFFFFFFFF) >>> 0; }
+  function zipStore(files) {
+    var enc = new TextEncoder(), parts = [], central = [], off = 0;
+    var u16 = function (v) { return [v & 255, (v >>> 8) & 255]; }, u32 = function (v) { return [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255]; };
+    files.forEach(function (f) {
+      var name = enc.encode(f.name), data = typeof f.data === "string" ? enc.encode(f.data) : f.data, crc = crc32(data);
+      var head = [].concat([0x50, 0x4b, 0x03, 0x04], u16(20), u16(0x0800), u16(0), u16(0), u16(0x21), u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0));
+      parts.push(new Uint8Array(head), name, data);
+      central.push(new Uint8Array([].concat([0x50, 0x4b, 0x01, 0x02], u16(20), u16(20), u16(0x0800), u16(0), u16(0), u16(0x21), u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(off))), name);
+      off += head.length + name.length + data.length;
+    });
+    var csize = central.reduce(function (a, b) { return a + b.length; }, 0);
+    var end = new Uint8Array([].concat([0x50, 0x4b, 0x05, 0x06], u16(0), u16(0), u16(files.length), u16(files.length), u32(csize), u32(off), u16(0)));
+    return new Blob(parts.concat(central, [end]), { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+  }
+  function b64bytes(d) { var t = atob(d.split(",")[1] || ""), o = new Uint8Array(t.length); for (var i = 0; i < t.length; i++) o[i] = t.charCodeAt(i); return o; }
+  function stampPng(R) { var c = document.createElement("canvas"); c.width = 240; c.height = 240; drawStamp(c.getContext("2d"), R, 120, 120, 112); return c.toDataURL("image/png"); }
+  function receiptDocx(r) {
+    var R = rcpt(r), xe = function (t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); };
+    var run = function (t, o) { o = o || {}; return '<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>' + (o.b ? '<w:b/>' : '') + (o.i ? '<w:i/>' : '') + (o.c ? '<w:color w:val="' + o.c + '"/>' : '') + '<w:sz w:val="' + (o.sz || 20) + '"/></w:rPr><w:t xml:space="preserve">' + xe(t) + '</w:t></w:r>'; };
+    var para = function (runs, o) { o = o || {}; return '<w:p><w:pPr><w:spacing w:before="' + (o.before || 0) + '" w:after="' + (o.after == null ? 40 : o.after) + '"/>' + (o.jc ? '<w:jc w:val="' + o.jc + '"/>' : '') + (o.border ? '<w:pBdr><w:top w:val="single" w:sz="12" w:space="4" w:color="111111"/><w:bottom w:val="single" w:sz="12" w:space="4" w:color="111111"/></w:pBdr>' : '') + '</w:pPr>' + runs + '</w:p>'; };
+    var imgs = [], img = function (dataUrl, wPx, hPx) {
+      var id = imgs.length + 1, ext = /png/.test(dataUrl.slice(0, 20)) ? "png" : "jpeg"; imgs.push({ id: id, ext: ext, data: b64bytes(dataUrl) });
+      var cx = Math.round(wPx * 9525), cy = Math.round(hPx * 9525);
+      return '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="' + cx + '" cy="' + cy + '"/><wp:docPr id="' + id + '" name="Image' + id + '"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="' + id + '" name="Image' + id + '"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rImg' + id + '"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
+    };
+    var NB = '<w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders>';
+    var cell = function (w, content, o) { o = o || {}; return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>' + (o.fill ? '<w:shd w:val="clear" w:color="auto" w:fill="' + o.fill + '"/>' : '') + (o.borders || '') + '<w:vAlign w:val="' + (o.v || "center") + '"/></w:tcPr>' + content + '</w:tc>'; };
+    var table = function (widths, rows, borders) { return '<w:tbl><w:tblPr><w:tblW w:w="' + widths.reduce(function (a, b) { return a + b; }, 0) + '" w:type="dxa"/>' + (borders || NB) + '<w:tblLayout w:type="fixed"/><w:tblCellMar><w:left w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>' + widths.map(function (w) { return '<w:gridCol w:w="' + w + '"/>'; }).join("") + '</w:tblGrid>' + rows.join("") + '</w:tbl>'; };
+    var FULL = 9638, body = "";
+    // En-tête : logo + identité
+    var idt = para(run(R.shop.toUpperCase(), { b: true, sz: 32 }), { jc: R.logo ? "left" : "center" });
+    if (R.addr) idt += para(run(R.addr, { sz: 18, c: "444444" }), { jc: R.logo ? "left" : "center", after: 0 });
+    var ct = [R.phone ? L("tel") + " : " + R.phone : "", R.email].filter(Boolean).join(" · "); if (ct) idt += para(run(ct, { sz: 18, c: "444444" }), { jc: R.logo ? "left" : "center", after: 0 });
+    var lg = [R.rccm ? L("rccm") + " : " + R.rccm : "", R.nif ? L("nif") + " : " + R.nif : ""].filter(Boolean).join(" · "); if (lg) idt += para(run(lg, { sz: 16, c: "555555" }), { jc: R.logo ? "left" : "center", after: 0 });
+    body += R.logo ? table([1700, FULL - 1700], ['<w:tr>' + cell(1700, para(img(R.logo, 90, 90))) + cell(FULL - 1700, idt) + '</w:tr>']) : idt;
+    body += para(run(L("rcptTitle"), { b: true, sz: 26 }), { jc: "center", before: 160, after: 160, border: true });
+    // Infos
+    var kv = function (k, v) { return para(run(k + " : ", { sz: 18, c: "666666" }) + run(v, { b: true, sz: 20 }), { after: 20 }); };
+    body += table([FULL / 2, FULL / 2], ['<w:tr>' + cell(FULL / 2, kv(L("num"), R.no) + kv(L("client"), (R.client || L("walkin")) + (R.clientPhone ? " · " + R.clientPhone : ""))) + cell(FULL / 2, kv(L("date"), R.date + (R.time ? " " + L("atTime") + " " + R.time : "")) + (R.seller ? kv(L("seller"), R.seller) : "")) + '</w:tr>']);
+    body += para("", { after: 80 });
+    // Articles
+    var BD = '<w:tblBorders><w:top w:val="single" w:sz="6" w:color="999999"/><w:left w:val="single" w:sz="6" w:color="999999"/><w:bottom w:val="single" w:sz="6" w:color="999999"/><w:right w:val="single" w:sz="6" w:color="999999"/><w:insideH w:val="single" w:sz="4" w:color="BBBBBB"/><w:insideV w:val="single" w:sz="4" w:color="BBBBBB"/></w:tblBorders>';
+    var W5 = [600, 4438, 1000, 1800, 1800], hd = [L("num"), L("design"), L("qtyShort"), L("unitP"), L("amountCol")];
+    var rows = ['<w:tr><w:trPr><w:tblHeader/></w:trPr>' + hd.map(function (t, i) { return cell(W5[i], para(run(t.toUpperCase(), { b: true, sz: 18 }), { jc: i === 1 ? "left" : i === 0 ? "center" : "right", after: 0 }), { fill: "E5F4E4" }); }).join("") + '</w:tr>'];
+    R.lines.forEach(function (l, i) { var v = [String(i + 1), l.name, qtyFmt(l.qty), money(l.pu), money(l.amt)]; rows.push('<w:tr>' + v.map(function (t, j) { return cell(W5[j], para(run(t, { sz: 20, b: j === 4 }), { jc: j === 1 ? "left" : j === 0 ? "center" : "right", after: 0 })); }).join("") + '</w:tr>'); });
+    body += table(W5, rows, BD);
+    // Totaux
+    var tr = function (a, b, o) { o = o || {}; return '<w:tr>' + cell(FULL - 4000, para("")) + cell(2200, para(run(a, { sz: o.big ? 24 : 20, b: !!o.big }), { after: 0 }), { fill: o.big ? "F0EFEC" : "" }) + cell(1800, para(run(b, { sz: o.big ? 24 : 20, b: true, c: o.c }), { jc: "right", after: 0 }), { fill: o.big ? "F0EFEC" : "" }) + '</w:tr>'; };
+    var trs = [tr(L("total"), money(R.total), { big: true }), tr(L("paid") + (R.mode ? " (" + R.mode + ")" : ""), money(R.paid))];
+    if (R.rest > 0) trs.push(tr(L("rest"), money(R.rest), { c: "C62828" }));
+    trs.push(tr(L("status"), L(R.st), { c: R.st === "stPaid" ? "2E7D32" : "C62828" }));
+    body += para("", { after: 60 }) + table([FULL - 4000, 2200, 1800], trs);
+    body += para(run(L("arrete") + " : ", { sz: 20 }) + run(R.words + ".", { b: true, i: true, sz: 20 }), { before: 200, after: 120 });
+    if (R.note) body += para(run(L("note") + " : " + R.note, { i: true, sz: 18 }));
+    // Signatures
+    var SB = '<w:tcBorders><w:top w:val="dashed" w:sz="6" w:color="999999"/><w:left w:val="dashed" w:sz="6" w:color="999999"/><w:bottom w:val="dashed" w:sz="6" w:color="999999"/><w:right w:val="dashed" w:sz="6" w:color="999999"/></w:tcBorders>';
+    var sh = '<w:tr><w:trPr><w:trHeight w:val="2600" w:hRule="atLeast"/></w:trPr>' + cell(4619, para(run(L("clientSign"), { sz: 18, c: "666666" }), { jc: "center" }), { borders: SB, v: "top" }) + cell(400, para("")) + cell(4619, para(run(L("stampZone"), { sz: 18, c: "666666" }), { jc: "center" }) + (R.stamp ? para(img(stampPng(R), 125, 125), { jc: "center" }) : ""), { borders: SB, v: "top" }) + '</w:tr>';
+    body += para("", { after: 120 }) + table([4619, 400, 4619], [sh]);
+    if (R.foot) body += para(run(R.foot, { i: true, sz: 18 }), { jc: "center", before: 200 });
+    body += para(run(L("receiptThanks"), { b: true, sz: 20 }), { jc: "center", before: R.foot ? 60 : 240 }) + para(run(L("rcptFoot"), { sz: 16, c: "888888" }), { jc: "center" });
+    var doc = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body>' + body +
+      '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>';
+    var rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + imgs.map(function (m) { return '<Relationship Id="rImg' + m.id + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image' + m.id + '.' + m.ext + '"/>'; }).join("") + '</Relationships>';
+    var files = [
+      { name: "[Content_Types].xml", data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpeg" ContentType="image/jpeg"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>' },
+      { name: "_rels/.rels", data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>' },
+      { name: "word/document.xml", data: doc },
+      { name: "word/_rels/document.xml.rels", data: rels }
+    ];
+    imgs.forEach(function (m) { files.push({ name: "word/media/image" + m.id + "." + m.ext, data: m.data }); });
+    return zipStore(files);
+  }
+  function receiptWord() {
+    var r = S.modal && getE("sale", S.modal.id); if (!r) return;
+    var R = rcpt(r), blob = receiptDocx(r), fname = "recu-" + R.no + ".docx";
+    var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fname; document.body.appendChild(a); a.click();
+    setTimeout(function () { a.remove(); }, 1500); toast("✅ " + L("wordSaved"));
   }
 
   // ---------------- Actions ----------------
@@ -1272,6 +1420,8 @@
         case "delete": if (confirm(L("confirmDel"))) { write(k, v, null, true); done(); } break;
         case "receipt": S.modal = { t: "receipt", id: v }; render(); break;
         case "receipt-img": shareReceiptImage(); break;
+        case "receipt-word": receiptWord(); break;
+        case "logo-del": write("settings", "logo", { img: "" }); render(); break;
         case "print": printReceipt(); break;
         case "modal-close": case "modal-bg": S.modal = null; render(); break;
         case "ladd": {
@@ -1297,7 +1447,7 @@
         case "print-page": printPage(); break;
         case "print-test": printTest(); break;
         case "oh-tab": S.ohTab = v; render(); break;
-        case "ohada-toggle": { var on = !setting("ohada", false); write("settings", "main", merge(clean(getE("settings", "main") || {}, ["openingCash", "phone", "address", "ohada"]), { ohada: on })); if (on) S.page = "ohada"; render(); break; }
+        case "ohada-toggle": { var on = !setting("ohada", false); write("settings", "main", merge(clean(getE("settings", "main") || {}, ["openingCash", "phone", "address", "ohada", "email", "rccm", "nif", "rcptNote"]), { ohada: on })); if (on) S.page = "ohada"; render(); break; }
         case "backup-dl": backupDownload(); break;
         case "backup-share": backupShare(); break;
         case "pay": if (H().payGestion) { var cid = S.cid; close(); H().payGestion(cid); } break;
@@ -1324,7 +1474,7 @@
           break;
         case "save-settings": {
           var nm = (document.getElementById("gx-set-name") || {}).value || "";
-          if (can("settings")) write("settings", "main", merge(clean(getE("settings", "main") || {}, ["openingCash", "phone", "address", "ohada"]), { openingCash: num((document.getElementById("gx-set-cash") || {}).value), phone: (document.getElementById("gx-set-phone") || {}).value || "", address: (document.getElementById("gx-set-addr") || {}).value || "" }));
+          if (can("settings")) write("settings", "main", merge(clean(getE("settings", "main") || {}, ["openingCash", "phone", "address", "ohada", "email", "rccm", "nif", "rcptNote"]), { openingCash: num((document.getElementById("gx-set-cash") || {}).value), phone: (document.getElementById("gx-set-phone") || {}).value || "", address: (document.getElementById("gx-set-addr") || {}).value || "", email: ((document.getElementById("gx-set-email") || {}).value || "").trim().slice(0, 80), rccm: ((document.getElementById("gx-set-rccm") || {}).value || "").trim().slice(0, 60), nif: ((document.getElementById("gx-set-nif") || {}).value || "").trim().slice(0, 40), rcptNote: ((document.getElementById("gx-set-rnote") || {}).value || "").trim().slice(0, 200) }));
           if (isChef() && nm.trim() && nm.trim() !== S.name) api("rename", { companyId: S.cid, name: nm.trim() }).then(function (r) { if (r.success) { S.name = nm.trim(); render(); if (H().refreshRoles) H().refreshRoles(); } else toast("❌ " + L("mustOnline")); });
           done(); break;
         }
@@ -1378,6 +1528,8 @@
     root.addEventListener("change", function (ev) {
       var el = ev.target; if (!S) return;
       if (el.id === "gx-restore" && el.files && el.files[0]) { restoreFile(el.files[0]); el.value = ""; return; }
+      if (el.id === "gx-logo-file" && el.files && el.files[0]) { loadLogo(el.files[0]); el.value = ""; return; }
+      if (el.id === "gx-stamp" || el.id === "gx-stamp2") { var sc = printCfg(); sc.stamp = !!el.checked; setPrintCfg(sc); if (S.modal && S.modal.t === "receipt") renderModalOnly(); else toast("✅ " + L("saved")); return; }
       if (el.id === "gx-pfmt" || el.id === "gx-pdev" || el.id === "gx-prawbt") { var pc = printCfg(); if (el.id === "gx-pfmt") pc.fmt = el.value; else if (el.id === "gx-pdev") pc.printer = el.value; else pc.rawbt = el.checked; setPrintCfg(pc); toast("✅ " + L("saved")); return; }
       if (el.getAttribute("data-a") === "member-role") {
         api("member_update", { companyId: S.cid, phone: el.getAttribute("data-v"), role: el.value }).then(function (r) { if (!r.success) toast("❌ " + L("mustOnline")); S.members = null; render(); });
@@ -1400,6 +1552,40 @@
   function printCfg() { try { return JSON.parse(localStorage.getItem("sns_gx_print") || "{}") || {}; } catch (e) { return {}; } }
   function setPrintCfg(c) { try { localStorage.setItem("sns_gx_print", JSON.stringify(c)); } catch (e) {} }
   function isAndroid() { return /Android/i.test(navigator.userAgent); }
+  function logoImg() { var l = getE("settings", "logo"); return l && l.img && /^data:image\/(png|jpeg);base64,/.test(l.img) ? l.img : ""; }
+  function stampOn() { return printCfg().stamp !== false; }
+  function rcptCard() {
+    var h = '<div class="gx-card"><h3><i class="fa-solid fa-receipt"></i> ' + L("rcptCard") + '</h3><div class="gx-logo-row">';
+    var lg = logoImg();
+    h += lg ? '<img class="gx-logo-prev" src="' + lg + '" alt="">' : '<div class="gx-logo-prev gx-logo-empty"><i class="fa-regular fa-image"></i></div>';
+    if (can("settings")) h += '<label class="gx-btn"><i class="fa-solid fa-upload"></i> ' + L("logoAdd") + '<input type="file" accept="image/*" id="gx-logo-file" hidden></label>' + (lg ? ' <button class="gx-btn" data-a="logo-del">' + L("logoDel") + '</button>' : '');
+    h += '</div><label class="gx-check" style="margin-top:10px"><input type="checkbox" id="gx-stamp"' + (stampOn() ? ' checked' : '') + '> ' + L("stampAuto") + '</label><p class="gx-hint">' + L("stampHint") + '</p></div>';
+    return h;
+  }
+  // Logo réduit (≤ 11 000 caractères) pour passer dans une seule ligne synchronisée.
+  function loadLogo(file) {
+    var rd = new FileReader();
+    rd.onload = function () {
+      var im = new Image();
+      im.onload = function () {
+        var sizes = [240, 200, 160, 120, 90], out = "";
+        for (var i = 0; i < sizes.length && !out; i++) {
+          var k = Math.min(1, sizes[i] / Math.max(im.width, im.height)), cv = document.createElement("canvas");
+          cv.width = Math.max(1, Math.round(im.width * k)); cv.height = Math.max(1, Math.round(im.height * k));
+          var x = cv.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, cv.width, cv.height); x.drawImage(im, 0, 0, cv.width, cv.height);
+          [0.85, 0.7, 0.55].forEach(function (q) { if (out) return; var d = cv.toDataURL("image/jpeg", q); if (d.length < 11000) out = d; });
+        }
+        if (!out) return toast("❌ " + L("logoBig"));
+        write("settings", "logo", { img: out }); toast("✅ " + L("saved"));
+        // garder ce qui a été tapé dans la fiche (pas encore enregistré)
+        var keep = {}; Array.prototype.forEach.call(root.querySelectorAll("input[id^='gx-set-']"), function (i) { keep[i.id] = i.value; });
+        render(); Object.keys(keep).forEach(function (k) { var i = document.getElementById(k); if (i) i.value = keep[k]; });
+      };
+      im.onerror = function () { toast("❌ " + L("logoBig")); };
+      im.src = rd.result;
+    };
+    rd.readAsDataURL(file);
+  }
   function printerCard() {
     var c = printCfg(), d = window.SnsDesktop, h = '<div class="gx-card"><h3><i class="fa-solid fa-print"></i> ' + L("printer") + '</h3>';
     h += '<label class="gx-field">' + L("printFmt") + '<select id="gx-pfmt">' + [["a4", L("fmtA4")], ["t80", L("fmt80")], ["t58", L("fmt58")]].map(function (o) { return '<option value="' + o[0] + '"' + ((c.fmt || "a4") === o[0] ? " selected" : "") + '>' + o[1] + '</option>'; }).join("") + '</select></label>';
@@ -1418,7 +1604,7 @@
     var w = fmt === "t58" ? 58 : fmt === "t80" ? 80 : 0;
     var css = w ? "@page{size:" + w + "mm auto;margin:0}body{width:" + (w - 6) + "mm;margin:0 3mm;font-family:'Courier New',monospace;font-size:" + (w === 58 ? 10.5 : 12) + "px;color:#000}h2{font-size:1.3em;text-align:center;margin:4px 0}p{margin:2px 0}.c{text-align:center}.l{display:flex;justify-content:space-between;gap:4px}.l span{flex:1;min-width:0;word-break:break-word}.sep{border-top:1px dashed #000;margin:4px 0}.tot{font-size:1.25em;font-weight:bold}"
       : "@page{size:A4;margin:14mm}body{font-family:Arial,sans-serif;font-size:12px;color:#111}h1,h2{margin:0 0 8px}table{width:100%;border-collapse:collapse;margin:8px 0}th,td{border:1px solid #bbb;padding:5px 7px;text-align:left}td.r,th.r{text-align:right}.l{display:flex;justify-content:space-between;border-bottom:1px dashed #ccc;padding:4px 0}.tot{font-size:16px;font-weight:bold;text-align:right;margin-top:8px}.c{text-align:center}.sep{border-top:1px solid #999;margin:8px 0}.muted{color:#666}";
-    return '<!doctype html><html><head><meta charset="utf-8"><title>Sounsouni</title><style>' + css + RC_CSS + (w ? ".rc-ticket .rc-bottom{flex-direction:column-reverse;align-items:stretch}.rc-ticket .rc-sum{max-width:none}.rc-ticket .rc-stamp{text-align:center}.rc-ticket .rc-meta{grid-template-columns:1fr}" : ".rc-a4{max-width:150mm;margin:0 auto;font-size:13px}.rc-a4 .rc-sum{max-width:80mm}") + '</style></head><body>' + body + '</body></html>';
+    return '<!doctype html><html><head><meta charset="utf-8"><title>Sounsouni</title><style>' + css + RC_CSS + (w ? ".rc-ticket .rc-sum{max-width:none}.rc-ticket .rc-meta{grid-template-columns:1fr}.rc-ticket .rc-head{flex-direction:column;gap:4px}.rc-ticket .rc-logo{width:48px;height:48px}.rc-ticket .rc-sign{min-height:110px;border-color:#000}" : ".rc-a4{font-size:13px}.rc-a4 .rc-head{justify-content:flex-start;text-align:left}.rc-a4 .rc-logo{width:84px;height:84px}.rc-a4 .rc-t th,.rc-a4 .rc-t td{border:1px solid #bbb;padding:6px 8px}.rc-a4 .rc-t th{background:#e5f4e4}.rc-a4 .rc-sum{max-width:85mm}.rc-a4 .rc-sign{min-height:42mm}.rc-a4 .rc-foot{margin-top:18px}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}") + '</style></head><body>' + body + '</body></html>';
   }
   function ticketBody(r) {
     var fmt = printCfg().fmt, ticket = fmt === "t58" || fmt === "t80";
@@ -1432,13 +1618,18 @@
     var line = new Array(W + 1).join("-");
     var R = rcpt(r);
     out.push(center(R.shop.toUpperCase())); if (R.addr) out.push(center(R.addr)); if (R.phone) out.push(center(L("tel") + " " + R.phone));
+    if (R.rccm) out.push(center(L("rccm") + " " + R.rccm)); if (R.nif) out.push(center(L("nif") + " " + R.nif));
     out.push(line, center(L("rcptTitle")), line, two("N° " + R.no, R.date + (R.time ? " " + R.time : "")), fold(L("client") + " : " + (R.client || L("walkin"))));
     if (R.seller) out.push(fold(L("seller") + " : " + R.seller));
     out.push(line);
     R.lines.forEach(function (l) { out.push(fold(l.name).slice(0, W)); out.push(two("  " + qtyFmt(l.qty) + " x " + money(l.pu), money(l.amt))); });
     out.push(line, two(L("total").toUpperCase(), money(R.total)), two(L("paid") + (R.mode ? " (" + R.mode + ")" : ""), money(R.paid)));
     if (R.rest > 0) out.push(two(L("rest"), money(R.rest)));
-    out.push(two(L("status"), L(R.st)), line, center(L("receiptThanks")), center("Sounsouni Gestion"), "", "", "");
+    out.push(two(L("status"), L(R.st)), line);
+    var wl = fold(L("arrete") + " : " + R.words + "."), ln = "";
+    wl.split(" ").forEach(function (w) { if ((ln + " " + w).trim().length > W) { out.push(ln); ln = w; } else ln = (ln + " " + w).trim(); }); if (ln) out.push(ln);
+    if (R.foot) out.push(fold(R.foot).slice(0, W * 2));
+    out.push(line, center(L("receiptThanks")), center("Sounsouni Gestion"), "", "", "");
     return out.join("\n");
   }
   function printDoc(body, opts) {
@@ -1680,7 +1871,7 @@
       ".gx-picker{border:1px dashed var(--bd);border-radius:14px;padding:8px;margin-bottom:6px}.gx-pick-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;max-height:170px;overflow-y:auto}",
       ".gx-pick-list button{border:1px solid var(--bd);background:var(--bg);color:var(--tx);border-radius:10px;padding:7px 10px;font-size:12.5px;font-weight:700;text-align:left;max-width:100%}.gx-pick-list button small{display:block;font-weight:500;color:var(--dim);font-size:11px}.gx-pick-list .gx-other{color:var(--g)}",
       ".gx-meta{font-size:11.5px;color:var(--dim);margin-top:10px}.gx-hist{font-size:11.5px;color:var(--dim);margin-top:6px}.gx-hist div{padding:3px 0}",
-      ".gx-receipt{border:1px solid var(--bd);border-radius:12px;padding:16px 14px;text-align:left;background:#fff;color:#111;box-shadow:0 2px 10px rgba(0,0,0,.06)}" + RC_CSS + "@media(max-width:380px){.gx-receipt .rc-stamp svg{width:92px;height:92px}}",
+      ".gx-logo-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.gx-logo-prev{width:56px;height:56px;object-fit:contain;border:1px solid var(--bd);border-radius:10px;background:#fff}.gx-logo-empty{display:flex;align-items:center;justify-content:center;color:#999;font-size:22px}.gx-receipt{border:1px solid var(--bd);border-radius:12px;padding:16px 14px;text-align:left;background:#fff;color:#111;box-shadow:0 2px 10px rgba(0,0,0,.06)}" + RC_CSS + "@media(max-width:380px){.gx-receipt .rc-stamp svg{width:92px;height:92px}}",
       "@media (max-width:360px){.gx-fgrid{grid-template-columns:1fr}.gx-kpi b{font-size:15px}}"
     ].join("\n");
     var st = document.createElement("style"); st.id = "gx-css"; st.textContent = css; document.head.appendChild(st);
