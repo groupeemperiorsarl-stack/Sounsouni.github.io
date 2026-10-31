@@ -1,0 +1,42 @@
+name: Application Windows (Sounsouni-Setup.exe)
+# Fabrique l'installateur Windows et le publie dans « Releases » :
+# lien fixe https://github.com/groupeemperiorsarl-stack/Sounsouni.github.io/releases/latest/download/Sounsouni-Setup.exe
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["tools/desktop/**", ".github/workflows/desktop.yml"]
+permissions:
+  contents: write
+concurrency:
+  group: desktop
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: tools/desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Icône
+        shell: bash
+        run: mkdir -p build && cp ../../icons/icon-512-any.png build/icon.png
+      - run: npm install --no-audit --no-fund
+      - run: npm run dist
+      - name: Version
+        id: v
+        shell: bash
+        run: echo "tag=desktop-v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Publier dans Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.v.outputs.tag }}
+          name: Sounsouni pour Windows ${{ steps.v.outputs.tag }}
+          make_latest: true
+          body: "Installateur Windows de Sounsouni (même application que sounsouni.pro, avec Sounsouni Gestion). Téléchargez Sounsouni-Setup.exe puis double-cliquez."
+          files: tools/desktop/dist/Sounsouni-Setup.exe
+          overwrite_files: true

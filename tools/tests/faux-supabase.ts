@@ -100,9 +100,63 @@ function walletBatch(ops: any[]) {
   }
 }
 export const CALLS: any[] = [];
+// ---- Tables ordinaires (gestion_*) : colonnes simples, clés uniques déclarées ici ----
+export const TABLES: Record<string, any[]> = {};
+const KEYS: Record<string, string[][]> = { gestion_companies: [["id"]], gestion_members: [["company_id", "phone"]], gestion_ops: [["seq"], ["company_id", "op_id"]] };
+let SEQ = 0;
+class T {
+  f: Array<(r: any) => boolean> = []; mode = "select"; p: any = null; o: any = null; sel = "*"; single = false; lim: number | null = null; cnt = false; head = false; ord: [string, boolean] | null = null;
+  constructor(public t: string) { TABLES[t] = TABLES[t] || []; }
+  select(s = "*", o?: any) { if (this.mode === "select") { this.sel = s; this.cnt = !!(o && o.count); this.head = !!(o && o.head); } return this; }
+  eq(c: string, v: any) { this.f.push((r) => r[c] !== undefined && r[c] !== null && String(r[c]) === String(v)); return this; }
+  gt(c: string, v: any) { this.f.push((r) => Number(r[c]) > Number(v)); return this; }
+  in(c: string, a: any[]) { this.f.push((r) => a.map(String).includes(String(r[c]))); return this; }
+  not(c: string, _op: string, val: string) { const l = val.replace(/^\(|\)$/g, "").split(",").map((x) => x.replace(/^"|"$/g, "")); this.f.push((r) => !l.includes(String(r[c]))); return this; }
+  order(c: string, o?: any) { this.ord = [c, !(o && o.ascending === false)]; return this; }
+  limit(n: number) { this.lim = n; return this; }
+  maybeSingle() { this.single = true; return this; }
+  insert(p: any) { this.mode = "insert"; this.p = p; return this; }
+  upsert(p: any, o?: any) { this.mode = "upsert"; this.p = p; this.o = o || {}; return this; }
+  update(p: any) { this.mode = "update"; this.p = p; return this; }
+  delete() { this.mode = "delete"; return this; }
+  rows() { return TABLES[this.t].filter((r) => this.f.every((g) => g(r))); }
+  exec(): any {
+    const tab = TABLES[this.t];
+    if (this.mode === "select") {
+      let rows = this.rows();
+      if (this.ord) { const [c, asc] = this.ord; rows = rows.slice().sort((a, b) => (a[c] > b[c] ? 1 : a[c] < b[c] ? -1 : 0) * (asc ? 1 : -1)); }
+      const count = rows.length;
+      if (this.lim !== null) rows = rows.slice(0, this.lim);
+      const proj = (r: any) => { if (this.sel === "*") return clone(r); const o: any = {}; for (const k of this.sel.split(",").map((x) => x.trim())) o[k] = clone(r[k]); return o; };
+      if (this.head) return { data: null, count, error: null };
+      if (this.single) return { data: rows[0] ? proj(rows[0]) : null, error: null };
+      return { data: rows.map(proj), count: this.cnt ? count : undefined, error: null };
+    }
+    if (this.mode === "insert" || this.mode === "upsert") {
+      for (const p0 of (Array.isArray(this.p) ? this.p : [this.p])) {
+        const p = clone(p0);
+        if (this.t === "gestion_ops" && p.seq === undefined) p.seq = ++SEQ;
+        if (!p.created_at) p.created_at = new Date(Date.now() + SEQ).toISOString();
+        const dup = tab.find((r) => (KEYS[this.t] || []).some((k) => k.every((c) => p[c] !== undefined && String(r[c]) === String(p[c]))));
+        if (dup) { if (this.mode === "insert") return { data: null, error: { message: "duplicate key" } }; if (this.o.ignoreDuplicates) continue; Object.assign(dup, p); continue; }
+        if (this.t === "gestion_companies") { p.plan = p.plan || "free"; p.paid_until = p.paid_until || 0; }
+        if (this.t === "gestion_members") p.status = p.status || "invited";
+        tab.push(p);
+      }
+      return { data: null, error: null };
+    }
+    if (this.mode === "update") { for (const r of this.rows()) Object.assign(r, clone(this.p)); return { data: null, error: null }; }
+    if (this.mode === "delete") {
+      const del = this.rows(); TABLES[this.t] = tab.filter((r) => !del.includes(r));
+      if (this.t === "gestion_companies") for (const d of del) for (const t2 of ["gestion_members", "gestion_ops"]) TABLES[t2] = (TABLES[t2] || []).filter((r) => r.company_id !== d.id);
+      return { data: null, error: null };
+    }
+  }
+  then(res: any, rej: any) { try { return Promise.resolve(this.exec()).then(res, rej); } catch (e) { return Promise.reject(e).then(res, rej); } }
+}
 export function createClient(..._a: any[]): any {
   return {
-    from: (t: string) => new Q(t),
+    from: (t: string) => (t === "app_data" ? new Q(t) : new T(t)),
     rpc: async (name: string, args: any) => {
       CALLS.push({ name, args: clone(args) });
       if (name === "sns_wallet_batch") return walletBatch(args.p_ops);
@@ -111,6 +165,14 @@ export function createClient(..._a: any[]): any {
         if (!r || (args.p_expect && !contains(r.data, args.p_expect))) return { data: null, error: null };
         r.data = { ...r.data, ...clone(args.p_patch) };
         return { data: clone(r.data), error: null };
+      }
+      if (name === "sns_gestion_extend") {
+        const c = (TABLES.gestion_companies || []).find((x) => x.id === args.p_cid);
+        if (!c) return { data: null, error: null };
+        c.paid_txns = c.paid_txns || [];
+        if (c.paid_txns.includes(args.p_txn)) return { data: null, error: null };
+        c.paid_until = Math.max(Date.now(), Number(c.paid_until) || 0) + args.p_days * 86400000; c.paid_txns.push(args.p_txn);
+        return { data: c.paid_until, error: null };
       }
       throw new Error("rpc " + name);
     },

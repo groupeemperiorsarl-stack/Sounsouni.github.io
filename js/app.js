@@ -9295,6 +9295,7 @@ function startLigdicashPayment(ref) {
   var amt = 0;
   if (ref.kind === "wallet") amt = Number(ref.amount) || 0;
   else if (ref.kind === "booking") { var bkk = (state.bookings || []).find(function(x) { return x.id === ref.bookingId; }); var bsp = bkk ? findProductById(bkk.productId) : null; amt = bsp && bsp.price != null ? Number(bsp.price) : (bkk ? Number(bkk.price) || 0 : 0); }
+  else if (ref.kind === "gestion") amt = Number(ref.amount) || 0;
   else if (ref.kind === "boost") { var bb = (state.boosts || []).find(function(x) { return x.id === ref.boostId; }); amt = bb ? Number(bb.price) || 0 : 0; }
   else { var oo = (state.orders || []).find(function(x) { return x.id === ref.orderId; }); amt = oo ? Number(oo.total) || 0 : 0; }
   state.ligdiChoose = { ref: ref, amount: amt, op: "orange", phone: ligdiMyPhone8() };
@@ -9302,7 +9303,7 @@ function startLigdicashPayment(ref) {
 }
 function ligdiChooseGo() {
   var c = state.ligdiChoose; if (!c) return;
-  var ref = { kind: c.ref.kind, orderId: c.ref.orderId, boostId: c.ref.boostId, bookingId: c.ref.bookingId, amount: c.ref.amount };
+  var ref = { kind: c.ref.kind, orderId: c.ref.orderId, boostId: c.ref.boostId, bookingId: c.ref.bookingId, companyId: c.ref.companyId, amount: c.ref.amount };
   var el = document.getElementById("ligdi-phone");
   var ph = String((el && el.value) || c.phone || "").replace(/\D/g, "");
   if (ph.length === 11 && ph.indexOf("223") === 0) ph = ph.slice(3);
@@ -9321,7 +9322,7 @@ function ligdiCreateAndOpen(ref, attempt) {
       if (res.error === "session_required") noteSessionRejected();
       showToast("❌ " + ligdiErrorText(res.error)); render(); return;
     }
-    var refId = ref.kind === "boost" ? ref.boostId : ref.kind === "wallet" ? "wallet" : ref.kind === "booking" ? ref.bookingId : ref.orderId;
+    var refId = ref.kind === "boost" ? ref.boostId : ref.kind === "wallet" ? "wallet" : ref.kind === "booking" ? ref.bookingId : ref.kind === "gestion" ? ref.companyId : ref.orderId;
     ligdiSavePending({ txn: res.transactionId, kind: ref.kind, refId: refId, at: Date.now() });
     render();
     var md = String(res.mode || "");
@@ -9513,6 +9514,7 @@ function checkLigdicashPayment(txn, showResult, cancelled) {
 function applyLigdiResultLocally(r) {
   var now = Date.now();
   if (r.kind === "wallet") { if (r.status === "completed") { try { fetchMyWalletState(); } catch (e) {} } return; }
+  if (r.kind === "gestion") { if (r.status === "completed") { try { gestionRefresh(true); if (window.SnsGestion) window.SnsGestion.onPaid(); } catch (e) {} } return; }
   if (r.kind === "booking") { var bkl = (state.bookings || []).find(function(x) { return x.id === r.refId; }); if (bkl && r.status === "completed") { bkl.paymentStatus = "paid"; bkl.paidAt = bkl.paidAt || now; save(); } return; }
   if (r.kind === "boost") {
     var b = (state.boosts || []).find(function(x) { return x.id === r.refId; });
@@ -9556,12 +9558,14 @@ function maybeRunLigdiSweep() {
 function renderLigdiResultModal() {
   var r = state.ligdiResult; if (!r) return "";
   var wk = r.kind === "wallet", bkr = r.kind === "booking";
+  if (r.kind === "gestion") { wk = false; bkr = false; }
   var map = { completed: ["fa-circle-check", "var(--success)", t("ligdi_ok_title"), wk ? t("ligdi_ok_wallet") : bkr ? t("ligdi_ok_booking") : r.kind === "boost" ? t("ligdi_ok_boost") : t("ligdi_ok_order")],
     notcompleted: ["fa-circle-xmark", "var(--danger)", t("ligdi_fail_title"), wk ? t("ligdi_fail_wallet") : bkr ? t("ligdi_fail_booking") : r.kind === "boost" ? t("ligdi_fail_boost") : t("ligdi_fail_order")],
     pending: ["fa-hourglass-half", "var(--accent)", t("ligdi_wait_title"), t("ligdi_wait_text")],
     cancelled: ["fa-circle-pause", "var(--accent)", t("ligdi_cancel_title"), wk ? t("ligdi_fail_wallet") : bkr ? t("ligdi_fail_booking") : r.kind === "boost" ? t("ligdi_cancel_boost") : t("ligdi_cancel_order")],
     amount_mismatch: ["fa-triangle-exclamation", "var(--danger)", t("ligdi_mismatch_title"), t("ligdi_mismatch_text")],
     unknown: ["fa-wifi", "var(--text-dim)", t("ligdi_wait_title"), t("ligdi_unknown_text")] };
+  if (r.kind === "gestion") { map.completed[3] = t("gx_paid_ok"); map.notcompleted[3] = t("gx_paid_fail"); map.cancelled[3] = t("gx_paid_fail"); }
   var v = map[r.status] || map.unknown;
   var html = '<div class="modal-overlay" style="z-index:9998;"><div class="modal-sheet" style="text-align:center;padding:26px 20px;">';
   if (r.status === "completed") html += '<div class="sns-success-3d" id="sns-success-3d" data-sns3d="success"><div class="sns-success-glow"></div><img src="img/3d/success.webp" alt="" width="440" height="441" decoding="async" /></div>';
@@ -13974,6 +13978,110 @@ function renderShopPickerModal() {
   return html;
 }
 
+// ---------- SOUNSOUNI GESTION (31/10/2026) ----------
+// Gestion et comptabilité des entreprises : module séparé js/gestion.js,
+// chargé seulement à l'ouverture. Ici : la liste « Mes entreprises » et les
+// invitations (menu Changer de rôle), l'ouverture, et le paiement de
+// l'abonnement. Liste gardée sur l'appareil pour marcher sans connexion.
+function gestionApi(op, body) {
+  body = body || {}; body.operation = op;
+  return fetch(supabaseConfig.url + "/functions/v1/gestion-sync", { method: "POST", headers: authHeaders(), body: JSON.stringify(body) })
+    .then(readServerJson).catch(function() { return { success: false, error: "network_error" }; });
+}
+function gestionCacheKey() { return "sns_gx_list_" + (state.profile ? state.profile.id : ""); }
+function gestionState() {
+  // Toujours la liste du compte connecté (jamais celle d'un autre compte) :
+  // relue depuis l'appareil la première fois pour ce compte.
+  if (state.profile && (!state.gestion || state.gestion.profileId !== state.profile.id || window._gxLoadedFor !== state.profile.id)) {
+    window._gxLoadedFor = state.profile.id;
+    var cached = null; try { cached = JSON.parse(localStorage.getItem(gestionCacheKey()) || "null"); } catch (e) {}
+    state.gestion = cached && cached.profileId === state.profile.id ? cached : (state.gestion && state.gestion.profileId === state.profile.id ? state.gestion : null);
+  }
+  return state.gestion || { companies: [], invites: [], config: { mode: "free" } };
+}
+function gestionRefresh(force) {
+  if (!state.profile || !state.sessionToken) return Promise.resolve();
+  if (!force && Date.now() - (window._gxAt || 0) < 60000) return Promise.resolve();
+  window._gxAt = Date.now();
+  return gestionApi("my").then(function(r) {
+    if (!r || !r.success) return;
+    var before = JSON.stringify(state.gestion || null);
+    state.gestion = { companies: r.companies || [], invites: r.invites || [], config: r.config || { mode: "free" }, profileId: state.profile && state.profile.id };
+    window._gxLoadedFor = state.profile && state.profile.id;
+    try { localStorage.setItem(gestionCacheKey(), JSON.stringify(state.gestion)); } catch (e) {}
+    if (state.gestion.companies.length) gestionLoadScript(function() {});
+    if (JSON.stringify(state.gestion) !== before) render();
+  });
+}
+function gestionLoadScript(cb) {
+  if (window.SnsGestion) { cb(); return; }
+  (window._gxCbs = window._gxCbs || []).push(cb);
+  if (window._gxLoading) return;
+  window._gxLoading = true;
+  var sc = document.createElement("script");
+  sc.src = "js/gestion.js?v=" + encodeURIComponent(window.SOUNSOUNI_VERSION || "1");
+  sc.onload = function() { window._gxLoading = false; var l = window._gxCbs || []; window._gxCbs = []; l.forEach(function(f) { try { f(); } catch (e) { console.error(e); } }); };
+  sc.onerror = function() { window._gxLoading = false; window._gxCbs = []; showToast("❌ " + t("gx_offline")); };
+  document.head.appendChild(sc);
+}
+window.SnsGestionHost = {
+  url: supabaseConfig.url,
+  headers: function() { return authHeaders(); },
+  profile: function() { return state.profile; },
+  toast: function(m) { showToast(m); },
+  lang: function() { return state.language || "fr"; },
+  orders: function() { return state.orders || []; },
+  myProducts: function(ownerId) { return (state.products || []).filter(function(p) { return p && p.sellerId === ownerId; }); },
+  gestionConfig: function() { return gestionState().config || { mode: "free" }; },
+  refreshRoles: function() { gestionRefresh(true); },
+  payGestion: function(cid) { var cfg = gestionState().config || {}; if (!ligdiAmountOk(cfg.price)) return; startLigdicashPayment({ kind: "gestion", companyId: cid, amount: Number(cfg.price) || 0 }); }
+};
+function gestionOpen(cid) {
+  var c = (gestionState().companies || []).find(function(x) { return x.id === cid; });
+  if (!c) return;
+  state.showRoleMenu = false; render();
+  gestionLoadScript(function() { window.SnsGestion.open(c); });
+}
+function gestionCreate() {
+  var name = prompt(t("gx_create_name"), (state.profile && (state.profile.shopName || state.profile.name)) || "");
+  if (!name || name.trim().length < 2) return;
+  gestionApi("create", { name: name.trim() }).then(function(r) {
+    if (!r.success) { showToast("❌ " + (r.error === "network_error" ? t("gx_offline") : t("gx_err"))); return; }
+    var g = gestionState(); g.companies = (g.companies || []).concat([r.company]); g.profileId = state.profile.id; state.gestion = g;
+    try { localStorage.setItem(gestionCacheKey(), JSON.stringify(g)); } catch (e) {}
+    gestionOpen(r.company.id);
+    gestionRefresh(true);
+  });
+}
+function gestionRespond(cid, accept) {
+  gestionApi("respond", { companyId: cid, accept: !!accept }).then(function(r) {
+    if (!r.success) { showToast("❌ " + (r.error === "network_error" ? t("gx_offline") : t("gx_err"))); return; }
+    if (accept) showToast("✅ " + t("gx_joined"));
+    gestionRefresh(true).then(function() { if (accept) gestionOpen(cid); });
+  });
+}
+function renderGestionRoleSection() {
+  if (!state.profile) return "";
+  var g = gestionState(), html = "";
+  var canCreate = !!(state.profile.shopName || state.profile.sellerType) && !(g.companies || []).some(function(c) { return c.isOwner; });
+  if (!(g.companies || []).length && !(g.invites || []).length && !canCreate) return "";
+  html += '<div class="divider-dashed" style="margin:14px 0;"></div>';
+  html += '<div style="font-size:11px;font-weight:700;color:var(--text-dim);margin-bottom:8px;"><i class="fa-solid fa-book"></i> ' + t("gx_title") + '</div>';
+  (g.invites || []).forEach(function(c) {
+    html += '<div class="glass-card" style="padding:10px 12px;margin-bottom:8px;border:1.5px solid var(--accent);">';
+    html += '<div style="font-size:12.5px;margin-bottom:8px;"><b>' + esc(c.name) + '</b> ' + t("gx_invited_as") + ' <b>' + t("gx_r_" + c.role) + '</b></div>';
+    html += '<div style="display:flex;gap:8px;"><button class="btn-primary" style="flex:1;padding:8px;font-size:13px;" data-action="gx-accept" data-value="' + esc(c.id) + '">' + t("gx_join") + '</button><button class="link-btn" style="flex:1;font-size:13px;" data-action="gx-refuse" data-value="' + esc(c.id) + '">' + t("gx_refuse") + '</button></div></div>';
+  });
+  (g.companies || []).forEach(function(c) {
+    html += '<button type="button" class="card-row" style="width:100%;text-align:left;margin-bottom:6px;" data-action="gx-open" data-value="' + esc(c.id) + '">';
+    html += '<div class="emoji-thumb" style="width:32px;height:32px;font-size:13px;"><i class="fa-solid fa-book"></i></div>';
+    html += '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:12px;">' + t("gx_r_" + c.role) + ' – ' + esc(c.name) + '</div><div style="font-size:10px;color:' + (c.expired ? 'var(--danger)' : 'var(--text-dim)') + ';">' + (c.expired ? t("gx_expired") : t("gx_sub")) + '</div></div>';
+    html += '<i class="fa-solid fa-chevron-right" style="color:var(--text-dim);font-size:11px;"></i></button>';
+  });
+  if (canCreate) html += '<button type="button" class="link-btn" style="width:100%;text-align:center;font-size:12px;" data-action="gx-create"><i class="fa-solid fa-plus"></i> ' + t("gx_create") + '</button>';
+  return html;
+}
+
 function renderRoleMenuModal() {
   var role = state.profile.role;
   // "admin" n'est jamais un rôle auto-sélectionnable, et "agent_sourcing" ne
@@ -14015,6 +14123,7 @@ function renderRoleMenuModal() {
     html += '</button>';
   }
   html += '</div>';
+  html += renderGestionRoleSection();
 
   var linkedAccountsAll = findLinkedAccounts(state.profile);
   if (linkedAccountsAll.length > 0) {
@@ -15848,7 +15957,7 @@ function renderDownloadNudge() {
 }
 
 function renderAppDownloadContactModal() {
-  var isNativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  var isNativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) || /SounsouniDesktop/.test(navigator.userAgent);
   var html = '<div class="modal-overlay" data-action="close-app-download-contact">';
   html += '<div class="modal-sheet">';
 
@@ -15883,6 +15992,7 @@ function renderAppDownloadContactModal() {
     html += '<div style="font-weight:700;font-size:14px;margin-bottom:8px;"><i class="fa-brands fa-android" style="color:#3ddc84;"></i> Télécharger l\'application</div>';
     html += '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:10px;">Installez l\'app Android pour une meilleure expérience — plus rapide, notifications, et fonctionne même hors ligne.</div>';
     html += '<button class="btn-primary" style="width:100%;" data-action="show-install-guide"><i class="fa-solid fa-download"></i> Télécharger l\'app Android</button>';
+    if (!/SounsouniDesktop/.test(navigator.userAgent)) html += '<a class="btn-secondary" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px;text-decoration:none;" href="https://github.com/groupeemperiorsarl-stack/Sounsouni.github.io/releases/latest/download/Sounsouni-Setup.exe"><i class="fa-brands fa-windows"></i> ' + t("gx_desktop") + '</a>';
     html += '<div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--text-dim);"><i class="fa-brands fa-apple"></i> iOS — bientôt disponible</div>';
     html += '</div>';
     html += '<div style="border-top:1px solid var(--border-color);margin-bottom:16px;"></div>';
@@ -20645,6 +20755,7 @@ var ADMIN_MODULES_META = {
   reviews:            { icon: "fa-star",                 get name() { return t("admin_mod_reviews"); },      get sub() { return t("admin_mod_reviews_sub"); } },
   filature:           { icon: "fa-user-secret",           get name() { return t("admin_mod_filature"); },     get sub() { return t("admin_mod_filature_sub"); } },
   moderation:         { icon: "fa-shield-virus",           name: "Modération des articles", sub: "Articles signalés ou suspects, en attente de ta décision" },
+  gestion:            { icon: "fa-book",                   get name() { return t("gx_admin_title"); }, sub: "Gestion et comptabilité des entreprises : gratuit / payant, tarif, abonnements" },
   versements:         { icon: "fa-money-bill-transfer",   name: "Versements", sub: "Vendeurs : chaque jour à 17 h · Points de retrait : le mardi" },
   test:               { icon: "fa-bug",                    name: "Test", sub: "Journaux d'erreurs et diagnostics" },
   claude:             { icon: "fa-robot",                  name: "Accès Claude", sub: "Ce que l'assistant Claude peut faire, et tout ce qu'il a fait" }
@@ -20842,7 +20953,7 @@ function renderAdmin() {
   }
 
   // ---- Modules valides pour ce rôle (Groupe 1 complet, Groupe 2 restreint) ----
-  var validTabsOwner = ["dashboard","comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","moderation","versements","filature","test","claude"];
+  var validTabsOwner = ["dashboard","comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","moderation","versements","gestion","filature","test","claude"];
   var validTabsEmployee = ["dashboard","comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","pub","reviews","moderation","versements","partenaires"];
   var validTabs = isOwner ? validTabsOwner : validTabsEmployee;
   if (validTabs.indexOf(state.adminTab) === -1) state.adminTab = "dashboard";
@@ -20885,6 +20996,7 @@ function renderAdmin() {
   else if (state.adminTab === "reviews") html += renderAdminReviews();
   else if (state.adminTab === "filature" && currentAdminHasFilatureAccess()) html += renderAdminFilature();
   else if (state.adminTab === "versements") html += renderAdminVersements();
+  else if (state.adminTab === "gestion") html += renderAdminGestion();
   else if (state.adminTab === "test") html += renderAdminTest();
   else if (state.adminTab === "claude") html += renderAdminClaude();
 
@@ -22635,6 +22747,46 @@ function renderAdminTarifs() {
   return html;
 }
 
+// ---- Admin : Sounsouni Gestion (mode gratuit / payant, tarif, entreprises) ----
+function gestionAdminApi(op, body) {
+  body = body || {}; body.operation = op;
+  return fetch(supabaseConfig.url + "/functions/v1/gestion-sync", { method: "POST", headers: authHeaders(null, true), body: JSON.stringify(body) })
+    .then(readServerJson).catch(function() { return { success: false, error: "network_error" }; });
+}
+function gestionAdminLoad() {
+  state.gxAdmin = state.gxAdmin || { loading: true };
+  gestionAdminApi("admin_list").then(function(r) {
+    state.gxAdmin = r && r.success ? { config: r.config, companies: r.companies, at: Date.now() } : { error: (r && r.error) || "error" };
+    render();
+  });
+}
+function renderAdminGestion() {
+  var g = state.gxAdmin;
+  if (!g || (!g.loading && !g.config && !g.error)) { gestionAdminLoad(); g = state.gxAdmin; }
+  if (g.loading) return '<div style="padding:20px;text-align:center;color:var(--mc-dim);"><i class="fa-solid fa-spinner fa-spin"></i></div>';
+  if (g.error) return '<div class="glass-card" style="padding:14px;">❌ ' + esc(g.error) + ' <button class="link-btn" data-action="gx-admin-reload">↻</button></div>';
+  var c = g.config, html = '';
+  html += '<div class="glass-card" style="padding:14px;margin-bottom:14px;">';
+  html += '<div style="font-weight:800;margin-bottom:10px;"><i class="fa-solid fa-sliders"></i> ' + t("gx_admin_mode") + '</div>';
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">';
+  html += '<button class="' + (c.mode !== "paid" ? 'btn-primary' : 'btn-secondary') + '" style="flex:1;min-width:140px;" data-action="gx-admin-mode" data-value="free">' + t("gx_admin_free") + '</button>';
+  html += '<button class="' + (c.mode === "paid" ? 'btn-primary' : 'btn-secondary') + '" style="flex:1;min-width:140px;" data-action="gx-admin-mode" data-value="paid">' + t("gx_admin_paid") + '</button></div>';
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;"><label style="flex:1;min-width:120px;font-size:11px;">' + t("gx_admin_price") + '<input class="input" type="number" id="gx-admin-price" min="100" value="' + (c.price || 5000) + '"></label>';
+  html += '<label style="flex:1;min-width:120px;font-size:11px;">' + t("gx_admin_days") + '<input class="input" type="number" id="gx-admin-days" min="1" max="366" value="' + (c.days || 30) + '"></label></div>';
+  html += '<button class="btn-primary" style="width:100%;margin-top:10px;" data-action="gx-admin-save"><i class="fa-solid fa-save"></i> ' + t("ad_save") + '</button></div>';
+  html += '<div style="font-weight:800;margin:6px 0 10px;"><i class="fa-solid fa-building"></i> ' + t("gx_admin_companies") + ' (' + g.companies.length + ')</div>';
+  g.companies.forEach(function(co) {
+    html += '<div class="glass-card" style="padding:12px;margin-bottom:8px;">';
+    html += '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;"><div style="min-width:0;"><b>' + esc(co.name) + '</b><div style="font-size:11px;color:var(--mc-dim);">+' + esc(co.ownerPhone) + ' · ' + co.members + ' ' + t("gx_admin_members") + ' · ' + co.ops + ' ' + t("gx_admin_lines") + '</div></div>';
+    var st = co.plan === "offert" ? '🎁 ' + t("gx_admin_offer") : c.mode !== "paid" ? t("gx_admin_free") : co.expired ? '<span style="color:var(--danger);">' + t("gx_expired") + '</span>' : '✅ ' + new Date(co.paidUntil).toLocaleDateString("fr-FR");
+    html += '<div style="font-size:12px;font-weight:700;">' + st + '</div></div>';
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">';
+    html += '<button class="btn-secondary" style="flex:1;font-size:12px;padding:7px;" data-action="gx-admin-offer" data-value="' + esc(co.id) + '" data-plan="' + (co.plan === "offert" ? "free" : "offert") + '">' + (co.plan === "offert" ? t("gx_admin_unoffer") : t("gx_admin_offer")) + '</button>';
+    html += '<button class="btn-secondary" style="flex:1;font-size:12px;padding:7px;" data-action="gx-admin-add30" data-value="' + esc(co.id) + '">' + t("gx_admin_add30") + '</button></div></div>';
+  });
+  return html;
+}
+
 function renderAdminDashboard(stats) {
   maybeRunLigdiSweep();
   var html = '';
@@ -22759,7 +22911,7 @@ function renderAdminDashboard(stats) {
 
   // ---- Grille des modules — cœur de la navigation du centre de contrôle ----
   var tileList = state.adminIsOwner
-    ? ["comptes","vendeurs","versements","disputes","moderation","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","claude","test"]
+    ? ["comptes","vendeurs","versements","gestion","disputes","moderation","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","claude","test"]
     : ["comptes","vendeurs","versements","disputes","moderation","relaisapplications","livreurapplications","quartiers","messagerie","pub","reviews","partenaires"];
   html += '<div class="section-head" style="display:flex;align-items:baseline;justify-content:space-between;margin:20px 0 12px;"><h2 style="font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--mc-dim);font-weight:700;margin:0;">' + t("ad_modules_title") + '</h2></div>';
   html += renderAdminTileGrid(tileList);
@@ -26644,7 +26796,7 @@ root.addEventListener("click", function(e) {
     }
   }
 
-  if (action === "toggle-role-menu") { state.showRoleMenu = true; render(); return; }
+  if (action === "toggle-role-menu") { state.showRoleMenu = true; render(); try { gestionRefresh(); } catch (e) {} return; }
   if (action === "close-role-menu" && e.target.id !== "role-menu-overlay" && !e.target.closest(".modal-close")) return;
   if (action === "close-scanner" && e.target.id !== "scanner-overlay" && !e.target.closest(".modal-close") && !e.target.closest(".link-btn")) return;
   if (action === "close-admin-parcel-detail" && e.target.id !== "parcel-detail-overlay" && !e.target.closest(".modal-close")) return;
@@ -27432,6 +27584,20 @@ root.addEventListener("click", function(e) {
     case "submit-become-relais": submitBecomeRelais(); break;
     case "submit-admin-gate": submitAdminGate(); break;
     case "switch-role": switchRole(value); break;
+    case "gx-open": gestionOpen(value); break;
+    case "gx-admin-reload": state.gxAdmin = null; render(); break;
+    case "gx-admin-mode": if (state.gxAdmin && state.gxAdmin.config) { state.gxAdmin.config.mode = value; render(); } break;
+    case "gx-admin-save": {
+      var gxc = state.gxAdmin && state.gxAdmin.config; if (!gxc) break;
+      var gxp = Number((document.getElementById("gx-admin-price") || {}).value) || 0, gxd = Number((document.getElementById("gx-admin-days") || {}).value) || 30;
+      gestionAdminApi("admin_config", { mode: gxc.mode, price: gxp, days: gxd }).then(function(r) { if (r.success) { showToast("✅ " + t("gx_admin_saved")); state.gxAdmin = null; render(); } else showToast("❌ " + (r.error === "price_min_100" ? t("ligdi_err_too_low") : r.error)); });
+      break;
+    }
+    case "gx-admin-offer": gestionAdminApi("admin_set_plan", { companyId: value, plan: btn.dataset.plan }).then(function(r) { if (!r.success) showToast("❌ " + r.error); state.gxAdmin = null; render(); }); break;
+    case "gx-admin-add30": gestionAdminApi("admin_set_plan", { companyId: value, addDays: 30 }).then(function(r) { if (!r.success) showToast("❌ " + r.error); state.gxAdmin = null; render(); }); break;
+    case "gx-create": gestionCreate(); break;
+    case "gx-accept": gestionRespond(value, true); break;
+    case "gx-refuse": gestionRespond(value, false); break;
     case "close-role-menu": state.showRoleMenu = false; render(); break;
     case "switch-to-linked-account": {
       state.showRoleMenu = false;
@@ -29065,6 +29231,9 @@ root.addEventListener("click", function(e) {
         state.view = "livreur";
       } else if (target === "pointvente") {
         state.view = "pointvente";
+      } else if (target === "role-menu") {
+        state.showRoleMenu = true;
+        try { gestionRefresh(true); } catch (e) {}
       } else if (target === "admin-chat") {
         var myAdminConv = getOrCreateAdminConversation(state.profile.id, state.profile.name);
         myAdminConv.unreadForUser = 0;

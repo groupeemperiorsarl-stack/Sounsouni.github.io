@@ -1,0 +1,24 @@
+{
+  "name": "sounsouni-desktop",
+  "productName": "Sounsouni",
+  "version": "1.0.0",
+  "description": "Sounsouni pour ordinateur",
+  "author": "Sounsouni",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "dist": "electron-builder --win nsis --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "pro.sounsouni.desktop",
+    "productName": "Sounsouni",
+    "files": ["main.js", "offline.html", "build/icon.png"],
+    "directories": { "buildResources": "build", "output": "dist" },
+    "win": { "target": "nsis", "icon": "build/icon.png", "artifactName": "Sounsouni-Setup.exe" },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "perMachine": false, "createDesktopShortcut": true, "createStartMenuShortcut": true, "shortcutName": "Sounsouni" }
+  }
+}

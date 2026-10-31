@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>Sounsouni</title>
+<style>body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;background:#f3f6f1;color:#1a1a2e;text-align:center}
+.b{max-width:420px;padding:24px}img{width:84px;height:84px;border-radius:20px}button{margin-top:16px;padding:12px 22px;border:0;border-radius:12px;background:#2e7d32;color:#fff;font-size:15px;font-weight:700;cursor:pointer}</style></head>
+<body><div class="b"><img src="build/icon.png" alt=""><h2>Pas de connexion</h2>
+<p>Pour la toute première ouverture, Sounsouni a besoin d'internet. Ensuite, votre gestion marche aussi sans connexion.</p>
+<button onclick="location.href='https://sounsouni.pro/'">Réessayer</button></div>
+<script>setInterval(function(){if(navigator.onLine)location.href='https://sounsouni.pro/';},8000);</script></body></html>
