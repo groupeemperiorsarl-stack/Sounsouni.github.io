@@ -60,6 +60,11 @@
     journal: "Journal", ledger: "Grand livre", trial: "Balance", incomeSt: "Compte de résultat", balanceSh: "Bilan", account: "Compte", label: "Libellé", debit: "Débit", credit2: "Crédit",
     totals: "Totaux", soldeD: "Solde débiteur", soldeC: "Solde créditeur", charges: "Charges", produits: "Produits", actif: "Actif", passif: "Passif", resultat: "Résultat de l'exercice",
     stockVar: "Variation des stocks", balanced: "Équilibré", notBalanced: "Non équilibré", ohadaNote: "Stock évalué au dernier prix d'achat de chaque article. À faire vérifier par votre expert-comptable avant dépôt officiel.",
+    gDaily: "Chaque jour", gMoney: "Mes comptes", gPeople: "Les personnes", gOther: "Autres",
+    dHome: "Les chiffres du jour et du mois", dSales: "Noter ce que vous vendez", dItems: "Vos produits et ce qui reste en stock", dExpenses: "Loyer, transport, salaires…", dPurchases: "Marchandises achetées pour revendre",
+    dClients: "Qui vous doit de l'argent", dSuppliers: "À qui vous devez de l'argent", dEmployees: "Votre personnel et les salaires", dReports: "Bénéfice, meilleures ventes, dépenses", dOhada: "Bilan, compte de résultat, journal (faits tout seuls)",
+    dMembers: "Comptable, caissier, partenaire", dSettings: "Sauvegarde, code PIN, imprimante",
+    tIncomeSt: "Ce que vous avez gagné ou perdu sur la période.", tBalanceSh: "Ce que l'entreprise possède (actif) et ce qu'elle doit (passif).", tJournal: "Toutes les écritures, faites automatiquement.", tLedger: "Les mouvements de chaque compte.", tTrial: "Le total de chaque compte (pour le comptable).",
     printer: "Imprimante", printFmt: "Format d'impression", fmtA4: "Page normale (A4)", fmt80: "Ticket 80 mm", fmt58: "Ticket 58 mm", printerSel: "Imprimante de cet ordinateur", printerAsk: "Me demander à chaque fois",
     rawbt: "Imprimante Bluetooth (application RawBT)", rawbtHint: "Sur téléphone Android : installez l'application gratuite « RawBT » (Play Store), reliez-la à votre imprimante à tickets Bluetooth, puis cochez cette case.",
     testPrint: "Imprimer un essai", printErr: "Impression impossible", printSent: "Envoyé à l'imprimante", reportPrint: "Imprimer", hideZero: "Masquer stock 0", sortBy: "Trier", alerts: "Alertes", seller: "Vendeur"
@@ -106,6 +111,11 @@
     journal: "Journal", ledger: "General ledger", trial: "Trial balance", incomeSt: "Income statement", balanceSh: "Balance sheet", account: "Account", label: "Label", debit: "Debit", credit2: "Credit",
     totals: "Totals", soldeD: "Debit balance", soldeC: "Credit balance", charges: "Expenses", produits: "Income", actif: "Assets", passif: "Liabilities & equity", resultat: "Profit for the period",
     stockVar: "Change in inventory", balanced: "Balanced", notBalanced: "Not balanced", ohadaNote: "Stock valued at each item's latest purchase price. Have it checked by your accountant before any official filing.",
+    gDaily: "Every day", gMoney: "My accounts", gPeople: "People", gOther: "Other",
+    dHome: "Today's and this month's figures", dSales: "Record what you sell", dItems: "Your products and stock left", dExpenses: "Rent, transport, salaries…", dPurchases: "Goods bought to resell",
+    dClients: "Who owes you money", dSuppliers: "Who you owe money to", dEmployees: "Your staff and salaries", dReports: "Profit, best sellers, expenses", dOhada: "Balance sheet, income statement, journal (done for you)",
+    dMembers: "Accountant, cashier, partner", dSettings: "Backup, PIN code, printer",
+    tIncomeSt: "What you earned or lost over the period.", tBalanceSh: "What the business owns (assets) and owes (liabilities).", tJournal: "All entries, made automatically.", tLedger: "Movements of each account.", tTrial: "Total of each account (for the accountant).",
     printer: "Printer", printFmt: "Print format", fmtA4: "Normal page (A4)", fmt80: "80 mm ticket", fmt58: "58 mm ticket", printerSel: "Printer of this computer", printerAsk: "Ask me every time",
     rawbt: "Bluetooth printer (RawBT app)", rawbtHint: "On Android phones: install the free “RawBT” app (Play Store), connect it to your Bluetooth ticket printer, then tick this box.",
     testPrint: "Test print", printErr: "Printing failed", printSent: "Sent to the printer", reportPrint: "Print", om: "Orange Money", moov: "Moov Money", wave: "Wave", bank: "Bank"
@@ -459,10 +469,16 @@
   ];
   function allowedPages() {
     var r = S.role;
-    var oh = !!setting("ohada", false);
-    if (r === "partenaire") return oh ? ["home", "reports", "ohada", "members"] : ["home", "reports", "members"];
+    if (r === "partenaire") return ["home", "reports", "ohada", "members"];
     if (r === "caissier") return ["home", "sales", "items", "clients", "members"];
-    return NAV.map(function (n) { return n[0]; }).filter(function (p) { return p !== "ohada" || oh; });
+    return NAV.map(function (n) { return n[0]; });
+  }
+  // Barre du bas (téléphone) : les 4 pages les plus utiles, le reste dans « Plus ».
+  function bottomPages(pages) {
+    var want = S.role === "caissier" ? ["home", "sales", "items", "clients"] : S.role === "partenaire" ? ["home", "reports", "ohada", "members"] : ["home", "sales", "expenses", "ohada"];
+    var b = want.filter(function (p) { return pages.indexOf(p) >= 0; });
+    if (pages.some(function (p) { return b.indexOf(p) < 0; })) b.push("more");
+    return b;
   }
   function render() {
     if (!S || !root) return;
@@ -482,7 +498,7 @@
     } else {
       html += '<header class="gx-top"><button class="gx-icon" data-a="close" aria-label="' + L("close") + '"><i class="fa-solid fa-arrow-left"></i></button><div class="gx-title"><b>' + esc(S.name) + '</b><span>' + L(S.page) + ' · ' + L(S.role) + '</span></div><span id="gx-sync"></span></header>';
       html += '<main class="gx-main">' + banners() + '<div class="gx-actions-m">' + topActions() + '</div><div class="gx-content">' + page() + '</div></main>';
-      var bottom = pages.slice(0, 4); if (pages.length > 4) bottom.push("more");
+      var bottom = bottomPages(pages);
       html += '<nav class="gx-bottom">';
       bottom.forEach(function (p) { var ic = p === "more" ? "fa-ellipsis" : NAV.filter(function (n) { return n[0] === p; })[0][1]; var on = p === S.page || (p === "more" && bottom.indexOf(S.page) < 0); html += '<button class="' + (on ? 'on' : '') + '" data-a="page" data-v="' + p + '"><i class="fa-solid ' + ic + '"></i><span>' + L(p) + '</span></button>'; });
       html += '</nav>';
@@ -700,13 +716,19 @@
       items.forEach(function (i) { t += '<tr><td>' + esc(i.name) + '</td><td class="r">' + qtyFmt(i.qty) + '</td><td class="r">' + money(i.total) + '</td><td class="r ' + (i.margin < 0 ? "red" : "green") + '">' + money(i.margin) + '</td></tr>'; });
       return t + '</tbody></table></div>';
     })() : empty()) + '</div>';
-    if (!setting("ohada", false)) h += '<div class="gx-card gx-soon"><i class="fa-solid fa-scale-balanced"></i> <b>' + L("syscohada") + '</b> — ' + L("ohadaHint") + (can("settings") ? ' <button class="gx-btn gx-small" data-a="ohada-toggle">' + L("ohadaOn") + '</button>' : '') + '</div>';
     return h;
   }
   function pMore() {
-    var pages = allowedPages(), h = '<div class="gx-more">';
-    NAV.forEach(function (n) { if (pages.indexOf(n[0]) >= 0) h += '<button data-a="page" data-v="' + n[0] + '"><i class="fa-solid ' + n[1] + '"></i><span>' + L(n[0]) + '</span></button>'; });
-    return h + '</div>';
+    var pages = allowedPages(), h = "";
+    var ic = {}; NAV.forEach(function (n) { ic[n[0]] = n[1]; });
+    var D = { home: "dHome", sales: "dSales", items: "dItems", expenses: "dExpenses", purchases: "dPurchases", clients: "dClients", suppliers: "dSuppliers", employees: "dEmployees", reports: "dReports", ohada: "dOhada", members: "dMembers", settings: "dSettings" };
+    [["gMoney", ["ohada", "reports"]], ["gDaily", ["sales", "expenses", "purchases", "items"]], ["gPeople", ["clients", "suppliers", "employees", "members"]], ["gOther", ["settings"]]].forEach(function (g) {
+      var list = g[1].filter(function (p) { return pages.indexOf(p) >= 0; }); if (!list.length) return;
+      h += '<h3 class="gx-more-h">' + L(g[0]) + '</h3><div class="gx-more">';
+      list.forEach(function (p) { h += '<button class="' + (p === "ohada" ? 'gx-more-main' : '') + '" data-a="page" data-v="' + p + '"><i class="fa-solid ' + ic[p] + '"></i><span><b>' + L(p) + '</b><small>' + L(D[p]) + '</small></span><i class="fa-solid fa-chevron-right gx-more-go"></i></button>'; });
+      h += '</div>';
+    });
+    return h;
   }
   function pMembers() {
     if (!S.members) { loadMembers(); return '<div class="gx-center"><i class="fa-solid fa-spinner fa-spin"></i></div>'; }
@@ -761,8 +783,6 @@
     h += '</div><div class="gx-card"><h3>' + L("pin") + '</h3>';
     if (localPin()) h += '<button class="gx-btn" data-a="pin-remove">' + L("removePin") + '</button>';
     else h += '<div class="gx-form-inline"><input id="gx-newpin" type="password" inputmode="numeric" maxlength="8" placeholder="1234"><button class="gx-btn" data-a="pin-set">' + L("setPin") + '</button></div>';
-    h += '</div><div class="gx-card"><h3><i class="fa-solid fa-scale-balanced"></i> ' + L("syscohada") + '</h3><p class="gx-hint">' + L("ohadaHint") + '</p>';
-    if (can("settings")) h += '<button class="gx-btn' + (setting("ohada", false) ? '' : ' gx-primary') + '" data-a="ohada-toggle">' + (setting("ohada", false) ? L("ohadaOff") : L("ohadaOn")) + '</button>';
     h += '</div>' + printerCard() + '</div>';
     return h;
   }
@@ -1328,7 +1348,7 @@
     var clone = el.cloneNode(true);
     Array.prototype.forEach.call(clone.querySelectorAll("button, input, select, .gx-periods, .gx-custom, .gx-tabs"), function (x) { if (x.closest(".gx-periods") || x.closest(".gx-tabs") || x.tagName !== "BUTTON" || !x.closest("table")) x.remove(); });
     var r = periodRange(S.period);
-    printDoc('<h1>' + esc(S.name) + '</h1><p class="muted">' + esc(L(S.page === "ohada" ? (S.ohTab || "journal") : "reports")) + ' — ' + L("from") + ' ' + dateFr(r[0]) + ' ' + L("to") + ' ' + dateFr(r[1]) + '</p>' + clone.innerHTML.replace(/<i class="fa[^"]*"><\/i>/g, ""), { a4: true });
+    printDoc('<h1>' + esc(S.name) + '</h1><p class="muted">' + esc(L(S.page === "ohada" ? (S.ohTab || "incomeSt") : "reports")) + ' — ' + L("from") + ' ' + dateFr(r[0]) + ' ' + L("to") + ' ' + dateFr(r[1]) + '</p>' + clone.innerHTML.replace(/<i class="fa[^"]*"><\/i>/g, ""), { a4: true });
   }
 
   // ---------------- Comptabilité SYSCOHADA (écritures automatiques) ----------------
@@ -1389,12 +1409,12 @@
   function balances(list) { var b = {}; list.forEach(function (e) { e.lines.forEach(function (x) { var a = b[x[0]] || (b[x[0]] = { d: 0, c: 0 }); a.d += x[1]; a.c += x[2]; }); }); return b; }
   function accLabel(a) { return a + " " + (ACC[a] || ""); }
   function pOhada() {
-    var r = periodRange(S.period), tab = S.ohTab || "journal";
+    var r = periodRange(S.period), tab = S.ohTab || "incomeSt";
     var all = entries(r[1]), inPer = all.filter(function (e) { return e.d >= r[0]; });
     var varE = variationEntry(r[0], r[1], all), perAll = inPer.concat([varE]);
     var h = periodBar() + '<div class="gx-tabs">';
-    ["journal", "ledger", "trial", "incomeSt", "balanceSh"].forEach(function (t) { h += '<button class="' + (tab === t ? 'on' : '') + '" data-a="oh-tab" data-v="' + t + '">' + L(t) + '</button>'; });
-    h += '</div><p class="gx-hint">' + L("ohadaNote") + '</p>';
+    ["incomeSt", "balanceSh", "journal", "ledger", "trial"].forEach(function (t) { h += '<button class="' + (tab === t ? 'on' : '') + '" data-a="oh-tab" data-v="' + t + '">' + L(t) + '</button>'; });
+    h += '</div><p class="gx-hint"><b>' + L({ incomeSt: "tIncomeSt", balanceSh: "tBalanceSh", journal: "tJournal", ledger: "tLedger", trial: "tTrial" }[tab]) + '</b> ' + L("ohadaNote") + '</p>';
     var tbl = function (head, rows, foot) {
       var t = '<div class="gx-table-wrap"><table class="gx-table gx-acc"><thead><tr>' + head.map(function (c) { return '<th' + (c.r ? ' class="r"' : '') + '>' + c.t + '</th>'; }).join("") + '</tr></thead><tbody>';
       t += rows.length ? rows.map(function (rw) { return '<tr' + (rw.cls ? ' class="' + rw.cls + '"' : '') + '>' + rw.c.map(function (v, i) { return '<td' + (head[i].r ? ' class="r"' : '') + '>' + v + '</td>'; }).join("") + '</tr>'; }).join("") : '<tr><td colspan="' + head.length + '">' + L("noData") + '</td></tr>';
@@ -1512,7 +1532,7 @@
       ".gx-empty{text-align:center;color:var(--dim);padding:22px 10px}.gx-empty i{font-size:26px;opacity:.6}",
       ".gx-grid2{display:grid;grid-template-columns:1fr;gap:0 14px}.gx-wide .gx-grid2{grid-template-columns:1fr 1fr}",
       ".gx-bars{display:flex;align-items:flex-end;gap:4px;height:150px;overflow-x:auto;padding-top:6px}.gx-bar{flex:1 0 18px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:4px}.gx-bar i{display:block;width:100%;background:linear-gradient(180deg,var(--g2),var(--g));border-radius:5px 5px 2px 2px;min-height:2px}.gx-bar span{font-size:9.5px;color:var(--dim);white-space:nowrap}",
-      ".gx-more{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.gx-more button{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px 6px;display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--tx);font-size:12px;font-weight:700}.gx-more button i{font-size:22px;color:var(--g)}",
+      ".gx-more-h{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu,#667);margin:14px 4px 8px}.gx-more-h:first-child{margin-top:2px}.gx-more{display:flex;flex-direction:column;gap:8px}.gx-more button{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:12px;color:var(--tx);text-align:left;width:100%;min-width:0}.gx-more button>i:first-child{font-size:20px;color:var(--g);width:26px;text-align:center;flex:0 0 26px}.gx-more button span{flex:1;min-width:0;display:flex;flex-direction:column}.gx-more button b{font-size:15px}.gx-more button small{font-size:12.5px;opacity:.7;line-height:1.3}.gx-more-go{opacity:.4;font-size:13px}.gx-more button.gx-more-main{border:2px solid var(--g)}.gx-wide .gx-more{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}",
       ".gx-tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px}.gx-tabs button{flex:0 0 auto;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:10px;padding:8px 12px;font-size:12.5px;font-weight:700}.gx-tabs button.on{background:#163a19;color:#fff;border-color:#163a19}",
       ".gx-acc td{font-size:12.5px;padding:7px 10px}.gx-acc tbody tr{cursor:default}.gx-acc tr.gx-first td{border-top:2px solid var(--bd)}.gx-acc tr.gx-foot td{font-weight:800;background:rgba(123,203,58,.1)}",
       ".gx-soon{color:var(--dim)}.gx-hint{font-size:12.5px;color:var(--dim)}",
