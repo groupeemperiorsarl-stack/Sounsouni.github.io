@@ -70,6 +70,7 @@
     debtTitleC: "Un client me doit", debtTitleS: "Je dois à un fournisseur", debtHintC: "Pour une NOUVELLE vente à crédit, utilisez plutôt « Une vente » avec le paiement « À crédit » : le stock et le chiffre d'affaires seront justes.", debtHintS: "Pour un NOUVEL achat à crédit, utilisez plutôt « Un achat de marchandises » en mettant Payé = 0.",
     orNewName: "… ou nom d'un nouveau", newCName: "Ou nouveau client (nom)", newSName: "Ou nouveau fournisseur (nom)", chooseParty: "Choisissez une personne ou tapez un nouveau nom.", debtLine: "Dette notée", owesNow: "Il vous doit actuellement", weOweNow: "Vous lui devez actuellement", payTooMuch: "Attention : c'est plus que la dette. Pour noter une dette, utilisez « Un client me doit ».",
     payOk: "Paiement enregistré", stillOwes: "Il vous doit encore", nothingOwed: "Plus rien à payer", advance: "Payé d'avance", whereGo: "Où le retrouver ?", w1: "Accueil → Trésorerie (l'argent reçu y est ajouté) et Crédits clients", w1s: "Accueil → Trésorerie (l'argent payé y est retiré) et Dettes fournisseurs", w2: "Fiche de la personne (Clients ou Fournisseurs) : historique et solde", w3: "Accueil → Dernières opérations", w4: "Comptabilité → Journal (écrit automatiquement)", payRcpt: "Reçu de paiement", payRcptT: "REÇU DE PAIEMENT", received: "Reçu de", paidTo: "Payé à", paymentIn: "Paiement reçu", paymentOut: "Paiement fournisseur",
+    stockAdjL: "Écarts d'inventaire (pertes, casse…)",
     whatNote: "Que voulez-vous noter ?", eSale: "Une vente", eSaleD: "Un client achète. Le stock baisse tout seul.", eExp: "Une dépense", eExpD: "Loyer, transport, électricité, salaire…", ePur: "Un achat de marchandises", ePurD: "Vous achetez pour revendre. Le stock monte.", eItem: "Un nouvel article", eItemD: "Ajouter un produit ou un service à votre liste.",
     eCPay: "Un client me paie", eCPayD: "Il règle ce qu'il doit (vente à crédit).", eSPay: "Je paie un fournisseur", eSPayD: "Vous réglez ce que vous lui devez.", eOut: "Une sortie de stock", eOutD: "Perte, casse, cadeau : corriger le stock.", eOutHint: "Touchez l'article, puis « Inventaire » pour noter la quantité qui reste.", ePartyHint: "Touchez la personne, puis le bouton de paiement.",
     gDaily: "Chaque jour", gMoney: "Mes comptes", gPeople: "Les personnes", gOther: "Autres",
@@ -133,6 +134,7 @@
     debtTitleC: "A customer owes me", debtTitleS: "I owe a supplier", debtHintC: "For a NEW credit sale, use “A sale” with payment “On credit” instead: stock and revenue stay right.", debtHintS: "For a NEW credit purchase, use “A goods purchase” with Paid = 0 instead.",
     orNewName: "… or a new name", newCName: "Or new customer (name)", newSName: "Or new supplier (name)", chooseParty: "Choose a person or type a new name.", debtLine: "Debt recorded", owesNow: "Currently owes you", weOweNow: "You currently owe", payTooMuch: "Careful: this is more than the debt. To record a debt, use “A customer owes me”.",
     payOk: "Payment recorded", stillOwes: "Still owes you", nothingOwed: "Nothing left to pay", advance: "Paid in advance", whereGo: "Where to find it?", w1: "Home → Cash and Customer credits", w1s: "Home → Cash and Supplier debts", w2: "The person's page (Customers or Suppliers): history and balance", w3: "Home → Latest operations", w4: "Accounting → Journal (automatic)", payRcpt: "Payment receipt", payRcptT: "PAYMENT RECEIPT", received: "Received from", paidTo: "Paid to", paymentIn: "Payment received", paymentOut: "Supplier payment",
+    stockAdjL: "Stock count differences (loss, breakage…)",
     whatNote: "What do you want to record?", eSale: "A sale", eSaleD: "A customer buys. Stock goes down automatically.", eExp: "An expense", eExpD: "Rent, transport, electricity, salary…", ePur: "A goods purchase", ePurD: "You buy to resell. Stock goes up.", eItem: "A new item", eItemD: "Add a product or service to your list.",
     eCPay: "A customer pays me", eCPayD: "They settle what they owe (credit sale).", eSPay: "I pay a supplier", eSPayD: "You settle what you owe them.", eOut: "Stock going out", eOutD: "Loss, breakage, gift: correct the stock.", eOutHint: "Tap the item, then “Stock count” to record what is left.", ePartyHint: "Tap the person, then the payment button.",
     gDaily: "Every day", gMoney: "My accounts", gPeople: "People", gOther: "Other",
@@ -351,7 +353,7 @@
     document.documentElement.classList.add("gx-open");
     S = { cid: company.id, name: company.name, role: company.role, isOwner: !!company.isOwner, ownerId: company.ownerId, expired: !!company.expired,
       plan: company.plan, paidUntil: company.paidUntil, ops: {}, ent: blankEnt(), pending: [], lastSeq: 0, meta: { cid: company.id }, page: "home", modal: null,
-      q: "", period: "month", locked: false, loading: true };
+      q: "", period: "month", locked: false, loading: true, openedAt: Date.now() };
     try { history.pushState({ gx: 1 }, ""); } catch (e) {}
     render();
     var cid = company.id;
@@ -377,7 +379,10 @@
     if (root) { root.className = ""; root.innerHTML = ""; }
     document.documentElement.classList.remove("gx-open");
   }
-  window.addEventListener("popstate", function () { if (!S) return; if (S.modal) { S.modal = null; render(); try { history.pushState({ gx: 1 }, ""); } catch (e) {} } else close(); });
+  window.addEventListener("popstate", function () { if (!S) return;
+    // Un « retour » qui arrive juste après l'ouverture vient de la fermeture du menu : on l'ignore.
+    if (Date.now() - (S.openedAt || 0) < 1200) { try { history.pushState({ gx: 1 }, ""); } catch (e) {} return; }
+    if (S.modal) { S.modal = null; render(); try { history.pushState({ gx: 1 }, ""); } catch (e) {} } else close(); });
 
   // ---------------- Code PIN (propre à cet appareil) ----------------
   function pinKey() { return "sns_gx_pin_" + S.cid + "_" + ((profile() || {}).id || ""); }
@@ -438,7 +443,10 @@
     live("expense").forEach(function (x) { if (!inRange(x.d, r)) return; f.expenses += num(x.amount); f.cashOut += num(x.amount); f.byCat[x.cat || "autre"] = (f.byCat[x.cat || "autre"] || 0) + num(x.amount); });
     live("purchase").forEach(function (p) { if (!inRange(p.d, r)) return; f.purchases += num(p.total); f.cashOut += num(p.paid); });
     live("payment").forEach(function (p) { if (!inRange(p.d, r)) return; if (p.side === "client") f.cashIn += num(p.amount); else f.cashOut += num(p.amount); });
-    f.margin = f.revenue - f.cogs; f.net = f.margin - f.expenses;
+    // Inventaires : une perte (casse, vol…) diminue le bénéfice, un surplus l'augmente (au prix d'achat).
+    f.stockAdj = 0;
+    live("adjust").forEach(function (a) { if (!inRange(a.d, r) || isOpening(a)) return; var it = getE("item", a.item); f.stockAdj += num(a.qty) * num(it && it.cost); });
+    f.margin = f.revenue - f.cogs; f.net = f.margin - f.expenses + f.stockAdj;
     return f;
   }
   function cashTotal() {
@@ -746,6 +754,7 @@
     h += kpi(L("cogs"), money(f.cogs), "", "fa-boxes-stacked");
     h += kpi(L("grossMargin"), money(f.margin), f.margin < 0 ? "red" : "green", "fa-percent");
     h += kpi(L("expenses"), money(f.expenses), "red", "fa-money-bill-wave");
+    if (f.stockAdj) h += kpi(L("stockAdjL"), money(f.stockAdj), f.stockAdj < 0 ? "red" : "green", "fa-clipboard-check");
     h += kpi(L("netProfit"), money(f.net), f.net < 0 ? "red" : "green", "fa-sack-dollar");
     h += kpi(L("purchases"), money(f.purchases), "", "fa-truck-ramp-box");
     h += kpi(L("cashIn"), money(f.cashIn), "green", "fa-circle-arrow-down");
@@ -800,7 +809,7 @@
     return h + '</div>';
   }
   function loadMembers() {
-    if (navigator.onLine === false) { S.members = "offline"; return; }
+    if (navigator.onLine === false) { S.members = "offline"; setTimeout(function () { if (S && S.page === "members") render(); }, 0); return; }
     api("members", { companyId: S.cid }).then(function (r) {
       if (!S) return;
       if (r.success) { S.members = r.members; S.membersOwner = r.ownerPhone; } else S.members = "offline";

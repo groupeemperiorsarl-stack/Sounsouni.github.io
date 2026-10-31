@@ -14163,8 +14163,16 @@ window.SnsGestionHost = {
 function gestionOpen(cid) {
   var c = (gestionState().companies || []).find(function(x) { return x.id === cid; });
   if (!c) return;
+  // Fermer le menu « Changer de rôle » fait un « retour » dans l'historique
+  // (history.back, asynchrone). Si la Gestion s'ouvrait avant ce retour, il la
+  // refermait aussitôt (2e ouverture, module déjà chargé). On attend donc ce
+  // retour avant d'ouvrir.
+  var wasMenu = !!state.showRoleMenu, opened = false;
+  var go = function() { if (opened) return; opened = true; window.removeEventListener("popstate", onPop); gestionLoadScript(function() { window.SnsGestion.open(c); }); };
+  var onPop = function() { setTimeout(go, 30); };
+  if (wasMenu) window.addEventListener("popstate", onPop);
   state.showRoleMenu = false; render();
-  gestionLoadScript(function() { window.SnsGestion.open(c); });
+  if (wasMenu) setTimeout(go, 700); else go();
 }
 function gestionCreate() {
   var name = prompt(t("gx_create_name"), (state.profile && (state.profile.shopName || state.profile.name)) || "");
