@@ -60,6 +60,7 @@
     journal: "Journal", ledger: "Grand livre", trial: "Balance", incomeSt: "Compte de résultat", balanceSh: "Bilan", account: "Compte", label: "Libellé", debit: "Débit", credit2: "Crédit",
     totals: "Totaux", soldeD: "Solde débiteur", soldeC: "Solde créditeur", charges: "Charges", produits: "Produits", actif: "Actif", passif: "Passif", resultat: "Résultat de l'exercice",
     stockVar: "Variation des stocks", balanced: "Équilibré", notBalanced: "Non équilibré", ohadaNote: "Stock évalué au dernier prix d'achat de chaque article. À faire vérifier par votre expert-comptable avant dépôt officiel.",
+    rcptTitle: "REÇU DE VENTE", seller: "Vendeur", walkin: "Client de passage", unitP: "P.U.", amountCol: "Montant", status: "Statut", stPaid: "PAYÉ", stPartial: "ACOMPTE", stCredit: "À CRÉDIT", shareImg: "Envoyer le reçu (image)", waText: "WhatsApp (texte)", clientName: "Nom du client (sur le reçu)", atTime: "à", rcptFoot: "Reçu émis avec Sounsouni Gestion", rcptSetHint: "Ajoutez l'adresse et le téléphone de la boutique dans Réglages : ils seront sur vos reçus.", imgSaved: "Image du reçu enregistrée", tel: "Tél",
     gDaily: "Chaque jour", gMoney: "Mes comptes", gPeople: "Les personnes", gOther: "Autres",
     dHome: "Les chiffres du jour et du mois", dSales: "Noter ce que vous vendez", dItems: "Vos produits et ce qui reste en stock", dExpenses: "Loyer, transport, salaires…", dPurchases: "Marchandises achetées pour revendre",
     dClients: "Qui vous doit de l'argent", dSuppliers: "À qui vous devez de l'argent", dEmployees: "Votre personnel et les salaires", dReports: "Bénéfice, meilleures ventes, dépenses", dOhada: "Bilan, compte de résultat, journal (faits tout seuls)",
@@ -111,6 +112,7 @@
     journal: "Journal", ledger: "General ledger", trial: "Trial balance", incomeSt: "Income statement", balanceSh: "Balance sheet", account: "Account", label: "Label", debit: "Debit", credit2: "Credit",
     totals: "Totals", soldeD: "Debit balance", soldeC: "Credit balance", charges: "Expenses", produits: "Income", actif: "Assets", passif: "Liabilities & equity", resultat: "Profit for the period",
     stockVar: "Change in inventory", balanced: "Balanced", notBalanced: "Not balanced", ohadaNote: "Stock valued at each item's latest purchase price. Have it checked by your accountant before any official filing.",
+    rcptTitle: "SALES RECEIPT", seller: "Seller", walkin: "Walk-in customer", unitP: "Unit", amountCol: "Amount", status: "Status", stPaid: "PAID", stPartial: "DEPOSIT", stCredit: "ON CREDIT", shareImg: "Send receipt (image)", waText: "WhatsApp (text)", clientName: "Customer name (on receipt)", atTime: "at", rcptFoot: "Receipt issued with Sounsouni Gestion", rcptSetHint: "Add the shop address and phone in Settings: they will appear on your receipts.", imgSaved: "Receipt image saved", tel: "Tel",
     gDaily: "Every day", gMoney: "My accounts", gPeople: "People", gOther: "Other",
     dHome: "Today's and this month's figures", dSales: "Record what you sell", dItems: "Your products and stock left", dExpenses: "Rent, transport, salaries…", dPurchases: "Goods bought to resell",
     dClients: "Who owes you money", dSuppliers: "Who you owe money to", dEmployees: "Your staff and salaries", dReports: "Profit, best sellers, expenses", dOhada: "Balance sheet, income statement, journal (done for you)",
@@ -834,6 +836,7 @@
     var h = '<h2><i class="fa-solid fa-cash-register"></i> ' + (S.modal.id ? L("edit") : L("newSale")) + '</h2>' + linesEditor(d, "price");
     h += '<div class="gx-total">' + L("total") + ' <b>' + money(tot) + '</b></div><div class="gx-fgrid">';
     h += selectF(L("client"), "client", d.client, partyOpts("client"));
+    if (!d.client) h += field(L("clientName"), "cname", d.cname, 'maxlength="60"');
     h += selectF(L("mode"), "mode", d.mode, modeOpts().concat([["credit", modeLabel("credit")]]));
     h += field(L("paid"), "paid", d.paid, 'inputmode="numeric"');
     h += field(L("date"), "d", d.d, 'type="date"');
@@ -974,25 +977,149 @@
   function linesView(lines, pf) {
     return '<div class="gx-list">' + lines.map(function (l) { return '<div class="gx-line"><span>' + qtyFmt(l.qty) + ' × ' + esc(l.name) + ' <small>(' + money(l[pf]) + ')</small></span><b>' + money(num(l.qty) * num(l[pf])) + '</b></div>'; }).join("") + '</div>';
   }
+  // ---------------- Reçu ----------------
+  // Toutes les informations du reçu, partagées par l'écran, le texte WhatsApp, l'image et l'impression.
+  function rcpt(r) {
+    var c = r.client ? getE("client", r.client) : null, rest = Math.max(0, num(r.total) - num(r.paid));
+    var t = r._at ? new Date(r._at) : null, time = t && r.d === (t.getFullYear() + "-" + pad(t.getMonth() + 1) + "-" + pad(t.getDate())) ? pad(t.getHours()) + ":" + pad(t.getMinutes()) : "";
+    return {
+      shop: String(S.name || ""), addr: String(setting("address", "") || ""), phone: String(setting("phone", "") || ""),
+      no: "R-" + String(r.id).replace(/^s_/, "").slice(-6).toUpperCase(), date: dateFr(r.d), time: time,
+      client: c ? c.name : (r.cname || ""), clientPhone: c && c.phone ? String(c.phone) : "", seller: String(r._bn || ""),
+      lines: saleLines(r).map(function (l) { return { name: String(l.name || ""), qty: num(l.qty), pu: num(l.price), amt: num(l.qty) * num(l.price) }; }),
+      total: num(r.total), paid: num(r.paid), rest: rest, mode: r.mode === "sounsouni" ? "Sounsouni" : (r.mode === "credit" ? "" : modeLabel(r.mode)),
+      st: rest <= 0 ? "stPaid" : num(r.paid) > 0 ? "stPartial" : "stCredit", note: String(r.note || "")
+    };
+  }
+  // Cachet rond au nom de la boutique (SVG) : nom en haut, ville/téléphone en bas, statut et date au centre.
+  function stampSvg(R, ink, size) {
+    ink = ink || "#1f3fa8"; size = size || 120;
+    var name = R.shop.toUpperCase().slice(0, 30), fs = Math.max(7, Math.min(13, 118 / (name.length * 0.62 + 1)));
+    var bottom = (R.phone || "MALI").toUpperCase().slice(0, 22), st = L(R.st);
+    return '<svg class="gx-stamp" width="' + size + '" height="' + size + '" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" style="transform:rotate(-12deg)">' +
+      '<defs><path id="gxst-t" d="M 17,60 A 43,43 0 0,1 103,60"/><path id="gxst-b" d="M 21,60 A 39,39 0 0,0 99,60"/></defs>' +
+      '<g fill="none" stroke="' + ink + '"><circle cx="60" cy="60" r="57" stroke-width="2.6"/><circle cx="60" cy="60" r="51" stroke-width="1"/><circle cx="60" cy="60" r="31" stroke-width="1.2"/></g>' +
+      '<g fill="' + ink + '" font-family="Arial,Helvetica,sans-serif" font-weight="700" text-anchor="middle">' +
+      '<text font-size="' + fs.toFixed(1) + '" letter-spacing=".5"><textPath href="#gxst-t" startOffset="50%">' + esc(name) + '</textPath></text>' +
+      '<text font-size="8" letter-spacing="1"><textPath href="#gxst-b" startOffset="50%">' + esc(bottom) + '</textPath></text>' +
+      '<text x="10" y="63.5" font-size="9">★</text><text x="110" y="63.5" font-size="9">★</text>' +
+      '<text x="60" y="' + (st.length > 6 ? 61 : 62) + '" font-size="' + (st.length > 6 ? 9.5 : 12.5) + '" font-weight="900">' + esc(st) + '</text>' +
+      '<text x="60" y="73" font-size="7.5" font-weight="700">' + esc(R.date) + '</text></g></svg>';
+  }
   function receiptText(r) {
-    var t = "*" + S.name + "*\n" + L("receipt") + " — " + dateFr(r.d) + "\n";
-    if (setting("phone", "")) t += setting("phone", "") + "\n";
-    t += "------------------\n";
-    saleLines(r).forEach(function (l) { t += qtyFmt(l.qty) + " x " + l.name + " : " + money(num(l.qty) * num(l.price)) + "\n"; });
-    t += "------------------\n" + L("total") + " : *" + money(r.total) + "*\n" + L("paid") + " : " + money(r.paid) + "\n";
-    if (num(r.total) - num(r.paid) > 0) t += L("rest") + " : " + money(num(r.total) - num(r.paid)) + "\n";
-    t += "\n" + L("receiptThanks") + "\n— Sounsouni Gestion";
+    var R = rcpt(r), sep = "━━━━━━━━━━━━━━", t = "*" + R.shop.toUpperCase() + "*\n";
+    if (R.addr) t += R.addr + "\n";
+    if (R.phone) t += L("tel") + " : " + R.phone + "\n";
+    t += sep + "\n*" + L("rcptTitle") + " N° " + R.no + "*\n" + L("date") + " : " + R.date + (R.time ? " " + L("atTime") + " " + R.time : "") + "\n";
+    t += L("client") + " : " + (R.client || L("walkin")) + "\n";
+    if (R.seller) t += L("seller") + " : " + R.seller + "\n";
+    t += sep + "\n";
+    R.lines.forEach(function (l) { t += "• " + l.name + "\n    " + qtyFmt(l.qty) + " × " + money(l.pu) + " = *" + money(l.amt) + "*\n"; });
+    t += sep + "\n*" + L("total").toUpperCase() + " : " + money(R.total) + "*\n" + L("paid") + (R.mode ? " (" + R.mode + ")" : "") + " : " + money(R.paid) + "\n";
+    if (R.rest > 0) t += L("rest") + " : *" + money(R.rest) + "*\n";
+    t += L("status") + " : " + (R.st === "stPaid" ? "✅ " : "⏳ ") + L(R.st) + "\n";
+    if (R.note) t += L("note") + " : " + R.note + "\n";
+    t += sep + "\n" + L("receiptThanks") + "\n_" + L("rcptFoot") + "_";
     return t;
   }
+  // Corps du reçu en HTML (écran, A4, ticket). ink = couleur du cachet.
+  function receiptHtml(r, ink, ticket) {
+    var R = rcpt(r), h = '<div class="rc-head"><div class="rc-shop">' + esc(R.shop) + '</div>';
+    if (R.addr) h += '<div class="rc-sub">' + esc(R.addr) + '</div>';
+    if (R.phone) h += '<div class="rc-sub">' + L("tel") + ' : ' + esc(R.phone) + '</div>';
+    h += '</div><div class="rc-title">' + L("rcptTitle") + '</div><div class="rc-meta">';
+    h += '<div><span>N°</span><b>' + esc(R.no) + '</b></div><div><span>' + L("date") + '</span><b>' + R.date + (R.time ? ' ' + R.time : '') + '</b></div>';
+    h += '<div><span>' + L("client") + '</span><b>' + esc(R.client || L("walkin")) + (R.clientPhone ? ' · ' + esc(R.clientPhone) : '') + '</b></div>';
+    if (R.seller) h += '<div><span>' + L("seller") + '</span><b>' + esc(R.seller) + '</b></div>';
+    h += '</div><table class="rc-t"><thead><tr><th>' + L("article") + '</th><th class="r">' + L("qtyShort") + '</th>' + (ticket ? '' : '<th class="r">' + L("unitP") + '</th>') + '<th class="r">' + L("amountCol") + '</th></tr></thead><tbody>';
+    R.lines.forEach(function (l) { h += '<tr><td>' + esc(l.name) + (ticket ? '<br><small>' + money(l.pu) + '</small>' : '') + '</td><td class="r">' + qtyFmt(l.qty) + '</td>' + (ticket ? '' : '<td class="r">' + money(l.pu) + '</td>') + '<td class="r">' + money(l.amt) + '</td></tr>'; });
+    h += '</tbody></table><div class="rc-bottom"><div class="rc-stamp">' + stampSvg(R, ink, ticket ? 96 : 116) + '</div><div class="rc-sum">';
+    h += '<div class="rc-tot"><span>' + L("total") + '</span><b>' + money(R.total) + '</b></div>';
+    h += '<div><span>' + L("paid") + (R.mode ? ' (' + esc(R.mode) + ')' : '') + '</span><b>' + money(R.paid) + '</b></div>';
+    if (R.rest > 0) h += '<div class="rc-rest"><span>' + L("rest") + '</span><b>' + money(R.rest) + '</b></div>';
+    h += '<div><span>' + L("status") + '</span><b>' + L(R.st) + '</b></div></div></div>';
+    if (R.note) h += '<div class="rc-note">' + L("note") + ' : ' + esc(R.note) + '</div>';
+    return h + '<div class="rc-foot">' + L("receiptThanks") + '<br><small>' + L("rcptFoot") + '</small></div>';
+  }
+  var RC_CSS = ".rc-head{text-align:center;margin-bottom:6px}.rc-shop{font-size:1.45em;font-weight:900;letter-spacing:.02em;text-transform:uppercase}.rc-sub{font-size:.88em;opacity:.8}" +
+    ".rc-title{text-align:center;font-weight:800;letter-spacing:.12em;border-top:2px solid currentColor;border-bottom:2px solid currentColor;padding:5px 0;margin:8px 0}" +
+    ".rc-meta{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:.9em;margin-bottom:8px}.rc-meta div{display:flex;flex-direction:column;min-width:0}.rc-meta span{opacity:.65;font-size:.85em}.rc-meta b{word-break:break-word}" +
+    ".rc-t{width:100%;border-collapse:collapse;font-size:.92em}.rc-t th{text-align:left;border-bottom:1.5px solid currentColor;padding:4px 3px;font-size:.85em;text-transform:uppercase}.rc-t td{border-bottom:1px dashed rgba(127,127,127,.5);padding:5px 3px;vertical-align:top;word-break:break-word}.rc-t .r{text-align:right;white-space:nowrap}" +
+    ".rc-bottom{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px}.rc-stamp{flex:0 0 auto;opacity:.88}.rc-sum{flex:1;min-width:0;max-width:240px}.rc-sum div{display:flex;justify-content:space-between;gap:8px;padding:2px 0;font-size:.92em}" +
+    ".rc-sum .rc-tot{font-size:1.2em;border-top:2px solid currentColor;border-bottom:2px solid currentColor;padding:5px 0;margin-bottom:3px}.rc-rest b{color:#c62828}.rc-note{font-size:.85em;margin-top:8px;font-style:italic}.rc-foot{text-align:center;margin-top:12px;font-weight:700}.rc-foot small{font-weight:400;opacity:.65}";
   function vReceipt() {
     var r = getE("sale", S.modal.id); if (!r) return "";
     var c = r.client ? getE("client", r.client) : null;
     var phone = c && c.phone ? String(c.phone).replace(/\D/g, "") : "";
-    var h = '<div class="gx-receipt" id="gx-receipt-print"><h2>' + esc(S.name) + '</h2>' + (setting("address", "") ? '<p>' + esc(setting("address", "")) + '</p>' : '') + (setting("phone", "") ? '<p>' + esc(setting("phone", "")) + '</p>' : '');
-    h += '<p><b>' + L("receipt") + '</b> · ' + dateFr(r.d) + ' · N° ' + esc(String(r.id).slice(-6).toUpperCase()) + (c ? '<br>' + L("client") + ' : ' + esc(c.name) : '') + '</p>' + linesView(saleLines(r), "price");
-    h += '<div class="gx-total">' + L("total") + ' <b>' + money(r.total) + '</b></div><p>' + L("paid") + ' : ' + money(r.paid) + (num(r.total) - num(r.paid) > 0 ? ' · ' + L("rest") + ' : ' + money(num(r.total) - num(r.paid)) : '') + '</p><p class="gx-hint">' + L("receiptThanks") + '</p></div>';
-    h += '<div class="gx-sheet-foot"><a class="gx-btn gx-primary" target="_blank" rel="noopener" href="https://wa.me/' + phone + '?text=' + encodeURIComponent(receiptText(r)) + '"><i class="fa-brands fa-whatsapp"></i> ' + L("shareWa") + '</a><button class="gx-btn" data-a="print"><i class="fa-solid fa-print"></i> ' + L("print") + '</button></div>';
+    var h = '<div class="gx-receipt" id="gx-receipt-print">' + receiptHtml(r) + '</div>';
+    if (!setting("phone", "") && !setting("address", "")) h += '<p class="gx-hint">' + L("rcptSetHint") + '</p>';
+    h += '<div class="gx-sheet-foot"><button class="gx-btn gx-primary" data-a="receipt-img"><i class="fa-solid fa-image"></i> ' + L("shareImg") + '</button><a class="gx-btn" target="_blank" rel="noopener" href="https://wa.me/' + phone + '?text=' + encodeURIComponent(receiptText(r)) + '"><i class="fa-brands fa-whatsapp"></i> ' + L("waText") + '</a><button class="gx-btn" data-a="print"><i class="fa-solid fa-print"></i> ' + L("print") + '</button></div>';
     return h;
+  }
+  // Image du reçu (dessinée sur un canvas, sans rien de l'extérieur) pour l'envoyer en photo.
+  function receiptCanvas(r) {
+    var R = rcpt(r), W = 760, P = 44, cv = document.createElement("canvas"), x = cv.getContext("2d"), F = "Arial,Helvetica,sans-serif";
+    var wrap = function (txt, w, font) { x.font = font; var words = String(txt).split(" "), out = [], cur = ""; words.forEach(function (wd) { var t = cur ? cur + " " + wd : wd; if (x.measureText(t).width > w && cur) { out.push(cur); cur = wd; } else cur = t; }); out.push(cur); return out; };
+    var H = 520 + R.lines.reduce(function (a, l) { return a + 34 * wrap(l.name, W - 2 * P - 330, "20px " + F).length + 10; }, 0) + (R.rest > 0 ? 34 : 0) + (R.note ? 36 : 0) + (R.addr ? 28 : 0) + (R.phone ? 28 : 0);
+    H = 3000; cv.width = W; cv.height = H; x.fillStyle = "#fff"; x.fillRect(0, 0, W, H); x.fillStyle = "#2e7d32"; x.fillRect(0, 0, W, 10);
+    var y = 66; x.fillStyle = "#111"; x.textAlign = "center"; x.font = "900 36px " + F; x.fillText(R.shop.toUpperCase().slice(0, 34), W / 2, y);
+    x.font = "20px " + F; x.fillStyle = "#555";
+    if (R.addr) { y += 30; x.fillText(R.addr.slice(0, 70), W / 2, y); }
+    if (R.phone) { y += 28; x.fillText(L("tel") + " : " + R.phone, W / 2, y); }
+    y += 26; x.fillStyle = "#111"; x.fillRect(P, y, W - 2 * P, 3); y += 36; x.font = "800 24px " + F; x.fillText(L("rcptTitle").split("").join(" "), W / 2, y); y += 16; x.fillRect(P, y, W - 2 * P, 3);
+    x.textAlign = "left"; y += 40;
+    var meta = [["N°", R.no], [L("date"), R.date + (R.time ? " " + R.time : "")], [L("client"), (R.client || L("walkin")) + (R.clientPhone ? " · " + R.clientPhone : "")], [L("seller"), R.seller]];
+    meta.forEach(function (m, i) { if (!m[1]) return; var cx = i % 2 ? W / 2 + 10 : P, cy = y + Math.floor(i / 2) * 56; x.fillStyle = "#777"; x.font = "17px " + F; x.fillText(m[0], cx, cy); x.fillStyle = "#111"; x.font = "700 21px " + F; x.fillText(String(m[1]).slice(0, 30), cx, cy + 25); });
+    y += 112; x.font = "700 17px " + F; x.fillStyle = "#111";
+    var cQ = W - P - 300, cU = W - P - 150, cA = W - P;
+    x.fillText(L("article").toUpperCase(), P, y); x.textAlign = "right"; x.fillText(L("qtyShort").toUpperCase(), cQ + 20, y); x.fillText(L("unitP").toUpperCase(), cU + 10, y); x.fillText(L("amountCol").toUpperCase(), cA, y);
+    y += 12; x.fillRect(P, y, W - 2 * P, 2); y += 32;
+    R.lines.forEach(function (l) {
+      var ls = wrap(l.name, cQ - P - 40, "20px " + F); x.textAlign = "left"; x.font = "20px " + F; x.fillStyle = "#111";
+      ls.forEach(function (t, i) { x.fillText(t, P, y + i * 34); });
+      x.textAlign = "right"; x.fillText(qtyFmt(l.qty), cQ + 20, y); x.fillText(money(l.pu), cU + 10, y); x.font = "700 20px " + F; x.fillText(money(l.amt), cA, y);
+      y += 34 * ls.length - 14; x.strokeStyle = "#bbb"; x.setLineDash([5, 5]); x.beginPath(); x.moveTo(P, y); x.lineTo(W - P, y); x.stroke(); x.setLineDash([]); y += 34;
+    });
+    // Totaux à droite, cachet à gauche
+    var sx = W / 2 + 20, sy = y + 6, row = function (a, b, bold, col) { x.textAlign = "left"; x.fillStyle = "#333"; x.font = (bold ? "800 25px " : "19px ") + F; x.fillText(a, sx, sy); x.textAlign = "right"; x.fillStyle = col || "#111"; x.font = (bold ? "800 25px " : "700 19px ") + F; x.fillText(b, W - P, sy); sy += bold ? 44 : 32; };
+    x.fillStyle = "#111"; x.fillRect(sx, sy - 6, W - P - sx, 3); sy += 30; row(L("total"), money(R.total), true); x.fillRect(sx, sy - 34, W - P - sx, 3); sy += 6;
+    row(L("paid") + (R.mode ? " (" + R.mode + ")" : ""), money(R.paid)); if (R.rest > 0) row(L("rest"), money(R.rest), false, "#c62828"); row(L("status"), L(R.st), false, R.st === "stPaid" ? "#2e7d32" : "#c62828");
+    drawStamp(x, R, P + 105, y + 105, 98);
+    y = Math.max(sy, y + 215) + 20;
+    if (R.note) { x.textAlign = "left"; x.fillStyle = "#444"; x.font = "italic 18px " + F; x.fillText((L("note") + " : " + R.note).slice(0, 70), P, y); y += 36; }
+    x.textAlign = "center"; x.fillStyle = "#111"; x.font = "700 21px " + F; x.fillText(L("receiptThanks"), W / 2, y + 8); x.fillStyle = "#888"; x.font = "16px " + F; x.fillText(L("rcptFoot"), W / 2, y + 36);
+    var endY = y + 62, out = document.createElement("canvas"); out.width = W; out.height = endY;
+    var o = out.getContext("2d"); o.drawImage(cv, 0, 0); o.fillStyle = "#2e7d32"; o.fillRect(0, endY - 10, W, 10);
+    return out;
+  }
+  function drawStamp(x, R, cx, cy, rad) {
+    var ink = "#1f3fa8", F = "Arial,Helvetica,sans-serif";
+    x.save(); x.translate(cx, cy); x.rotate(-0.21); x.globalAlpha = 0.88; x.strokeStyle = ink; x.fillStyle = ink;
+    [[rad, 5], [rad * 0.89, 2], [rad * 0.54, 2.2]].forEach(function (c) { x.lineWidth = c[1]; x.beginPath(); x.arc(0, 0, c[0], 0, Math.PI * 2); x.stroke(); });
+    var arc = function (txt, r, size, top) {
+      x.font = "700 " + size + "px " + F; var widths = txt.split("").map(function (ch) { return x.measureText(ch).width + size * 0.08; }), tot = widths.reduce(function (a, b) { return a + b; }, 0);
+      var ang = (top ? -Math.PI / 2 : Math.PI / 2) + (top ? -1 : 1) * tot / r / 2;
+      txt.split("").forEach(function (ch, i) { var a = ang + (top ? 1 : -1) * widths[i] / r / 2; x.save(); x.rotate(a); x.translate(r, 0); x.rotate(top ? Math.PI / 2 : -Math.PI / 2); x.textAlign = "center"; x.fillText(ch, 0, 0); x.restore(); ang += (top ? 1 : -1) * widths[i] / r; });
+    };
+    var name = R.shop.toUpperCase().slice(0, 30), fs = Math.max(11, Math.min(21, (Math.PI * rad * 0.72) / (name.length * 0.66 + 1)));
+    x.textBaseline = "alphabetic"; arc(name, rad * 0.66, fs, true); arc((R.phone || "MALI").toUpperCase().slice(0, 22), rad * 0.8, 12, false);
+    x.textAlign = "center"; x.font = "15px " + F; x.fillText("★", -rad * 0.72, 5); x.fillText("★", rad * 0.72, 5);
+    var st = L(R.st); x.font = "900 " + (st.length > 6 ? 15 : 20) + "px " + F; x.fillText(st, 0, 3); x.font = "700 12px " + F; x.fillText(R.date, 0, 22);
+    x.restore();
+  }
+  function shareReceiptImage() {
+    var r = S.modal && getE("sale", S.modal.id); if (!r) return;
+    var R = rcpt(r), cv = receiptCanvas(r), fname = "recu-" + R.no + ".png";
+    cv.toBlob(function (blob) {
+      if (!blob) return toast("❌ " + L("errGeneric"));
+      var file = null; try { file = new File([blob], fname, { type: "image/png" }); } catch (e) {}
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+        navigator.share({ files: [file], title: R.shop + " — " + R.no }).catch(function () {});
+        return;
+      }
+      var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fname; document.body.appendChild(a); a.click();
+      setTimeout(function () { a.remove(); }, 1500); toast("✅ " + L("imgSaved"));
+    }, "image/png");
   }
 
   // ---------------- Actions ----------------
@@ -1028,7 +1155,7 @@
     var paid = d.mode === "credit" ? num(d.paid) : num(d.paid);
     if (paid < tot && !d.client) return toast(L("client") + " : " + L("required"));
     var e = S.modal.id || rid("s_");
-    write("sale", e, { d: d.d || today(), lines: lines, total: tot, paid: Math.min(paid, tot), mode: d.mode === "credit" ? (paid > 0 ? "cash" : "credit") : d.mode, client: d.client || null, note: String(d.note || "").slice(0, 200) });
+    write("sale", e, { d: d.d || today(), lines: lines, total: tot, paid: Math.min(paid, tot), mode: d.mode === "credit" ? (paid > 0 ? "cash" : "credit") : d.mode, client: d.client || null, cname: d.client ? "" : String(d.cname || "").trim().slice(0, 60), note: String(d.note || "").slice(0, 200) });
     S.modal = { t: "receipt", id: e }; render();
     toast("✅ " + L("saved"));
   }
@@ -1144,6 +1271,7 @@
         case "edit": openForm(k, v); break;
         case "delete": if (confirm(L("confirmDel"))) { write(k, v, null, true); done(); } break;
         case "receipt": S.modal = { t: "receipt", id: v }; render(); break;
+        case "receipt-img": shareReceiptImage(); break;
         case "print": printReceipt(); break;
         case "modal-close": case "modal-bg": S.modal = null; render(); break;
         case "ladd": {
@@ -1290,17 +1418,11 @@
     var w = fmt === "t58" ? 58 : fmt === "t80" ? 80 : 0;
     var css = w ? "@page{size:" + w + "mm auto;margin:0}body{width:" + (w - 6) + "mm;margin:0 3mm;font-family:'Courier New',monospace;font-size:" + (w === 58 ? 10.5 : 12) + "px;color:#000}h2{font-size:1.3em;text-align:center;margin:4px 0}p{margin:2px 0}.c{text-align:center}.l{display:flex;justify-content:space-between;gap:4px}.l span{flex:1;min-width:0;word-break:break-word}.sep{border-top:1px dashed #000;margin:4px 0}.tot{font-size:1.25em;font-weight:bold}"
       : "@page{size:A4;margin:14mm}body{font-family:Arial,sans-serif;font-size:12px;color:#111}h1,h2{margin:0 0 8px}table{width:100%;border-collapse:collapse;margin:8px 0}th,td{border:1px solid #bbb;padding:5px 7px;text-align:left}td.r,th.r{text-align:right}.l{display:flex;justify-content:space-between;border-bottom:1px dashed #ccc;padding:4px 0}.tot{font-size:16px;font-weight:bold;text-align:right;margin-top:8px}.c{text-align:center}.sep{border-top:1px solid #999;margin:8px 0}.muted{color:#666}";
-    return '<!doctype html><html><head><meta charset="utf-8"><title>Sounsouni</title><style>' + css + '</style></head><body>' + body + '</body></html>';
+    return '<!doctype html><html><head><meta charset="utf-8"><title>Sounsouni</title><style>' + css + RC_CSS + (w ? ".rc-ticket .rc-bottom{flex-direction:column-reverse;align-items:stretch}.rc-ticket .rc-sum{max-width:none}.rc-ticket .rc-stamp{text-align:center}.rc-ticket .rc-meta{grid-template-columns:1fr}" : ".rc-a4{max-width:150mm;margin:0 auto;font-size:13px}.rc-a4 .rc-sum{max-width:80mm}") + '</style></head><body>' + body + '</body></html>';
   }
   function ticketBody(r) {
-    var c = r.client ? getE("client", r.client) : null, h = '<h2>' + esc(S.name) + '</h2>';
-    if (setting("address", "")) h += '<p class="c">' + esc(setting("address", "")) + '</p>';
-    if (setting("phone", "")) h += '<p class="c">' + esc(setting("phone", "")) + '</p>';
-    h += '<div class="sep"></div><p>' + L("receipt") + ' N° ' + esc(String(r.id).slice(-6).toUpperCase()) + '</p><p>' + dateFr(r.d) + (r._bn ? ' · ' + esc(r._bn) : '') + '</p>' + (c ? '<p>' + L("client") + ' : ' + esc(c.name) + '</p>' : '') + '<div class="sep"></div>';
-    saleLines(r).forEach(function (l) { h += '<div class="l"><span>' + qtyFmt(l.qty) + ' x ' + esc(l.name) + '</span><b>' + money(num(l.qty) * num(l.price)) + '</b></div>'; });
-    h += '<div class="sep"></div><div class="l tot"><span>' + L("total") + '</span><span>' + money(r.total) + '</span></div><div class="l"><span>' + L("paid") + ' (' + esc(r.mode === "sounsouni" ? "Sounsouni" : modeLabel(r.mode)) + ')</span><span>' + money(r.paid) + '</span></div>';
-    if (num(r.total) - num(r.paid) > 0) h += '<div class="l"><span>' + L("rest") + '</span><span>' + money(num(r.total) - num(r.paid)) + '</span></div>';
-    return h + '<div class="sep"></div><p class="c">' + L("receiptThanks") + '</p><p class="c">Sounsouni Gestion</p>';
+    var fmt = printCfg().fmt, ticket = fmt === "t58" || fmt === "t80";
+    return '<div class="rc' + (ticket ? ' rc-ticket' : ' rc-a4') + '">' + receiptHtml(r, ticket ? "#000" : "#1f3fa8", ticket) + '</div>';
   }
   function ticketText(r) {
     var W = printCfg().fmt === "t58" ? 32 : 42, out = [];
@@ -1308,12 +1430,15 @@
     var center = function (s) { s = fold(s).slice(0, W); var p = Math.max(0, Math.floor((W - s.length) / 2)); return new Array(p + 1).join(" ") + s; };
     var two = function (a, b) { a = fold(a); b = fold(b); var sp = W - b.length - 1; if (a.length > sp) { out.push(a.slice(0, W)); a = ""; } return a + new Array(Math.max(1, W - a.length - b.length) + 1).join(" ") + b; };
     var line = new Array(W + 1).join("-");
-    out.push(center(S.name)); if (setting("phone", "")) out.push(center(setting("phone", "")));
-    out.push(line, fold(L("receipt") + " " + String(r.id).slice(-6).toUpperCase() + "  " + dateFr(r.d)), line);
-    saleLines(r).forEach(function (l) { out.push(two(qtyFmt(l.qty) + " x " + l.name, money(num(l.qty) * num(l.price)))); });
-    out.push(line, two(L("total"), money(r.total)), two(L("paid"), money(r.paid)));
-    if (num(r.total) - num(r.paid) > 0) out.push(two(L("rest"), money(num(r.total) - num(r.paid))));
-    out.push(line, center(L("receiptThanks")), "", "", "");
+    var R = rcpt(r);
+    out.push(center(R.shop.toUpperCase())); if (R.addr) out.push(center(R.addr)); if (R.phone) out.push(center(L("tel") + " " + R.phone));
+    out.push(line, center(L("rcptTitle")), line, two("N° " + R.no, R.date + (R.time ? " " + R.time : "")), fold(L("client") + " : " + (R.client || L("walkin"))));
+    if (R.seller) out.push(fold(L("seller") + " : " + R.seller));
+    out.push(line);
+    R.lines.forEach(function (l) { out.push(fold(l.name).slice(0, W)); out.push(two("  " + qtyFmt(l.qty) + " x " + money(l.pu), money(l.amt))); });
+    out.push(line, two(L("total").toUpperCase(), money(R.total)), two(L("paid") + (R.mode ? " (" + R.mode + ")" : ""), money(R.paid)));
+    if (R.rest > 0) out.push(two(L("rest"), money(R.rest)));
+    out.push(two(L("status"), L(R.st)), line, center(L("receiptThanks")), center("Sounsouni Gestion"), "", "", "");
     return out.join("\n");
   }
   function printDoc(body, opts) {
@@ -1555,7 +1680,7 @@
       ".gx-picker{border:1px dashed var(--bd);border-radius:14px;padding:8px;margin-bottom:6px}.gx-pick-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;max-height:170px;overflow-y:auto}",
       ".gx-pick-list button{border:1px solid var(--bd);background:var(--bg);color:var(--tx);border-radius:10px;padding:7px 10px;font-size:12.5px;font-weight:700;text-align:left;max-width:100%}.gx-pick-list button small{display:block;font-weight:500;color:var(--dim);font-size:11px}.gx-pick-list .gx-other{color:var(--g)}",
       ".gx-meta{font-size:11.5px;color:var(--dim);margin-top:10px}.gx-hist{font-size:11.5px;color:var(--dim);margin-top:6px}.gx-hist div{padding:3px 0}",
-      ".gx-receipt{border:1px dashed var(--bd);border-radius:12px;padding:14px;text-align:left}.gx-receipt h2{margin:0 0 4px}",
+      ".gx-receipt{border:1px solid var(--bd);border-radius:12px;padding:16px 14px;text-align:left;background:#fff;color:#111;box-shadow:0 2px 10px rgba(0,0,0,.06)}" + RC_CSS + "@media(max-width:380px){.gx-receipt .rc-stamp svg{width:92px;height:92px}}",
       "@media (max-width:360px){.gx-fgrid{grid-template-columns:1fr}.gx-kpi b{font-size:15px}}"
     ].join("\n");
     var st = document.createElement("style"); st.id = "gx-css"; st.textContent = css; document.head.appendChild(st);
