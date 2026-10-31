@@ -124,5 +124,21 @@ check("l'Admin voit la liste", r.success && r.companies.length === 1 && r.compan
 r = await call("admin_owner", { operation: "admin_config", mode: "paid", price: 50, days: 30 });
 check("tarif trop petit refusé", r.error === "price_min_100", r);
 
+console.log("== Documents pour l'application Android (doc_put / doc_get)");
+r = await call(null, { operation: "doc_put", kind: "print", name: "x.html", mime: "text/html", data: "PGI+" });
+check("déposer sans session : refusé", r.error === "session_required", r);
+r = await call("CHEF", { operation: "doc_put", kind: "file", name: "a.exe", mime: "application/x-msdownload", data: "AA==" });
+check("type de fichier interdit : refusé", r.error === "bad_mime", r);
+r = await call("CHEF", { operation: "doc_put", kind: "file", name: "rapport.csv", mime: "text/csv", data: btoa("a;b\n1;2") });
+check("dépôt d'un CSV : code de 32 caractères", r.success && /^[a-f0-9]{32}$/.test(r.id), r);
+const docId = r.id;
+r = await call(null, { operation: "doc_get", id: docId });
+check("lecture sans session avec le code", r.success && r.name === "rapport.csv" && atob(r.data) === "a;b\n1;2", r);
+r = await call(null, { operation: "doc_get", id: "0".repeat(32) });
+check("mauvais code : rien", r.error === "expired", r);
+const row = (TABLES.gestion_docs || []).find((x: any) => x.id === docId); row.created_at = new Date(Date.now() - 3 * 3600000).toISOString();
+r = await call(null, { operation: "doc_get", id: docId });
+check("après 2 heures : expiré", r.error === "expired", r);
+
 console.log("\n" + pass + " réussis, " + failN + " échoués");
 if (failN) Deno.exit(1);

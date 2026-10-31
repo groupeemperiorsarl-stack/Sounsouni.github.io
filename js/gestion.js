@@ -1224,8 +1224,7 @@
         navigator.share({ files: [file], title: R.shop + " — " + R.no }).catch(function () {});
         return;
       }
-      var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fname; document.body.appendChild(a); a.click();
-      setTimeout(function () { a.remove(); }, 1500); toast("✅ " + L("imgSaved"));
+      saveFile(blob, fname, "image/png"); if (!nativeApp()) toast("✅ " + L("imgSaved"));
     }, "image/png"); });
   }
 
@@ -1309,8 +1308,7 @@
   function receiptWord() {
     var r = S.modal && getE("sale", S.modal.id); if (!r) return;
     var R = rcpt(r), blob = receiptDocx(r), fname = "recu-" + R.no + ".docx";
-    var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fname; document.body.appendChild(a); a.click();
-    setTimeout(function () { a.remove(); }, 1500); toast("✅ " + L("wordSaved"));
+    saveFile(blob, fname, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"); if (!nativeApp()) toast("✅ " + L("wordSaved"));
   }
 
   // ---------------- Actions ----------------
@@ -1405,9 +1403,7 @@
   function backupName() { return "sounsouni-gestion-" + S.name.replace(/[^A-Za-z0-9]+/g, "-").toLowerCase() + "-" + today() + ".json"; }
   function markBackup() { S.meta.lastBackup = Date.now(); dbMeta(S.cid, S.meta); render(); }
   function backupDownload() {
-    var blob = new Blob([backupData()], { type: "application/json" }), a = document.createElement("a");
-    a.href = URL.createObjectURL(blob); a.download = backupName(); document.body.appendChild(a); a.click();
-    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+    saveFile(backupData(), backupName(), "application/json");
     markBackup();
   }
   function backupShare() {
@@ -1445,7 +1441,7 @@
     live("expense").forEach(function (x) { if (inRange(x.d, r)) rowsOut.push(["Dépense", x.d, catLabel(x.cat || "autre") + (x.note ? " - " + x.note : ""), partyName("employee", x.employee), x.mode, -num(x.amount), -num(x.amount), x._bn]); });
     live("payment").forEach(function (p) { if (inRange(p.d, r)) rowsOut.push([p.side === "client" ? "Encaissement" : "Paiement fournisseur", p.d, p.note || "", partyName(p.side, p.party), p.mode, p.side === "client" ? num(p.amount) : -num(p.amount), "", p._bn]); });
     var csv = "﻿" + rowsOut.map(function (r2) { return r2.map(function (v) { var s = String(v == null ? "" : v); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(";"); }).join("\r\n");
-    var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = "rapport-" + r[0] + "-" + r[1] + ".csv"; document.body.appendChild(a); a.click(); setTimeout(function () { a.remove(); }, 1500);
+    saveFile(csv, "rapport-" + r[0] + "-" + r[1] + ".csv", "text/csv");
   }
 
   function bindEvents() {
@@ -1677,7 +1673,7 @@
   function docHtml(body, fmt) {
     var w = fmt === "t58" ? 58 : fmt === "t80" ? 80 : 0;
     var css = w ? "@page{size:" + w + "mm auto;margin:0}body{width:" + (w - 6) + "mm;margin:0 3mm;font-family:'Courier New',monospace;font-size:" + (w === 58 ? 10.5 : 12) + "px;color:#000}h2{font-size:1.3em;text-align:center;margin:4px 0}p{margin:2px 0}.c{text-align:center}.l{display:flex;justify-content:space-between;gap:4px}.l span{flex:1;min-width:0;word-break:break-word}.sep{border-top:1px dashed #000;margin:4px 0}.tot{font-size:1.25em;font-weight:bold}"
-      : "@page{size:A4;margin:14mm}body{font-family:Arial,sans-serif;font-size:12px;color:#111}h1,h2{margin:0 0 8px}table{width:100%;border-collapse:collapse;margin:8px 0}th,td{border:1px solid #bbb;padding:5px 7px;text-align:left}td.r,th.r{text-align:right}.l{display:flex;justify-content:space-between;border-bottom:1px dashed #ccc;padding:4px 0}.tot{font-size:16px;font-weight:bold;text-align:right;margin-top:8px}.c{text-align:center}.sep{border-top:1px solid #999;margin:8px 0}.muted{color:#666}";
+      : "@page{size:A4;margin:14mm}.gx-kpis{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}.gx-kpi{border:1px solid #bbb;border-radius:8px;padding:8px 12px;min-width:45mm}.gx-kpi span{display:block;color:#555;font-size:11px}.gx-kpi b{display:block;font-size:16px;margin-top:2px}body{font-family:Arial,sans-serif;font-size:12px;color:#111}h1,h2{margin:0 0 8px}table{width:100%;border-collapse:collapse;margin:8px 0}th,td{border:1px solid #bbb;padding:5px 7px;text-align:left}td.r,th.r{text-align:right}.l{display:flex;justify-content:space-between;border-bottom:1px dashed #ccc;padding:4px 0}.tot{font-size:16px;font-weight:bold;text-align:right;margin-top:8px}.c{text-align:center}.sep{border-top:1px solid #999;margin:8px 0}.muted{color:#666}";
     return '<!doctype html><html><head><meta charset="utf-8"><title>Sounsouni</title><style>' + css + RC_CSS + (w ? ".rc-ticket .rc-sum{max-width:none}.rc-ticket .rc-meta{grid-template-columns:1fr}.rc-ticket .rc-head{flex-direction:column;gap:4px}.rc-ticket .rc-logo{width:48px;height:48px}.rc-ticket .rc-sign{min-height:110px;border-color:#000}" : ".rc-a4{font-size:13px}.rc-a4 .rc-head{justify-content:flex-start;text-align:left}.rc-a4 .rc-logo{width:84px;height:84px}.rc-a4 .rc-t th,.rc-a4 .rc-t td{border:1px solid #bbb;padding:6px 8px}.rc-a4 .rc-t th{background:#e5f4e4}.rc-a4 .rc-sum{max-width:85mm}.rc-a4 .rc-sign{min-height:42mm}.rc-a4 .rc-foot{margin-top:18px}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}") + '</style></head><body>' + body + '</body></html>';
   }
   function ticketBody(r) {
@@ -1708,6 +1704,35 @@
     out.push(line, center(L("receiptThanks")), center("Sounsouni Gestion"), "", "", "");
     return out.join("\n");
   }
+  // ---------------- Application Android : imprimer / enregistrer via Chrome ----------------
+  // L'application Android ne sait ni imprimer ni enregistrer un fichier. On
+  // envoie le document au serveur (gardé 2 h) puis on l'ouvre dans Chrome
+  // (sounsouni.pro/doc.html), qui sait imprimer, faire un PDF et télécharger.
+  function nativeApp() { try { var C = window.Capacitor; return !!(C && C.isNativePlatform && C.isNativePlatform()); } catch (e) { return false; } }
+  function openOutside(url) {
+    var C = window.Capacitor, B = C && C.Plugins && C.Plugins.Browser;
+    if (B && B.open) { var p = B.open({ url: url, toolbarColor: "#2e7d32" }); if (p && p.catch) p.catch(function () { window.open(url, "_system"); }); return; }
+    window.open(url, "_system");
+  }
+  function b64Text(str) { return btoa(unescape(encodeURIComponent(str))); }
+  function sendToBrowser(kind, name, mime, b64) {
+    if (navigator.onLine === false) return toast("❌ " + L("mustOnline"));
+    toast("⏳ " + L("loading"));
+    api("doc_put", { kind: kind, name: name, mime: mime, data: b64 }).then(function (r) {
+      if (r && r.success && r.id) openOutside("https://sounsouni.pro/doc.html#" + r.id);
+      else toast("❌ " + (r && r.error === "network_error" ? L("mustOnline") : L("errGeneric")));
+    });
+  }
+  // Enregistrer un fichier (texte ou Blob) : téléchargement normal, ou Chrome dans l'application Android.
+  function saveFile(data, name, mime) {
+    if (nativeApp()) {
+      if (typeof data === "string") return sendToBrowser("file", name, mime, b64Text(data));
+      var rd = new FileReader(); rd.onload = function () { sendToBrowser("file", name, mime, String(rd.result).split(",")[1] || ""); }; rd.readAsDataURL(data); return;
+    }
+    var blob = typeof data === "string" ? new Blob([data], { type: mime }) : data, a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+  }
   function printDoc(body, opts) {
     opts = opts || {};
     var c = printCfg(), fmt = opts.a4 ? "a4" : (c.fmt || "a4"), d = window.SnsDesktop, html = docHtml(body, fmt);
@@ -1721,6 +1746,7 @@
       window.location.href = "rawbt:base64," + b64;
       return;
     }
+    if (nativeApp()) return sendToBrowser("print", "document.html", "text/html", b64Text(html));
     var fr = document.createElement("iframe");
     fr.style.cssText = "position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0";
     document.body.appendChild(fr);
@@ -1859,7 +1885,7 @@
     var out = [["Date", "Piece", "Compte", "Intitule", "Libelle", "Debit", "Credit"]];
     list.forEach(function (e) { e.lines.forEach(function (x) { out.push([e.d, e.ref, x[0], ACC[x[0]] || "", e.lib, Math.round(x[1]) || "", Math.round(x[2]) || ""]); }); });
     var csv = "﻿" + out.map(function (r2) { return r2.map(function (v) { var s2 = String(v == null ? "" : v); return /[";\n]/.test(s2) ? '"' + s2.replace(/"/g, '""') + '"' : s2; }).join(";"); }).join("\r\n");
-    var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = "journal-syscohada-" + r[0] + "-" + r[1] + ".csv"; document.body.appendChild(a); a.click(); setTimeout(function () { a.remove(); }, 1500);
+    saveFile(csv, "journal-syscohada-" + r[0] + "-" + r[1] + ".csv", "text/csv");
   }
 
   // ---------------- Styles ----------------

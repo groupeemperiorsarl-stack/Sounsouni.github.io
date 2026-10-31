@@ -42,6 +42,16 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const op = String(body.operation || "");
     const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    // Document à imprimer ou à télécharger depuis l'application Android (qui
+    // ne sait ni imprimer ni enregistrer de fichier) : la page sounsouni.pro/doc.html
+    // le récupère avec son code secret (32 caractères), pendant 2 heures.
+    if (op === "doc_get") {
+      const id = String(body.id || "");
+      if (!/^[a-f0-9]{32}$/.test(id)) return json({ success: false, error: "bad_id" }, 400);
+      const { data: d } = await db.from("gestion_docs").select("*").eq("id", id).maybeSingle();
+      if (!d || Date.now() - new Date((d as any).created_at).getTime() > 2 * 3600000) return json({ success: false, error: "expired" }, 404);
+      return json({ success: true, kind: (d as any).kind, name: (d as any).name, mime: (d as any).mime, data: (d as any).data });
+    }
     const s = await sessionOf(req);
     if (!s) return json({ success: false, error: "session_required" }, 401);
     const callerId = String(s.accountId);
@@ -131,6 +141,17 @@ Deno.serve(async (req) => {
       return { m: m as any, c: c as any };
     };
 
+    if (op === "doc_put") {
+      const kind = body.kind === "print" ? "print" : "file", data = String(body.data || "");
+      const mime = String(body.mime || ""), name = String(body.name || "document").replace(/[^A-Za-z0-9._ -]/g, "-").slice(0, 80);
+      if (!["text/html", "text/csv", "application/json", "image/png", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"].includes(mime)) return json({ success: false, error: "bad_mime" }, 400);
+      if (!data || data.length > 4000000) return json({ success: false, error: "too_big" }, 413);
+      await db.from("gestion_docs").delete().lt("created_at", new Date(Date.now() - 3 * 3600000).toISOString());
+      const id = Array.from(crypto.getRandomValues(new Uint8Array(16))).map((b) => b.toString(16).padStart(2, "0")).join("");
+      const { error } = await db.from("gestion_docs").insert({ id, owner_id: callerId, kind, name, mime, data });
+      if (error) return json({ success: false, error: "server_error" }, 500);
+      return json({ success: true, id });
+    }
     if (op === "my") {
       const cfg = await getCfg();
       const { data: ms } = await db.from("gestion_members").select("*").eq("phone", myPhone);

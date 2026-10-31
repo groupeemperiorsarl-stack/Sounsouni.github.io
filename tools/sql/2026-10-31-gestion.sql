@@ -66,3 +66,18 @@ grant execute on function public.sns_gestion_extend(text, text, int) to service_
 -- à internet (migration social_logins_private_2026_10_31).
 -- create policy "social_logins_no_direct_access" on public.app_data as restrictive for all to anon, authenticated
 --   using (collection <> 'socialLogins') with check (collection <> 'socialLogins');
+
+-- Documents à imprimer / télécharger depuis l'application Android
+-- (migration gestion_docs_2026_10_31). Gardés 2 heures, lus par code secret.
+create table if not exists public.gestion_docs (
+  id text primary key,
+  owner_id text not null,
+  kind text not null,
+  name text not null,
+  mime text not null,
+  data text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists gestion_docs_created on public.gestion_docs(created_at);
+alter table public.gestion_docs enable row level security;
+revoke all on public.gestion_docs from anon, authenticated;

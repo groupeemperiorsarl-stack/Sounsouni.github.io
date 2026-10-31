@@ -110,6 +110,7 @@ class T {
   select(s = "*", o?: any) { if (this.mode === "select") { this.sel = s; this.cnt = !!(o && o.count); this.head = !!(o && o.head); } return this; }
   eq(c: string, v: any) { this.f.push((r) => r[c] !== undefined && r[c] !== null && String(r[c]) === String(v)); return this; }
   gt(c: string, v: any) { this.f.push((r) => Number(r[c]) > Number(v)); return this; }
+  lt(c: string, v: any) { this.f.push((r) => String(r[c]) < String(v)); return this; }
   in(c: string, a: any[]) { this.f.push((r) => a.map(String).includes(String(r[c]))); return this; }
   not(c: string, _op: string, val: string) { const l = val.replace(/^\(|\)$/g, "").split(",").map((x) => x.replace(/^"|"$/g, "")); this.f.push((r) => !l.includes(String(r[c]))); return this; }
   order(c: string, o?: any) { this.ord = [c, !(o && o.ascending === false)]; return this; }
@@ -141,6 +142,7 @@ class T {
         if (dup) { if (this.mode === "insert") return { data: null, error: { message: "duplicate key" } }; if (this.o.ignoreDuplicates) continue; Object.assign(dup, p); continue; }
         if (this.t === "gestion_companies") { p.plan = p.plan || "free"; p.paid_until = p.paid_until || 0; }
         if (this.t === "gestion_members") p.status = p.status || "invited";
+        if (this.t === "gestion_docs") p.created_at = p.created_at || new Date().toISOString();
         tab.push(p);
       }
       return { data: null, error: null };
