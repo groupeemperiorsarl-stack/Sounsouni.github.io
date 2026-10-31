@@ -62,8 +62,10 @@
     stockVar: "Variation des stocks", balanced: "Équilibré", notBalanced: "Non équilibré", ohadaNote: "Stock évalué au dernier prix d'achat de chaque article. À faire vérifier par votre expert-comptable avant dépôt officiel.",
     rcptTitle: "REÇU DE VENTE", seller: "Vendeur", walkin: "Client de passage", unitP: "P.U.", amountCol: "Montant", status: "Statut", stPaid: "PAYÉ", stPartial: "ACOMPTE", stCredit: "À CRÉDIT", shareImg: "Envoyer le reçu (image)", waText: "WhatsApp (texte)", clientName: "Nom du client (sur le reçu)", atTime: "à", rcptFoot: "Reçu émis avec Sounsouni Gestion", rcptSetHint: "Ajoutez l'adresse et le téléphone de la boutique dans Réglages : ils seront sur vos reçus.", imgSaved: "Image du reçu enregistrée", tel: "Tél",
     stampAuto: "Cachet automatique sur les reçus", stampHint: "Décochez si vous préférez poser votre vrai cachet sur le papier : une case vide est laissée pour lui.", stampZone: "Cachet et signature du vendeur", clientSign: "Signature du client",
-    wordDl: "Télécharger en Word", wordSaved: "Fichier Word enregistré", arrete: "Arrêté le présent reçu à la somme de", francsCfa: "francs CFA", design: "Désignation", num: "N°",
+    wordDl: "Télécharger en Word", wordSaved: "Fichier Word enregistré", arrete: "Arrêté le présent reçu à la somme de", arreteF: "Arrêtée la présente facture à la somme de", francsCfa: "francs CFA", design: "Désignation", num: "N°",
     email: "E-mail", rccm: "RCCM", nif: "NIF", logo: "Logo", logoAdd: "Ajouter le logo", logoDel: "Enlever le logo", logoBig: "Image trop lourde, essayez une autre.", rcptNote: "Mention en bas du reçu (facultatif)", rcptNotePh: "Ex. : Les marchandises vendues ne sont ni reprises ni échangées.", rcptCard: "Vos reçus", payMode: "Mode de paiement", hour: "Heure",
+    imm: "N° d'immatriculation", bank: "Compte bancaire", bankPh: "Ex. : BDM-SA — ML016 01201 …", show: "Afficher", tvaOn: "Faire des factures avec TVA", tvaRate: "Taux de TVA (%)", tvaMode: "Les prix que vous tapez sont", tvaHT: "Hors taxe (HT)", tvaTTC: "TVA comprise (TTC)",
+    askMode: "À chaque vente", askAuto: "Automatique : rien n'est demandé", askAsk: "Me demander quoi mettre sur le reçu", onThisDoc: "Sur ce reçu", invoice: "FACTURE", invoiceShort: "Facture", totalHT: "Total HT", tvaAmt: "TVA", totalTTC: "Total TTC", rcptInfos: "Informations à mettre sur les reçus", rcptInfosHint: "Remplissez une fois. Cochez « Afficher » pour qu'elles apparaissent sur les reçus.",
     gDaily: "Chaque jour", gMoney: "Mes comptes", gPeople: "Les personnes", gOther: "Autres",
     dHome: "Les chiffres du jour et du mois", dSales: "Noter ce que vous vendez", dItems: "Vos produits et ce qui reste en stock", dExpenses: "Loyer, transport, salaires…", dPurchases: "Marchandises achetées pour revendre",
     dClients: "Qui vous doit de l'argent", dSuppliers: "À qui vous devez de l'argent", dEmployees: "Votre personnel et les salaires", dReports: "Bénéfice, meilleures ventes, dépenses", dOhada: "Bilan, compte de résultat, journal (faits tout seuls)",
@@ -117,8 +119,10 @@
     stockVar: "Change in inventory", balanced: "Balanced", notBalanced: "Not balanced", ohadaNote: "Stock valued at each item's latest purchase price. Have it checked by your accountant before any official filing.",
     rcptTitle: "SALES RECEIPT", seller: "Seller", walkin: "Walk-in customer", unitP: "Unit", amountCol: "Amount", status: "Status", stPaid: "PAID", stPartial: "DEPOSIT", stCredit: "ON CREDIT", shareImg: "Send receipt (image)", waText: "WhatsApp (text)", clientName: "Customer name (on receipt)", atTime: "at", rcptFoot: "Receipt issued with Sounsouni Gestion", rcptSetHint: "Add the shop address and phone in Settings: they will appear on your receipts.", imgSaved: "Receipt image saved", tel: "Tel",
     stampAuto: "Automatic stamp on receipts", stampHint: "Untick if you prefer to put your real stamp on the paper: an empty box is left for it.", stampZone: "Seller's stamp and signature", clientSign: "Customer's signature",
-    wordDl: "Download as Word", wordSaved: "Word file saved", arrete: "This receipt is closed at the sum of", francsCfa: "CFA francs", design: "Description", num: "No.",
+    wordDl: "Download as Word", wordSaved: "Word file saved", arrete: "This receipt is closed at the sum of", arreteF: "This invoice is closed at the sum of", francsCfa: "CFA francs", design: "Description", num: "No.",
     email: "Email", rccm: "Trade reg. (RCCM)", nif: "Tax ID (NIF)", logo: "Logo", logoAdd: "Add logo", logoDel: "Remove logo", logoBig: "Image too heavy, try another one.", rcptNote: "Note at the bottom of receipts (optional)", rcptNotePh: "E.g.: Goods sold are neither returned nor exchanged.", rcptCard: "Your receipts", payMode: "Payment method", hour: "Time",
+    imm: "Registration no.", bank: "Bank account", bankPh: "E.g.: BDM-SA — ML016 01201 …", show: "Show", tvaOn: "Make invoices with VAT", tvaRate: "VAT rate (%)", tvaMode: "The prices you type are", tvaHT: "Excl. tax", tvaTTC: "VAT included",
+    askMode: "On each sale", askAuto: "Automatic: nothing is asked", askAsk: "Ask me what to put on the receipt", onThisDoc: "On this receipt", invoice: "INVOICE", invoiceShort: "Invoice", totalHT: "Total excl. tax", tvaAmt: "VAT", totalTTC: "Total incl. tax", rcptInfos: "Information shown on receipts", rcptInfosHint: "Fill in once. Tick “Show” so it appears on receipts.",
     gDaily: "Every day", gMoney: "My accounts", gPeople: "People", gOther: "Other",
     dHome: "Today's and this month's figures", dSales: "Record what you sell", dItems: "Your products and stock left", dExpenses: "Rent, transport, salaries…", dPurchases: "Goods bought to resell",
     dClients: "Who owes you money", dSuppliers: "Who you owe money to", dEmployees: "Your staff and salaries", dReports: "Profit, best sellers, expenses", dOhada: "Balance sheet, income statement, journal (done for you)",
@@ -223,6 +227,7 @@
   }
   function live(k) { var b = S.ent[k], out = []; for (var id in b) if (!b[id]._del) out.push(b[id]); return out; }
   function getE(k, id) { var r = S.ent[k][id]; return r && !r._del ? r : null; }
+  var SET_KEYS = ["openingCash", "phone", "address", "ohada", "email", "rccm", "nif", "rcptNote", "imm", "bank", "showImm", "showRccm", "showNif", "showBank", "tvaOn", "tvaRate", "tvaMode", "askMode"];
   function setting(key, def) { var s = getE("settings", "main"); return s && s[key] !== undefined ? s[key] : def; }
 
   function can(action) {
@@ -406,8 +411,8 @@
     var f = { revenue: 0, cogs: 0, expenses: 0, salesN: 0, cashIn: 0, cashOut: 0, byCat: {}, byItem: {}, byDay: {}, purchases: 0 };
     live("sale").forEach(function (s) {
       if (!inRange(s.d, r)) return;
-      f.salesN++; f.revenue += num(s.total); f.cashIn += num(s.paid);
-      f.byDay[s.d] = (f.byDay[s.d] || 0) + num(s.total);
+      f.salesN++; f.revenue += num(s.total) - saleTva(s); f.cashIn += num(s.paid); f.tvaColl = (f.tvaColl || 0) + saleTva(s);
+      f.byDay[s.d] = (f.byDay[s.d] || 0) + num(s.total) - saleTva(s);
       saleLines(s).forEach(function (l) {
         f.cogs += num(l.cost) * num(l.qty);
         var key = l.item || ("txt:" + l.name);
@@ -777,8 +782,6 @@
     h += '<label class="gx-field">' + L("address") + '<input id="gx-set-addr" value="' + esc(setting("address", "")) + '"' + (can("settings") ? '' : ' disabled') + '></label>';
     var dis = can("settings") ? '' : ' disabled';
     h += '<label class="gx-field">' + L("email") + '<input id="gx-set-email" type="email" value="' + esc(setting("email", "")) + '"' + dis + '></label>';
-    h += '<div class="gx-fgrid"><label class="gx-field">' + L("rccm") + '<input id="gx-set-rccm" value="' + esc(setting("rccm", "")) + '" placeholder="ML-BKO-…"' + dis + '></label><label class="gx-field">' + L("nif") + '<input id="gx-set-nif" value="' + esc(setting("nif", "")) + '"' + dis + '></label></div>';
-    h += '<label class="gx-field">' + L("rcptNote") + '<input id="gx-set-rnote" value="' + esc(setting("rcptNote", "")) + '" placeholder="' + esc(L("rcptNotePh")) + '"' + dis + '></label>';
     if (can("settings") || isChef()) h += '<button class="gx-btn gx-primary" data-a="save-settings">' + L("save") + '</button>';
     h += '</div><div class="gx-card"><h3>' + L("subscription") + '</h3>';
     var cfg = (H().gestionConfig && H().gestionConfig()) || { mode: "free" };
@@ -841,17 +844,26 @@
   }
   function linesTotal(d, pf) { return draftLines(d).reduce(function (a, l) { return a + num(l.qty) * num(l[pf]); }, 0); }
   function fSale() {
-    var d = S.modal.d, tot = linesTotal(d, "price");
+    var d = S.modal.d;
+    if (!d.doc) d.doc = d.show ? merge(d.show, { tva: !!d.tva }) : docDefaults();
+    var base = linesTotal(d, "price"), tv = calcTva(base, d.doc.tva, d.tva ? d.tva.rate : setting("tvaRate", 18), d.tva ? d.tva.mode : setting("tvaMode", "ht")), tot = tv ? tv.ht + tv.amt : base;
     if (!d.paidTouched) d.paid = d.mode === "credit" ? 0 : tot;
     var h = '<h2><i class="fa-solid fa-cash-register"></i> ' + (S.modal.id ? L("edit") : L("newSale")) + '</h2>' + linesEditor(d, "price");
-    h += '<div class="gx-total">' + L("total") + ' <b>' + money(tot) + '</b></div><div class="gx-fgrid">';
+    if (tv) h += '<div class="gx-tva-box"><div><span>' + L("totalHT") + '</span><b>' + money(tv.ht) + '</b></div><div><span>' + L("tvaAmt") + ' ' + tv.rate + ' %</span><b>' + money(tv.amt) + '</b></div></div>';
+    h += '<div class="gx-total">' + (tv ? L("totalTTC") : L("total")) + ' <b>' + money(tot) + '</b></div>';
+    if (setting("askMode", "auto") === "ask") {
+      var opts = [["tva", L("invoiceShort") + " + " + L("tvaAmt") + " " + setting("tvaRate", 18) + " %"]];
+      INFO_F.forEach(function (f) { if (setting(f[0], "")) opts.push([f[0], L(f[2])]); });
+      h += '<div class="gx-docopts"><b>' + L("onThisDoc") + ' :</b>' + opts.map(function (o) { return '<label class="gx-check"><input type="checkbox" data-a="doc-opt" data-v="' + o[0] + '"' + (d.doc[o[0]] ? ' checked' : '') + '> ' + esc(o[1]) + '</label>'; }).join("") + '</div>';
+    }
+    h += '<div class="gx-fgrid">';
     h += selectF(L("client"), "client", d.client, partyOpts("client"));
     if (!d.client) h += field(L("clientName"), "cname", d.cname, 'maxlength="60"');
     h += selectF(L("mode"), "mode", d.mode, modeOpts().concat([["credit", modeLabel("credit")]]));
     h += field(L("paid"), "paid", d.paid, 'inputmode="numeric"');
     h += field(L("date"), "d", d.d, 'type="date"');
     h += '</div>' + field(L("note"), "note", d.note, "");
-    if (num(d.paid) < tot && !d.client) h += '<p class="gx-hint warn">' + L("client") + ' : ' + L("required") + ' (' + L("rest") + ' ' + money(tot - num(d.paid)) + ')</p>';
+    if (num(d.paid) < tot && !d.client && !(d.mode !== "credit" && !d.paidTouched)) h += '<p class="gx-hint warn">' + L("client") + ' : ' + L("required") + ' (' + L("rest") + ' ' + money(tot - num(d.paid)) + ')</p>';
     h += '<div class="gx-sheet-foot"><button class="gx-btn" data-a="modal-close">' + L("cancel") + '</button><button class="gx-btn gx-primary" data-a="save-sale"><i class="fa-solid fa-check"></i> ' + L("save") + '</button></div>';
     return h;
   }
@@ -987,6 +999,26 @@
   function linesView(lines, pf) {
     return '<div class="gx-list">' + lines.map(function (l) { return '<div class="gx-line"><span>' + qtyFmt(l.qty) + ' × ' + esc(l.name) + ' <small>(' + money(l[pf]) + ')</small></span><b>' + money(num(l.qty) * num(l[pf])) + '</b></div>'; }).join("") + '</div>';
   }
+  // ---------------- TVA, choix du reçu, numérotation ----------------
+  // Choix par défaut (Réglages) pour une nouvelle vente.
+  function docDefaults() { return { tva: !!setting("tvaOn", false), imm: setting("showImm", true) !== false, rccm: setting("showRccm", true) !== false, nif: setting("showNif", true) !== false, bank: setting("showBank", true) !== false }; }
+  function calcTva(base, on, rate, mode) {
+    base = Math.round(num(base)); if (!on) return null;
+    rate = num(rate) || 18; var ht, amt;
+    if (mode === "ttc") { ht = Math.round(base / (1 + rate / 100)); amt = base - ht; } else { ht = base; amt = Math.round(base * rate / 100); }
+    return { rate: rate, mode: mode === "ttc" ? "ttc" : "ht", ht: ht, amt: amt };
+  }
+  function saleTva(s) { return s && s.tva && num(s.tva.amt) > 0 ? num(s.tva.amt) : 0; }
+  // Numéros qui se suivent : R-2026-0001 (reçus) et F-2026-0001 (factures), remis à 1 chaque année.
+  function hwKey(k, y) { return "sns_gx_no_" + S.cid + "_" + k + y; }
+  function nextNo(kind, year) {
+    var mx = 0; live("sale").forEach(function (s) { if (s.nk === kind && s.ny === year && num(s.no) > mx) mx = num(s.no); });
+    try { mx = Math.max(mx, num(localStorage.getItem(hwKey(kind, year)))); } catch (e) {}
+    return mx + 1;
+  }
+  function noteNo(kind, year, n) { try { if (n > num(localStorage.getItem(hwKey(kind, year)))) localStorage.setItem(hwKey(kind, year), String(n)); } catch (e) {} }
+  function docNo(r) { return r.no ? (r.nk || "R") + "-" + r.ny + "-" + ("000" + r.no).slice(-Math.max(4, String(r.no).length)) : "R-" + String(r.id).replace(/^s_/, "").slice(-6).toUpperCase(); }
+
   // ---------------- Somme en lettres ----------------
   function wordsFr(n) {
     n = Math.floor(Math.abs(n)); if (!n) return "zéro";
@@ -1018,13 +1050,18 @@
 
   // ---------------- Reçu ----------------
   // Toutes les informations du reçu, partagées par l'écran, le texte WhatsApp, l'image et l'impression.
+  function shw(r, k) { return r.show ? !!r.show[k] : setting("show" + k.charAt(0).toUpperCase() + k.slice(1), true) !== false; }
+  function htRows(R) { return R.inv ? [[L("totalHT"), money(R.tva.ht)], [L("tvaAmt") + " " + R.tva.rate + " %", money(R.tva.amt)]] : []; }
+  function totLabel(R) { return R.inv ? L("totalTTC") : L("total"); }
+  function legalParts(R) { return [R.imm ? L("imm") + " : " + R.imm : "", R.rccm ? L("rccm") + " : " + R.rccm : "", R.nif ? L("nif") + " : " + R.nif : ""].filter(Boolean); }
   function rcpt(r) {
     var c = r.client ? getE("client", r.client) : null, rest = Math.max(0, num(r.total) - num(r.paid));
     var t = r._at ? new Date(r._at) : null, time = t && r.d === (t.getFullYear() + "-" + pad(t.getMonth() + 1) + "-" + pad(t.getDate())) ? pad(t.getHours()) + ":" + pad(t.getMinutes()) : "";
     return {
       shop: String(S.name || ""), addr: String(setting("address", "") || ""), phone: String(setting("phone", "") || ""),
-      email: String(setting("email", "") || ""), rccm: String(setting("rccm", "") || ""), nif: String(setting("nif", "") || ""), foot: String(setting("rcptNote", "") || ""), logo: logoImg(), stamp: stampOn(),
-      no: "R-" + String(r.id).replace(/^s_/, "").slice(-6).toUpperCase(), date: dateFr(r.d), time: time,
+      email: String(setting("email", "") || ""),
+      imm: shw(r, "imm") ? String(setting("imm", "") || "") : "", rccm: shw(r, "rccm") ? String(setting("rccm", "") || "") : "", nif: shw(r, "nif") ? String(setting("nif", "") || "") : "", bank: shw(r, "bank") ? String(setting("bank", "") || "") : "", foot: String(setting("rcptNote", "") || ""), logo: logoImg(), stamp: stampOn(),
+      no: docNo(r), date: dateFr(r.d), time: time, inv: !!(r.tva && num(r.tva.amt) > 0), tva: r.tva || null, title: r.tva && num(r.tva.amt) > 0 ? L("invoice") : L("rcptTitle"),
       client: c ? c.name : (r.cname || ""), clientPhone: c && c.phone ? String(c.phone) : "", seller: String(r._bn || ""),
       lines: saleLines(r).map(function (l) { return { name: String(l.name || ""), qty: num(l.qty), pu: num(l.price), amt: num(l.qty) * num(l.price) }; }),
       total: num(r.total), paid: num(r.paid), rest: rest, mode: r.mode === "sounsouni" ? "Sounsouni" : (r.mode === "credit" ? "" : modeLabel(r.mode)),
@@ -1052,41 +1089,45 @@
     if (R.addr) t += R.addr + "\n";
     if (R.phone) t += L("tel") + " : " + R.phone + "\n";
     if (R.email) t += R.email + "\n";
-    if (R.rccm || R.nif) t += [R.rccm ? L("rccm") + " " + R.rccm : "", R.nif ? L("nif") + " " + R.nif : ""].filter(Boolean).join(" · ") + "\n";
-    t += sep + "\n*" + L("rcptTitle") + " N° " + R.no + "*\n" + L("date") + " : " + R.date + (R.time ? " " + L("atTime") + " " + R.time : "") + "\n";
+    if (legalParts(R).length) t += legalParts(R).join(" · ") + "\n";
+    t += sep + "\n*" + R.title + " N° " + R.no + "*\n" + L("date") + " : " + R.date + (R.time ? " " + L("atTime") + " " + R.time : "") + "\n";
     t += L("client") + " : " + (R.client || L("walkin")) + "\n";
     if (R.seller) t += L("seller") + " : " + R.seller + "\n";
     t += sep + "\n";
     R.lines.forEach(function (l) { t += "• " + l.name + "\n    " + qtyFmt(l.qty) + " × " + money(l.pu) + " = *" + money(l.amt) + "*\n"; });
-    t += sep + "\n*" + L("total").toUpperCase() + " : " + money(R.total) + "*\n" + L("paid") + (R.mode ? " (" + R.mode + ")" : "") + " : " + money(R.paid) + "\n";
+    t += sep + "\n"; htRows(R).forEach(function (x) { t += x[0] + " : " + x[1] + "\n"; });
+    t += "*" + totLabel(R).toUpperCase() + " : " + money(R.total) + "*\n" + L("paid") + (R.mode ? " (" + R.mode + ")" : "") + " : " + money(R.paid) + "\n";
     if (R.rest > 0) t += L("rest") + " : *" + money(R.rest) + "*\n";
     t += L("status") + " : " + (R.st === "stPaid" ? "✅ " : "⏳ ") + L(R.st) + "\n";
     if (R.note) t += L("note") + " : " + R.note + "\n";
-    t += "_" + L("arrete") + " : " + R.words + "._\n";
+    t += "_" + (R.inv ? L("arreteF") : L("arrete")) + " : " + R.words + "._\n";
+    if (R.bank) t += L("bank") + " : " + R.bank + "\n";
     if (R.foot) t += R.foot + "\n";
     t += sep + "\n" + L("receiptThanks") + "\n_" + L("rcptFoot") + "_";
     return t;
   }
   // Corps du reçu en HTML (écran, A4, ticket). ink = couleur du cachet.
   function receiptHtml(r, ink, ticket) {
-    var R = rcpt(r), legal = [R.rccm ? L("rccm") + " : " + esc(R.rccm) : "", R.nif ? L("nif") + " : " + esc(R.nif) : ""].filter(Boolean).join(" · ");
+    var R = rcpt(r), legal = esc(legalParts(R).join(" · "));
     var h = '<div class="rc-head">' + (R.logo ? '<img class="rc-logo" src="' + R.logo + '" alt="">' : '') + '<div class="rc-id"><div class="rc-shop">' + esc(R.shop) + '</div>';
     if (R.addr) h += '<div class="rc-sub">' + esc(R.addr) + '</div>';
     var ct = [R.phone ? L("tel") + " : " + esc(R.phone) : "", R.email ? esc(R.email) : ""].filter(Boolean).join(" · ");
     if (ct) h += '<div class="rc-sub">' + ct + '</div>';
     if (legal) h += '<div class="rc-sub rc-legal">' + legal + '</div>';
-    h += '</div></div><div class="rc-title">' + L("rcptTitle") + '</div><div class="rc-meta">';
+    h += '</div></div><div class="rc-title">' + R.title + '</div><div class="rc-meta">';
     h += '<div><span>' + L("num") + '</span><b>' + esc(R.no) + '</b></div><div><span>' + L("date") + '</span><b>' + R.date + (R.time ? ' ' + L("atTime") + ' ' + R.time : '') + '</b></div>';
     h += '<div><span>' + L("client") + '</span><b>' + esc(R.client || L("walkin")) + (R.clientPhone ? ' · ' + esc(R.clientPhone) : '') + '</b></div>';
     if (R.seller) h += '<div><span>' + L("seller") + '</span><b>' + esc(R.seller) + '</b></div>';
     h += '</div><table class="rc-t"><thead><tr>' + (ticket ? '' : '<th class="c">' + L("num") + '</th>') + '<th>' + L("design") + '</th><th class="r">' + L("qtyShort") + '</th>' + (ticket ? '' : '<th class="r">' + L("unitP") + '</th>') + '<th class="r">' + L("amountCol") + '</th></tr></thead><tbody>';
     R.lines.forEach(function (l, i) { h += '<tr>' + (ticket ? '' : '<td class="c">' + (i + 1) + '</td>') + '<td>' + esc(l.name) + (ticket ? '<br><small>' + money(l.pu) + '</small>' : '') + '</td><td class="r">' + qtyFmt(l.qty) + '</td>' + (ticket ? '' : '<td class="r">' + money(l.pu) + '</td>') + '<td class="r">' + money(l.amt) + '</td></tr>'; });
     h += '</tbody></table><div class="rc-sum">';
-    h += '<div class="rc-tot"><span>' + L("total") + '</span><b>' + money(R.total) + '</b></div>';
+    htRows(R).forEach(function (x) { h += '<div><span>' + x[0] + '</span><b>' + x[1] + '</b></div>'; });
+    h += '<div class="rc-tot"><span>' + totLabel(R) + '</span><b>' + money(R.total) + '</b></div>';
     h += '<div><span>' + L("paid") + (R.mode ? ' (' + esc(R.mode) + ')' : '') + '</span><b>' + money(R.paid) + '</b></div>';
     if (R.rest > 0) h += '<div class="rc-rest"><span>' + L("rest") + '</span><b>' + money(R.rest) + '</b></div>';
     h += '<div><span>' + L("status") + '</span><b>' + L(R.st) + '</b></div></div>';
-    h += '<div class="rc-words">' + L("arrete") + ' : <b>' + esc(R.words) + '</b>.</div>';
+    h += '<div class="rc-words">' + (R.inv ? L("arreteF") : L("arrete")) + ' : <b>' + esc(R.words) + '</b>.</div>';
+    if (R.bank) h += '<div class="rc-words">' + L("bank") + ' : <b>' + esc(R.bank) + '</b></div>';
     if (R.note) h += '<div class="rc-note">' + L("note") + ' : ' + esc(R.note) + '</div>';
     h += '<div class="rc-signs">' + (ticket ? '' : '<div class="rc-sign"><span>' + L("clientSign") + '</span></div>') + '<div class="rc-sign rc-sign-v"><span>' + L("stampZone") + '</span>' + (R.stamp ? stampSvg(R, ink, ticket ? 96 : 112) : '') + '</div></div>';
     return h + '<div class="rc-foot">' + (R.foot ? '<div class="rc-mention">' + esc(R.foot) + '</div>' : '') + L("receiptThanks") + '<br><small>' + L("rcptFoot") + '</small></div>';
@@ -1121,9 +1162,9 @@
       if (logo) { var lh = 90, lw = Math.min(200, logo.width * lh / logo.height); x.drawImage(logo, (W - lw) / 2, y, lw, lh); y += lh + 8; }
       x.fillStyle = "#111"; x.font = "900 36px " + F; y += 30; x.fillText(R.shop.toUpperCase().slice(0, 34), W / 2, y);
       x.font = "19px " + F; x.fillStyle = "#555";
-      var info = [R.addr, [R.phone ? L("tel") + " : " + R.phone : "", R.email].filter(Boolean).join(" · "), [R.rccm ? L("rccm") + " : " + R.rccm : "", R.nif ? L("nif") + " : " + R.nif : ""].filter(Boolean).join(" · ")];
+      var info = [R.addr, [R.phone ? L("tel") + " : " + R.phone : "", R.email].filter(Boolean).join(" · "), legalParts(R).join(" · ")];
       info.forEach(function (t) { if (t) { y += 27; x.fillText(t.slice(0, 72), W / 2, y); } });
-      y += 24; x.fillStyle = "#111"; x.fillRect(P, y, W - 2 * P, 3); y += 36; x.font = "800 24px " + F; x.fillText(L("rcptTitle").split("").join(" "), W / 2, y); y += 16; x.fillRect(P, y, W - 2 * P, 3);
+      y += 24; x.fillStyle = "#111"; x.fillRect(P, y, W - 2 * P, 3); y += 36; x.font = "800 24px " + F; x.fillText(R.title.split("").join(" "), W / 2, y); y += 16; x.fillRect(P, y, W - 2 * P, 3);
       x.textAlign = "left"; y += 40;
       var meta = [[L("num"), R.no], [L("date"), R.date + (R.time ? " " + L("atTime") + " " + R.time : "")], [L("client"), (R.client || L("walkin")) + (R.clientPhone ? " · " + R.clientPhone : "")], [L("seller"), R.seller]];
       meta.forEach(function (m, i) { if (!m[1]) return; var cx = i % 2 ? W / 2 + 10 : P, cy = y + Math.floor(i / 2) * 56; x.fillStyle = "#777"; x.font = "17px " + F; x.fillText(m[0], cx, cy); x.fillStyle = "#111"; x.font = "700 21px " + F; x.fillText(String(m[1]).slice(0, 30), cx, cy + 25); });
@@ -1138,10 +1179,11 @@
         y += 30 * ls.length - 12; x.strokeStyle = "#bbb"; x.setLineDash([5, 5]); x.beginPath(); x.moveTo(P, y); x.lineTo(W - P, y); x.stroke(); x.setLineDash([]); y += 34;
       });
       var sx = W / 2 + 20, sy = y + 6, row = function (a, b, bold, col) { x.textAlign = "left"; x.fillStyle = "#333"; x.font = (bold ? "800 25px " : "19px ") + F; x.fillText(a, sx, sy); x.textAlign = "right"; x.fillStyle = col || "#111"; x.font = (bold ? "800 25px " : "700 19px ") + F; x.fillText(b, W - P, sy); sy += bold ? 44 : 32; };
-      x.fillStyle = "#111"; x.fillRect(sx, sy - 6, W - P - sx, 3); sy += 30; row(L("total"), money(R.total), true); x.fillRect(sx, sy - 34, W - P - sx, 3); sy += 6;
+      x.fillStyle = "#111"; x.fillRect(sx, sy - 6, W - P - sx, 3); sy += 26; htRows(R).forEach(function (q) { row(q[0], q[1]); }); row(totLabel(R), money(R.total), true); x.fillRect(sx, sy - 34, W - P - sx, 3); sy += 6;
       row(L("paid") + (R.mode ? " (" + R.mode + ")" : ""), money(R.paid)); if (R.rest > 0) row(L("rest"), money(R.rest), false, "#c62828"); row(L("status"), L(R.st), false, R.st === "stPaid" ? "#2e7d32" : "#c62828");
       y = sy + 6; x.textAlign = "left"; x.fillStyle = "#222";
-      wrap(L("arrete") + " : " + R.words + ".", W - 2 * P, "italic 18px " + F).forEach(function (t) { x.font = "italic 18px " + F; x.fillText(t, P, y); y += 26; });
+      wrap((R.inv ? L("arreteF") : L("arrete")) + " : " + R.words + ".", W - 2 * P, "italic 18px " + F).forEach(function (t) { x.font = "italic 18px " + F; x.fillText(t, P, y); y += 26; });
+      if (R.bank) { x.fillStyle = "#222"; wrap(L("bank") + " : " + R.bank, W - 2 * P, "17px " + F).forEach(function (t) { x.font = "17px " + F; x.fillText(t, P, y); y += 25; }); }
       if (R.note) { x.fillStyle = "#444"; wrap(L("note") + " : " + R.note, W - 2 * P, "italic 17px " + F).forEach(function (t) { x.font = "italic 17px " + F; x.fillText(t, P, y); y += 25; }); }
       // zones de signature
       y += 10; var bw = (W - 2 * P - 20) / 2, bh = 220;
@@ -1224,9 +1266,9 @@
     var idt = para(run(R.shop.toUpperCase(), { b: true, sz: 32 }), { jc: R.logo ? "left" : "center" });
     if (R.addr) idt += para(run(R.addr, { sz: 18, c: "444444" }), { jc: R.logo ? "left" : "center", after: 0 });
     var ct = [R.phone ? L("tel") + " : " + R.phone : "", R.email].filter(Boolean).join(" · "); if (ct) idt += para(run(ct, { sz: 18, c: "444444" }), { jc: R.logo ? "left" : "center", after: 0 });
-    var lg = [R.rccm ? L("rccm") + " : " + R.rccm : "", R.nif ? L("nif") + " : " + R.nif : ""].filter(Boolean).join(" · "); if (lg) idt += para(run(lg, { sz: 16, c: "555555" }), { jc: R.logo ? "left" : "center", after: 0 });
+    var lg = legalParts(R).join(" · "); if (lg) idt += para(run(lg, { sz: 16, c: "555555" }), { jc: R.logo ? "left" : "center", after: 0 });
     body += R.logo ? table([1700, FULL - 1700], ['<w:tr>' + cell(1700, para(img(R.logo, 90, 90))) + cell(FULL - 1700, idt) + '</w:tr>']) : idt;
-    body += para(run(L("rcptTitle"), { b: true, sz: 26 }), { jc: "center", before: 160, after: 160, border: true });
+    body += para(run(R.title, { b: true, sz: 26 }), { jc: "center", before: 160, after: 160, border: true });
     // Infos
     var kv = function (k, v) { return para(run(k + " : ", { sz: 18, c: "666666" }) + run(v, { b: true, sz: 20 }), { after: 20 }); };
     body += table([FULL / 2, FULL / 2], ['<w:tr>' + cell(FULL / 2, kv(L("num"), R.no) + kv(L("client"), (R.client || L("walkin")) + (R.clientPhone ? " · " + R.clientPhone : ""))) + cell(FULL / 2, kv(L("date"), R.date + (R.time ? " " + L("atTime") + " " + R.time : "")) + (R.seller ? kv(L("seller"), R.seller) : "")) + '</w:tr>']);
@@ -1239,11 +1281,12 @@
     body += table(W5, rows, BD);
     // Totaux
     var tr = function (a, b, o) { o = o || {}; return '<w:tr>' + cell(FULL - 4000, para("")) + cell(2200, para(run(a, { sz: o.big ? 24 : 20, b: !!o.big }), { after: 0 }), { fill: o.big ? "F0EFEC" : "" }) + cell(1800, para(run(b, { sz: o.big ? 24 : 20, b: true, c: o.c }), { jc: "right", after: 0 }), { fill: o.big ? "F0EFEC" : "" }) + '</w:tr>'; };
-    var trs = [tr(L("total"), money(R.total), { big: true }), tr(L("paid") + (R.mode ? " (" + R.mode + ")" : ""), money(R.paid))];
+    var trs = htRows(R).map(function (q) { return tr(q[0], q[1]); }).concat([tr(totLabel(R), money(R.total), { big: true })]); trs.push(tr(L("paid") + (R.mode ? " (" + R.mode + ")" : ""), money(R.paid)));
     if (R.rest > 0) trs.push(tr(L("rest"), money(R.rest), { c: "C62828" }));
     trs.push(tr(L("status"), L(R.st), { c: R.st === "stPaid" ? "2E7D32" : "C62828" }));
     body += para("", { after: 60 }) + table([FULL - 4000, 2200, 1800], trs);
-    body += para(run(L("arrete") + " : ", { sz: 20 }) + run(R.words + ".", { b: true, i: true, sz: 20 }), { before: 200, after: 120 });
+    body += para(run((R.inv ? L("arreteF") : L("arrete")) + " : ", { sz: 20 }) + run(R.words + ".", { b: true, i: true, sz: 20 }), { before: 200, after: 120 });
+    if (R.bank) body += para(run(L("bank") + " : ", { sz: 20 }) + run(R.bank, { b: true, sz: 20 }), { after: 120 });
     if (R.note) body += para(run(L("note") + " : " + R.note, { i: true, sz: 18 }));
     // Signatures
     var SB = '<w:tcBorders><w:top w:val="dashed" w:sz="6" w:color="999999"/><w:left w:val="dashed" w:sz="6" w:color="999999"/><w:bottom w:val="dashed" w:sz="6" w:color="999999"/><w:right w:val="dashed" w:sz="6" w:color="999999"/></w:tcBorders>';
@@ -1299,11 +1342,16 @@
   function saveSale() {
     var d = S.modal.d, lines = cleanLines(d, "price");
     if (!lines.length) return toast(L("lines") + " : " + L("required"));
-    var tot = lines.reduce(function (a, l) { return a + l.qty * l.price; }, 0);
-    var paid = d.mode === "credit" ? num(d.paid) : num(d.paid);
+    var base = lines.reduce(function (a, l) { return a + l.qty * l.price; }, 0);
+    var doc = setting("askMode", "auto") === "ask" && d.doc ? d.doc : (S.modal.id && d.show ? merge(d.show, { tva: !!d.tva }) : docDefaults());
+    var tv = calcTva(base, doc.tva, d.tva ? d.tva.rate : setting("tvaRate", 18), d.tva ? d.tva.mode : setting("tvaMode", "ht")), tot = tv ? tv.ht + tv.amt : base;
+    var paid = d.paidTouched ? num(d.paid) : (d.mode === "credit" ? 0 : tot);
     if (paid < tot && !d.client) return toast(L("client") + " : " + L("required"));
-    var e = S.modal.id || rid("s_");
-    write("sale", e, { d: d.d || today(), lines: lines, total: tot, paid: Math.min(paid, tot), mode: d.mode === "credit" ? (paid > 0 ? "cash" : "credit") : d.mode, client: d.client || null, cname: d.client ? "" : String(d.cname || "").trim().slice(0, 60), note: String(d.note || "").slice(0, 200) });
+    var e = S.modal.id || rid("s_"), date = d.d || today(), kind = tv ? "F" : "R", year = Number(String(date).slice(0, 4)) || new Date().getFullYear();
+    var old = S.modal.id ? getE("sale", S.modal.id) : null, no = old && old.no && old.nk === kind && old.ny === year ? old.no : nextNo(kind, year);
+    noteNo(kind, year, no);
+    write("sale", e, { d: date, lines: lines, total: tot, paid: Math.min(paid, tot), mode: d.mode === "credit" ? (paid > 0 ? "cash" : "credit") : d.mode, client: d.client || null, cname: d.client ? "" : String(d.cname || "").trim().slice(0, 60), note: String(d.note || "").slice(0, 200),
+      tva: tv, show: { imm: !!doc.imm, rccm: !!doc.rccm, nif: !!doc.nif, bank: !!doc.bank }, no: no, nk: kind, ny: year });
     S.modal = { t: "receipt", id: e }; render();
     toast("✅ " + L("saved"));
   }
@@ -1434,6 +1482,7 @@
         case "lqty": { var ln = S.modal.d.lines[+v]; ln.qty = Math.max(0, num(ln.qty) + num(el.getAttribute("data-d"))); renderModalOnly(); break; }
         case "ldel": S.modal.d.lines.splice(+v, 1); renderModalOnly(); break;
         case "save-sale": saveSale(); break;
+        case "doc-opt": if (S.modal && S.modal.d && S.modal.d.doc) { S.modal.d.doc[v] = !!el.checked; if (v === "tva") S.modal.d.tva = null; renderModalOnly(); } break;
         case "save-purchase": savePurchase(); break;
         case "save-expense": saveExpense(); break;
         case "save-item": saveItem(); break;
@@ -1447,7 +1496,7 @@
         case "print-page": printPage(); break;
         case "print-test": printTest(); break;
         case "oh-tab": S.ohTab = v; render(); break;
-        case "ohada-toggle": { var on = !setting("ohada", false); write("settings", "main", merge(clean(getE("settings", "main") || {}, ["openingCash", "phone", "address", "ohada", "email", "rccm", "nif", "rcptNote"]), { ohada: on })); if (on) S.page = "ohada"; render(); break; }
+        case "ohada-toggle": { var on = !setting("ohada", false); write("settings", "main", merge(clean(getE("settings", "main") || {}, SET_KEYS), { ohada: on })); if (on) S.page = "ohada"; render(); break; }
         case "backup-dl": backupDownload(); break;
         case "backup-share": backupShare(); break;
         case "pay": if (H().payGestion) { var cid = S.cid; close(); H().payGestion(cid); } break;
@@ -1472,9 +1521,10 @@
           if (!confirm(L("leaveConfirm"))) break;
           api("member_remove", { companyId: S.cid, phone: String((profile() || {}).phone || "").replace(/\D/g, "") }).then(function (r) { if (!r.success) return toast("❌ " + L("mustOnline")); var c = S.cid; dbClear(c); close(); if (H().refreshRoles) H().refreshRoles(); });
           break;
+        case "save-rcpt":
         case "save-settings": {
           var nm = (document.getElementById("gx-set-name") || {}).value || "";
-          if (can("settings")) write("settings", "main", merge(clean(getE("settings", "main") || {}, ["openingCash", "phone", "address", "ohada", "email", "rccm", "nif", "rcptNote"]), { openingCash: num((document.getElementById("gx-set-cash") || {}).value), phone: (document.getElementById("gx-set-phone") || {}).value || "", address: (document.getElementById("gx-set-addr") || {}).value || "", email: ((document.getElementById("gx-set-email") || {}).value || "").trim().slice(0, 80), rccm: ((document.getElementById("gx-set-rccm") || {}).value || "").trim().slice(0, 60), nif: ((document.getElementById("gx-set-nif") || {}).value || "").trim().slice(0, 40), rcptNote: ((document.getElementById("gx-set-rnote") || {}).value || "").trim().slice(0, 200) }));
+          if (can("settings")) write("settings", "main", merge(merge(clean(getE("settings", "main") || {}, SET_KEYS), { openingCash: num((document.getElementById("gx-set-cash") || {}).value), phone: (document.getElementById("gx-set-phone") || {}).value || "", address: (document.getElementById("gx-set-addr") || {}).value || "", email: ((document.getElementById("gx-set-email") || {}).value || "").trim().slice(0, 80) }), rcptFields()));
           if (isChef() && nm.trim() && nm.trim() !== S.name) api("rename", { companyId: S.cid, name: nm.trim() }).then(function (r) { if (r.success) { S.name = nm.trim(); render(); if (H().refreshRoles) H().refreshRoles(); } else toast("❌ " + L("mustOnline")); });
           done(); break;
         }
@@ -1542,7 +1592,11 @@
   }
   function refreshTotal() {
     var el = root.querySelector(".gx-total b"); if (!el || !S.modal) return;
-    var pf = S.modal.t === "purchase" ? "cost" : "price", tot = linesTotal(S.modal.d, pf);
+    var pf = S.modal.t === "purchase" ? "cost" : "price", tot = linesTotal(S.modal.d, pf), d = S.modal.d;
+    if (S.modal.t === "sale" && d.doc) {
+      var tv = calcTva(tot, d.doc.tva, d.tva ? d.tva.rate : setting("tvaRate", 18), d.tva ? d.tva.mode : setting("tvaMode", "ht")), bx = root.querySelectorAll(".gx-tva-box b");
+      if (tv) { tot = tv.ht + tv.amt; if (bx.length === 2) { bx[0].textContent = money(tv.ht); bx[1].textContent = money(tv.amt); } }
+    }
     el.textContent = money(tot);
     if (!S.modal.d.paidTouched) { S.modal.d.paid = S.modal.d.mode === "credit" ? 0 : tot; var pi = document.getElementById("paid"); if (pi) pi.value = S.modal.d.paid; }
   }
@@ -1554,13 +1608,33 @@
   function isAndroid() { return /Android/i.test(navigator.userAgent); }
   function logoImg() { var l = getE("settings", "logo"); return l && l.img && /^data:image\/(png|jpeg);base64,/.test(l.img) ? l.img : ""; }
   function stampOn() { return printCfg().stamp !== false; }
+  var INFO_F = [["imm", "showImm", "imm", ""], ["rccm", "showRccm", "rccm", "ML-BKO-…"], ["nif", "showNif", "nif", ""], ["bank", "showBank", "bank", "bankPh"]];
+  // Champs de la carte « Vos reçus » (enregistrés avec la fiche, par un seul bouton).
+  function rcptFields() {
+    var v2 = function (id) { return ((document.getElementById("gx-set-" + id) || {}).value || "").trim(); }, c2 = function (id) { return !!(document.getElementById("gx-set-" + id) || {}).checked; };
+    if (!document.getElementById("gx-set-tvaOn")) return {};
+    var rate = Math.max(0, Math.min(50, num(v2("tvaRate").replace(",", "."))));
+    return { imm: v2("imm").slice(0, 60), rccm: v2("rccm").slice(0, 60), nif: v2("nif").slice(0, 40), bank: v2("bank").slice(0, 120), rcptNote: v2("rcptNote").slice(0, 200),
+      showImm: c2("showImm"), showRccm: c2("showRccm"), showNif: c2("showNif"), showBank: c2("showBank"), tvaOn: c2("tvaOn"), tvaRate: rate || 18, tvaMode: v2("tvaMode") === "ttc" ? "ttc" : "ht", askMode: v2("askMode") === "ask" ? "ask" : "auto" };
+  }
   function rcptCard() {
-    var h = '<div class="gx-card"><h3><i class="fa-solid fa-receipt"></i> ' + L("rcptCard") + '</h3><div class="gx-logo-row">';
+    var dis = can("settings") ? '' : ' disabled', h = '<div class="gx-card"><h3><i class="fa-solid fa-receipt"></i> ' + L("rcptCard") + '</h3><div class="gx-logo-row">';
     var lg = logoImg();
     h += lg ? '<img class="gx-logo-prev" src="' + lg + '" alt="">' : '<div class="gx-logo-prev gx-logo-empty"><i class="fa-regular fa-image"></i></div>';
     if (can("settings")) h += '<label class="gx-btn"><i class="fa-solid fa-upload"></i> ' + L("logoAdd") + '<input type="file" accept="image/*" id="gx-logo-file" hidden></label>' + (lg ? ' <button class="gx-btn" data-a="logo-del">' + L("logoDel") + '</button>' : '');
-    h += '</div><label class="gx-check" style="margin-top:10px"><input type="checkbox" id="gx-stamp"' + (stampOn() ? ' checked' : '') + '> ' + L("stampAuto") + '</label><p class="gx-hint">' + L("stampHint") + '</p></div>';
-    return h;
+    h += '</div><label class="gx-check" style="margin-top:10px"><input type="checkbox" id="gx-stamp"' + (stampOn() ? ' checked' : '') + '> ' + L("stampAuto") + '</label><p class="gx-hint">' + L("stampHint") + '</p>';
+    h += '<h4 class="gx-sub">' + L("rcptInfos") + '</h4><p class="gx-hint">' + L("rcptInfosHint") + '</p>';
+    INFO_F.forEach(function (f) {
+      h += '<div class="gx-info-row"><label class="gx-field">' + L(f[2]) + '<input id="gx-set-' + f[0] + '" value="' + esc(setting(f[0], "")) + '"' + (f[3] ? ' placeholder="' + esc(f[3] === "bankPh" ? L("bankPh") : f[3]) + '"' : '') + dis + '></label>';
+      h += '<label class="gx-check gx-show"><input type="checkbox" id="gx-set-' + f[1] + '"' + (setting(f[1], true) !== false ? ' checked' : '') + dis + '> ' + L("show") + '</label></div>';
+    });
+    h += '<label class="gx-field">' + L("rcptNote") + '<input id="gx-set-rcptNote" value="' + esc(setting("rcptNote", "")) + '" placeholder="' + esc(L("rcptNotePh")) + '"' + dis + '></label>';
+    h += '<h4 class="gx-sub">' + L("tvaAmt") + '</h4><label class="gx-check"><input type="checkbox" id="gx-set-tvaOn"' + (setting("tvaOn", false) ? ' checked' : '') + dis + '> ' + L("tvaOn") + '</label>';
+    h += '<div class="gx-fgrid"><label class="gx-field">' + L("tvaRate") + '<input id="gx-set-tvaRate" inputmode="decimal" value="' + esc(setting("tvaRate", 18)) + '"' + dis + '></label>';
+    h += '<label class="gx-field">' + L("tvaMode") + '<select id="gx-set-tvaMode"' + dis + '><option value="ht"' + (setting("tvaMode", "ht") === "ht" ? ' selected' : '') + '>' + L("tvaHT") + '</option><option value="ttc"' + (setting("tvaMode", "ht") === "ttc" ? ' selected' : '') + '>' + L("tvaTTC") + '</option></select></label></div>';
+    h += '<label class="gx-field">' + L("askMode") + '<select id="gx-set-askMode"' + dis + '><option value="auto">' + L("askAuto") + '</option><option value="ask"' + (setting("askMode", "auto") === "ask" ? ' selected' : '') + '>' + L("askAsk") + '</option></select></label>';
+    if (can("settings")) h += '<button class="gx-btn gx-primary" data-a="save-rcpt">' + L("save") + '</button>';
+    return h + '</div>';
   }
   // Logo réduit (≤ 11 000 caractères) pour passer dans une seule ligne synchronisée.
   function loadLogo(file) {
@@ -1618,16 +1692,18 @@
     var line = new Array(W + 1).join("-");
     var R = rcpt(r);
     out.push(center(R.shop.toUpperCase())); if (R.addr) out.push(center(R.addr)); if (R.phone) out.push(center(L("tel") + " " + R.phone));
-    if (R.rccm) out.push(center(L("rccm") + " " + R.rccm)); if (R.nif) out.push(center(L("nif") + " " + R.nif));
-    out.push(line, center(L("rcptTitle")), line, two("N° " + R.no, R.date + (R.time ? " " + R.time : "")), fold(L("client") + " : " + (R.client || L("walkin"))));
+    legalParts(R).forEach(function (x) { out.push(center(x)); });
+    out.push(line, center(R.title), line, two("N° " + R.no, R.date + (R.time ? " " + R.time : "")), fold(L("client") + " : " + (R.client || L("walkin"))));
     if (R.seller) out.push(fold(L("seller") + " : " + R.seller));
     out.push(line);
     R.lines.forEach(function (l) { out.push(fold(l.name).slice(0, W)); out.push(two("  " + qtyFmt(l.qty) + " x " + money(l.pu), money(l.amt))); });
-    out.push(line, two(L("total").toUpperCase(), money(R.total)), two(L("paid") + (R.mode ? " (" + R.mode + ")" : ""), money(R.paid)));
+    out.push(line); htRows(R).forEach(function (q) { out.push(two(q[0], q[1])); });
+    out.push(two(totLabel(R).toUpperCase(), money(R.total)), two(L("paid") + (R.mode ? " (" + R.mode + ")" : ""), money(R.paid)));
     if (R.rest > 0) out.push(two(L("rest"), money(R.rest)));
     out.push(two(L("status"), L(R.st)), line);
-    var wl = fold(L("arrete") + " : " + R.words + "."), ln = "";
+    var wl = fold((R.inv ? L("arreteF") : L("arrete")) + " : " + R.words + "."), ln = "";
     wl.split(" ").forEach(function (w) { if ((ln + " " + w).trim().length > W) { out.push(ln); ln = w; } else ln = (ln + " " + w).trim(); }); if (ln) out.push(ln);
+    if (R.bank) out.push(fold(L("bank") + " : " + R.bank).slice(0, W * 2));
     if (R.foot) out.push(fold(R.foot).slice(0, W * 2));
     out.push(line, center(L("receiptThanks")), center("Sounsouni Gestion"), "", "", "");
     return out.join("\n");
@@ -1669,7 +1745,7 @@
 
   // ---------------- Comptabilité SYSCOHADA (écritures automatiques) ----------------
   var ACC = {
-    "101": "Capital", "311": "Marchandises", "401": "Fournisseurs", "411": "Clients", "4118": "Sounsouni (ventes en ligne à encaisser)",
+    "101": "Capital", "311": "Marchandises", "401": "Fournisseurs", "411": "Clients", "4431": "État, TVA facturée sur ventes", "4118": "Sounsouni (ventes en ligne à encaisser)",
     "521": "Banques", "5521": "Orange Money", "5522": "Moov Money", "5523": "Wave", "571": "Caisse",
     "601": "Achats de marchandises", "6031": "Variation des stocks de marchandises", "605": "Autres achats (eau, électricité, fournitures)",
     "618": "Autres frais de transport", "622": "Locations et charges locatives", "624": "Entretien, réparations et maintenance",
@@ -1696,9 +1772,9 @@
     live("adjust").forEach(function (a) { if (!isOpening(a) || num(a.qty) <= 0) return; var it = getE("item", a.item); var v = Math.round(num(a.qty) * (it ? num(it.cost) : 0)); if (v) add(a.d, "STK", L("initialStock") + " — " + (it ? it.name : ""), [["311", v, 0], ["101", 0, v]]); });
     live("sale").forEach(function (s) {
       var svc = 0, art = 0; saleLines(s).forEach(function (l) { var v = num(l.qty) * num(l.price); if (isSvcLine(l)) svc += v; else art += v; });
-      var tot = num(s.total), k = tot && (svc + art) ? tot / (svc + art) : 1, paid = Math.min(num(s.paid), tot);
+      var tot = num(s.total), tv = saleTva(s), ht = tot - tv, k = ht && (svc + art) ? ht / (svc + art) : 1, paid = Math.min(num(s.paid), tot);
       var lib = L("sales") + (s.client ? " — " + partyName("client", s.client) : "") + (s.note ? " — " + s.note : "");
-      add(s.d, "V" + String(s.id).slice(-5).toUpperCase(), lib, [[treso(s.mode), paid, 0], [s.mode === "sounsouni" ? "4118" : "411", tot - paid, 0], ["701", 0, Math.round(art * k)], ["706", 0, tot - Math.round(art * k)]]);
+      add(s.d, "V" + String(s.id).slice(-5).toUpperCase(), lib, [[treso(s.mode), paid, 0], [s.mode === "sounsouni" ? "4118" : "411", tot - paid, 0], ["701", 0, Math.round(art * k)], ["706", 0, ht - Math.round(art * k)]].concat(tv ? [["4431", 0, tv]] : []));
     });
     live("purchase").forEach(function (p) {
       var tot = num(p.total), paid = Math.min(num(p.paid), tot);
@@ -1871,7 +1947,7 @@
       ".gx-picker{border:1px dashed var(--bd);border-radius:14px;padding:8px;margin-bottom:6px}.gx-pick-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;max-height:170px;overflow-y:auto}",
       ".gx-pick-list button{border:1px solid var(--bd);background:var(--bg);color:var(--tx);border-radius:10px;padding:7px 10px;font-size:12.5px;font-weight:700;text-align:left;max-width:100%}.gx-pick-list button small{display:block;font-weight:500;color:var(--dim);font-size:11px}.gx-pick-list .gx-other{color:var(--g)}",
       ".gx-meta{font-size:11.5px;color:var(--dim);margin-top:10px}.gx-hist{font-size:11.5px;color:var(--dim);margin-top:6px}.gx-hist div{padding:3px 0}",
-      ".gx-logo-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.gx-logo-prev{width:56px;height:56px;object-fit:contain;border:1px solid var(--bd);border-radius:10px;background:#fff}.gx-logo-empty{display:flex;align-items:center;justify-content:center;color:#999;font-size:22px}.gx-receipt{border:1px solid var(--bd);border-radius:12px;padding:16px 14px;text-align:left;background:#fff;color:#111;box-shadow:0 2px 10px rgba(0,0,0,.06)}" + RC_CSS + "@media(max-width:380px){.gx-receipt .rc-stamp svg{width:92px;height:92px}}",
+      ".gx-sub{margin:14px 0 4px;font-size:14px}.gx-info-row{display:flex;align-items:flex-end;gap:8px}.gx-info-row .gx-field{flex:1;min-width:0}.gx-show{flex:0 0 auto;margin-bottom:12px;font-size:12.5px}.gx-tva-box{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:13px;margin-top:6px}.gx-tva-box div{display:flex;gap:10px}.gx-docopts{border:1px solid var(--bd);border-radius:12px;padding:10px;margin:8px 0;display:flex;flex-direction:column;gap:6px;font-size:13.5px}.gx-logo-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.gx-logo-prev{width:56px;height:56px;object-fit:contain;border:1px solid var(--bd);border-radius:10px;background:#fff}.gx-logo-empty{display:flex;align-items:center;justify-content:center;color:#999;font-size:22px}.gx-receipt{border:1px solid var(--bd);border-radius:12px;padding:16px 14px;text-align:left;background:#fff;color:#111;box-shadow:0 2px 10px rgba(0,0,0,.06)}" + RC_CSS + "@media(max-width:380px){.gx-receipt .rc-stamp svg{width:92px;height:92px}}",
       "@media (max-width:360px){.gx-fgrid{grid-template-columns:1fr}.gx-kpi b{font-size:15px}}"
     ].join("\n");
     var st = document.createElement("style"); st.id = "gx-css"; st.textContent = css; document.head.appendChild(st);
