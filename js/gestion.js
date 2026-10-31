@@ -66,6 +66,10 @@
     email: "E-mail", rccm: "RCCM", nif: "NIF", logo: "Logo", logoAdd: "Ajouter le logo", logoDel: "Enlever le logo", logoBig: "Image trop lourde, essayez une autre.", rcptNote: "Mention en bas du reçu (facultatif)", rcptNotePh: "Ex. : Les marchandises vendues ne sont ni reprises ni échangées.", rcptCard: "Vos reçus", payMode: "Mode de paiement", hour: "Heure",
     imm: "N° d'immatriculation", bank: "Compte bancaire", bankPh: "Ex. : BDM-SA — ML016 01201 …", show: "Afficher", tvaOn: "Faire des factures avec TVA", tvaRate: "Taux de TVA (%)", tvaMode: "Les prix que vous tapez sont", tvaHT: "Hors taxe (HT)", tvaTTC: "TVA comprise (TTC)",
     askMode: "À chaque vente", askAuto: "Automatique : rien n'est demandé", askAsk: "Me demander quoi mettre sur le reçu", onThisDoc: "Sur ce reçu", invoice: "FACTURE", invoiceShort: "Facture", totalHT: "Total HT", tvaAmt: "TVA", totalTTC: "Total TTC", rcptInfos: "Informations à mettre sur les reçus", rcptInfosHint: "Remplissez une fois. Cochez « Afficher » pour qu'elles apparaissent sur les reçus.",
+    eCDebt: "Un client me doit", eCDebtD: "Noter une dette qui existe déjà (ancien crédit).", eSDebt: "Je dois à un fournisseur", eSDebtD: "Noter une dette que vous avez déjà envers lui.",
+    debtTitleC: "Un client me doit", debtTitleS: "Je dois à un fournisseur", debtHintC: "Pour une NOUVELLE vente à crédit, utilisez plutôt « Une vente » avec le paiement « À crédit » : le stock et le chiffre d'affaires seront justes.", debtHintS: "Pour un NOUVEL achat à crédit, utilisez plutôt « Un achat de marchandises » en mettant Payé = 0.",
+    orNewName: "… ou nom d'un nouveau", newCName: "Ou nouveau client (nom)", newSName: "Ou nouveau fournisseur (nom)", chooseParty: "Choisissez une personne ou tapez un nouveau nom.", debtLine: "Dette notée", owesNow: "Il vous doit actuellement", weOweNow: "Vous lui devez actuellement", payTooMuch: "Attention : c'est plus que la dette. Pour noter une dette, utilisez « Un client me doit ».",
+    payOk: "Paiement enregistré", stillOwes: "Il vous doit encore", nothingOwed: "Plus rien à payer", advance: "Payé d'avance", whereGo: "Où le retrouver ?", w1: "Accueil → Trésorerie (l'argent reçu y est ajouté) et Crédits clients", w1s: "Accueil → Trésorerie (l'argent payé y est retiré) et Dettes fournisseurs", w2: "Fiche de la personne (Clients ou Fournisseurs) : historique et solde", w3: "Accueil → Dernières opérations", w4: "Comptabilité → Journal (écrit automatiquement)", payRcpt: "Reçu de paiement", payRcptT: "REÇU DE PAIEMENT", received: "Reçu de", paidTo: "Payé à", paymentIn: "Paiement reçu", paymentOut: "Paiement fournisseur",
     whatNote: "Que voulez-vous noter ?", eSale: "Une vente", eSaleD: "Un client achète. Le stock baisse tout seul.", eExp: "Une dépense", eExpD: "Loyer, transport, électricité, salaire…", ePur: "Un achat de marchandises", ePurD: "Vous achetez pour revendre. Le stock monte.", eItem: "Un nouvel article", eItemD: "Ajouter un produit ou un service à votre liste.",
     eCPay: "Un client me paie", eCPayD: "Il règle ce qu'il doit (vente à crédit).", eSPay: "Je paie un fournisseur", eSPayD: "Vous réglez ce que vous lui devez.", eOut: "Une sortie de stock", eOutD: "Perte, casse, cadeau : corriger le stock.", eOutHint: "Touchez l'article, puis « Inventaire » pour noter la quantité qui reste.", ePartyHint: "Touchez la personne, puis le bouton de paiement.",
     gDaily: "Chaque jour", gMoney: "Mes comptes", gPeople: "Les personnes", gOther: "Autres",
@@ -125,6 +129,10 @@
     email: "Email", rccm: "Trade reg. (RCCM)", nif: "Tax ID (NIF)", logo: "Logo", logoAdd: "Add logo", logoDel: "Remove logo", logoBig: "Image too heavy, try another one.", rcptNote: "Note at the bottom of receipts (optional)", rcptNotePh: "E.g.: Goods sold are neither returned nor exchanged.", rcptCard: "Your receipts", payMode: "Payment method", hour: "Time",
     imm: "Registration no.", bank: "Bank account", bankPh: "E.g.: BDM-SA — ML016 01201 …", show: "Show", tvaOn: "Make invoices with VAT", tvaRate: "VAT rate (%)", tvaMode: "The prices you type are", tvaHT: "Excl. tax", tvaTTC: "VAT included",
     askMode: "On each sale", askAuto: "Automatic: nothing is asked", askAsk: "Ask me what to put on the receipt", onThisDoc: "On this receipt", invoice: "INVOICE", invoiceShort: "Invoice", totalHT: "Total excl. tax", tvaAmt: "VAT", totalTTC: "Total incl. tax", rcptInfos: "Information shown on receipts", rcptInfosHint: "Fill in once. Tick “Show” so it appears on receipts.",
+    eCDebt: "A customer owes me", eCDebtD: "Record an existing debt (old credit).", eSDebt: "I owe a supplier", eSDebtD: "Record a debt you already have.",
+    debtTitleC: "A customer owes me", debtTitleS: "I owe a supplier", debtHintC: "For a NEW credit sale, use “A sale” with payment “On credit” instead: stock and revenue stay right.", debtHintS: "For a NEW credit purchase, use “A goods purchase” with Paid = 0 instead.",
+    orNewName: "… or a new name", newCName: "Or new customer (name)", newSName: "Or new supplier (name)", chooseParty: "Choose a person or type a new name.", debtLine: "Debt recorded", owesNow: "Currently owes you", weOweNow: "You currently owe", payTooMuch: "Careful: this is more than the debt. To record a debt, use “A customer owes me”.",
+    payOk: "Payment recorded", stillOwes: "Still owes you", nothingOwed: "Nothing left to pay", advance: "Paid in advance", whereGo: "Where to find it?", w1: "Home → Cash and Customer credits", w1s: "Home → Cash and Supplier debts", w2: "The person's page (Customers or Suppliers): history and balance", w3: "Home → Latest operations", w4: "Accounting → Journal (automatic)", payRcpt: "Payment receipt", payRcptT: "PAYMENT RECEIPT", received: "Received from", paidTo: "Paid to", paymentIn: "Payment received", paymentOut: "Supplier payment",
     whatNote: "What do you want to record?", eSale: "A sale", eSaleD: "A customer buys. Stock goes down automatically.", eExp: "An expense", eExpD: "Rent, transport, electricity, salary…", ePur: "A goods purchase", ePurD: "You buy to resell. Stock goes up.", eItem: "A new item", eItemD: "Add a product or service to your list.",
     eCPay: "A customer pays me", eCPayD: "They settle what they owe (credit sale).", eSPay: "I pay a supplier", eSPayD: "You settle what you owe them.", eOut: "Stock going out", eOutD: "Loss, breakage, gift: correct the stock.", eOutHint: "Tap the item, then “Stock count” to record what is left.", ePartyHint: "Tap the person, then the payment button.",
     gDaily: "Every day", gMoney: "My accounts", gPeople: "People", gOther: "Other",
@@ -391,12 +399,14 @@
   }
   function clientBalances() {
     var b = {};
+    live("client").forEach(function (c) { if (Array.isArray(c.debts)) c.debts.forEach(function (x) { b[c.id] = (b[c.id] || 0) + num(x.amount); }); });
     live("sale").forEach(function (s) { if (s.client) b[s.client] = (b[s.client] || 0) + num(s.total) - num(s.paid); });
     live("payment").forEach(function (p) { if (p.side === "client" && p.party) b[p.party] = (b[p.party] || 0) - num(p.amount); });
     return b;
   }
   function supplierBalances() {
     var b = {};
+    live("supplier").forEach(function (c) { if (Array.isArray(c.debts)) c.debts.forEach(function (x) { b[c.id] = (b[c.id] || 0) + num(x.amount); }); });
     live("purchase").forEach(function (s) { if (s.supplier) b[s.supplier] = (b[s.supplier] || 0) + num(s.total) - num(s.paid); });
     live("payment").forEach(function (p) { if (p.side === "supplier" && p.party) b[p.party] = (b[p.party] || 0) - num(p.amount); });
     return b;
@@ -585,7 +595,9 @@
       ["purchase", "ePur", "fa-truck-ramp-box", "new", "purchase"],
       ["item", "eItem", "fa-box-open", "new", "item"],
       ["cpay", "eCPay", "fa-hand-holding-dollar", "go-party", "clients"],
+      ["payment", "eCDebt", "fa-file-invoice-dollar", "new-debt", "client"],
       ["payment", "eSPay", "fa-money-check-dollar", "go-party", "suppliers"],
+      ["payment", "eSDebt", "fa-file-invoice", "new-debt", "supplier"],
       ["adjust", "eOut", "fa-clipboard-check", "go-out", "items"]
     ].filter(function (e) { return can(e[0]); });
     if (!E.length) return "";
@@ -621,6 +633,7 @@
     // Dernières opérations
     var lastOps = [];
     live("sale").forEach(function (s) { lastOps.push({ at: s._created, k: "sale", r: s, t: (s.client ? partyName("client", s.client) + " · " : "") + saleLines(s).map(function (l) { return l.name; }).join(", "), v: num(s.total), sign: 1 }); });
+    live("payment").forEach(function (p) { if (S.role === "caissier" && p.side !== "client") return; lastOps.push({ at: p._created, k: p.side, r: { id: p.party, d: p.d, _bn: p._bn }, t: L(p.side === "client" ? "paymentIn" : "paymentOut") + " · " + partyName(p.side, p.party), v: num(p.amount), sign: p.side === "client" ? 1 : -1 }); });
     if (S.role !== "caissier") {
       live("expense").forEach(function (x) { lastOps.push({ at: x._created, k: "expense", r: x, t: catLabel(x.cat || "autre") + (x.note ? " · " + x.note : ""), v: num(x.amount), sign: -1 }); });
       live("purchase").forEach(function (p) { lastOps.push({ at: p._created, k: "purchase", r: p, t: L("purchases") + (p.supplier ? " · " + partyName("supplier", p.supplier) : ""), v: num(p.total), sign: -1 }); });
@@ -836,6 +849,8 @@
     else if (m.t === "employee") body = fEmployee();
     else if (m.t === "payment") body = fPayment();
     else if (m.t === "adjust") body = fAdjust();
+    else if (m.t === "debt") body = fDebt();
+    else if (m.t === "payok") body = vPayOk();
     else if (m.t === "receipt") body = vReceipt();
     else if (m.t === "view") body = vRecord();
     return '<div class="gx-overlay" data-a="modal-bg"><div class="gx-sheet' + (m.big ? ' big' : '') + '" role="dialog"><button class="gx-x" data-a="modal-close" aria-label="' + L("close") + '"><i class="fa-solid fa-xmark"></i></button>' + body + '</div></div>';
@@ -945,8 +960,43 @@
   function fPayment() {
     var d = S.modal.d;
     var h = '<h2><i class="fa-solid fa-hand-holding-dollar"></i> ' + (d.side === "client" ? L("encaisser") : L("payBtn")) + ' — ' + esc(partyName(d.side, d.party)) + '</h2><div class="gx-fgrid">';
+    var bal0 = ((d.side === "client" ? clientBalances() : supplierBalances())[d.party]) || 0;
+    h = h.replace('<div class="gx-fgrid">', '<p class="gx-hint">' + L(d.side === "client" ? "owesNow" : "weOweNow") + ' : <b>' + money(Math.max(0, bal0)) + '</b></p><div class="gx-fgrid">');
     h += field(L("amount"), "amount", d.amount, 'inputmode="numeric"') + selectF(L("mode"), "mode", d.mode, modeOpts()) + field(L("date"), "d", d.d, 'type="date"') + field(L("note"), "note", d.note, "");
-    h += '</div><div class="gx-sheet-foot"><button class="gx-btn" data-a="modal-close">' + L("cancel") + '</button><button class="gx-btn gx-primary" data-a="save-payment"><i class="fa-solid fa-check"></i> ' + L("save") + '</button></div>';
+    h += '</div>' + (d.side === "client" && num(d.amount) > Math.max(0, bal0) ? '<p class="gx-hint warn">' + L("payTooMuch") + '</p>' : '') + '<div class="gx-sheet-foot"><button class="gx-btn" data-a="modal-close">' + L("cancel") + '</button><button class="gx-btn gx-primary" data-a="save-payment"><i class="fa-solid fa-check"></i> ' + L("save") + '</button></div>';
+    return h;
+  }
+  function fDebt() {
+    var d = S.modal.d, c = d.side === "client";
+    var h = '<h2><i class="fa-solid fa-file-invoice-dollar"></i> ' + L(c ? "debtTitleC" : "debtTitleS") + '</h2><p class="gx-hint">' + L(c ? "debtHintC" : "debtHintS") + '</p><div class="gx-fgrid">';
+    h += selectF(L(c ? "client" : "supplier"), "party", d.party, partyOpts(d.side));
+    if (!d.party) h += field(L(c ? "newCName" : "newSName"), "newName", d.newName, 'maxlength="80"') + field(L("phone"), "newPhone", d.newPhone, 'type="tel"');
+    h += field(L("amount"), "amount", d.amount, 'inputmode="numeric"') + field(L("date"), "d", d.d, 'type="date"') + field(L("note"), "note", d.note, 'maxlength="120"');
+    h += '</div><div class="gx-sheet-foot"><button class="gx-btn" data-a="modal-close">' + L("cancel") + '</button><button class="gx-btn gx-primary" data-a="save-debt"><i class="fa-solid fa-check"></i> ' + L("save") + '</button></div>';
+    return h;
+  }
+  function saveDebt() {
+    var d = S.modal.d, k = d.side, amt = num(d.amount);
+    if (amt <= 0) return toast(L("amount") + " : " + L("required"));
+    var p = d.party ? getE(k, d.party) : null;
+    if (!p && !String(d.newName || "").trim()) return toast(L("chooseParty"));
+    var id = p ? p.id : rid(k.charAt(0) + "_");
+    var base = p ? clean(p, ["name", "phone", "note", "debts"]) : { name: String(d.newName).trim().slice(0, 80), phone: String(d.newPhone || "").slice(0, 30), note: "" };
+    base.debts = (base.debts || []).concat([{ id: rid("dt"), d: d.d || today(), amount: amt, note: String(d.note || "").slice(0, 120) }]).slice(-150);
+    write(k, id, base);
+    S.modal = { t: "view", k: k, id: id }; render(); toast("✅ " + L("saved"));
+  }
+  function vPayOk() {
+    var p = getE("payment", S.modal.id); if (!p) return "";
+    var c = p.side === "client", bal = ((c ? clientBalances() : supplierBalances())[p.party]) || 0;
+    var h = '<div class="gx-payok"><i class="fa-solid fa-circle-check"></i><h2>' + L("payOk") + '</h2><div class="gx-amount">' + (c ? "+" : "−") + money(p.amount) + '</div></div>';
+    h += '<div class="gx-list"><div class="gx-line"><span>' + L(c ? "received" : "paidTo") + '</span><b>' + esc(partyName(p.side, p.party)) + '</b></div>';
+    h += '<div class="gx-line"><span>' + L("mode") + '</span><b>' + esc(modeLabel(p.mode)) + '</b></div><div class="gx-line"><span>' + L("date") + '</span><b>' + dateFr(p.d) + '</b></div>';
+    h += '<div class="gx-line"><span>' + (bal > 0 ? (c ? L("stillOwes") : L("weOweNow")) : bal < 0 ? L("advance") : L("nothingOwed")) + '</span><b class="' + (bal > 0 ? "warn" : "green") + '">' + money(Math.abs(bal)) + '</b></div></div>';
+    h += '<div class="gx-card gx-where"><b>' + L("whereGo") + '</b><ul><li>' + L(c ? "w1" : "w1s") + '</li><li>' + L("w2") + '</li><li>' + L("w3") + '</li><li>' + L("w4") + '</li></ul></div>';
+    var party = getE(p.side, p.party), ph = party && party.phone ? String(party.phone).replace(/\D/g, "") : "";
+    var txt = "*" + S.name.toUpperCase() + "*\n" + (setting("phone", "") ? L("tel") + " : " + setting("phone", "") + "\n" : "") + "━━━━━━━━━━━━━━\n*" + L("payRcptT") + "*\n" + L("date") + " : " + dateFr(p.d) + "\n" + L(c ? "received" : "paidTo") + " : " + partyName(p.side, p.party) + "\n" + L("amount") + " : *" + money(p.amount) + "* (" + modeLabel(p.mode) + ")\n" + (bal > 0 ? L(c ? "stillOwes" : "weOweNow") + " : " + money(bal) : L("nothingOwed")) + "\n━━━━━━━━━━━━━━\n" + L("receiptThanks") + "\n_" + L("rcptFoot") + "_";
+    h += '<div class="gx-sheet-foot">' + (c ? '<a class="gx-btn gx-primary" target="_blank" rel="noopener" href="https://wa.me/' + ph + '?text=' + encodeURIComponent(txt) + '"><i class="fa-brands fa-whatsapp"></i> ' + L("payRcpt") + '</a>' : '') + '<button class="gx-btn" data-a="open" data-k="' + p.side + '" data-v="' + esc(p.party) + '"><i class="fa-solid fa-user"></i> ' + esc(partyName(p.side, p.party)) + '</button><button class="gx-btn" data-a="modal-close">' + L("close") + '</button></div>';
     return h;
   }
   function fAdjust() {
@@ -997,6 +1047,7 @@
       if (k === "client") live("sale").forEach(function (s) { if (s.client === r.id) hist.push([s.d, L("sales") + " " + money(s.total), num(s.total) - num(s.paid)]); });
       else live("purchase").forEach(function (p) { if (p.supplier === r.id) hist.push([p.d, L("purchases") + " " + money(p.total), num(p.total) - num(p.paid)]); });
       live("payment").forEach(function (p) { if (p.party === r.id && p.side === k) hist.push([p.d, L("payments") + " (" + modeLabel(p.mode) + ")", -num(p.amount)]); });
+      (r.debts || []).forEach(function (x) { hist.push([x.d, L("debtLine") + (x.note ? " — " + x.note : ""), num(x.amount)]); });
       hist.sort(function (a, b) { return b[0] > a[0] ? 1 : -1; });
       h += '<div class="gx-list">' + (hist.length ? hist.slice(0, 40).map(function (x) { return '<div class="gx-line"><span>' + dateFr(x[0]) + ' · ' + esc(x[1]) + '</span><b class="' + (x[2] > 0 ? "warn" : "green") + '">' + (x[2] > 0 ? "+" : "") + money(x[2]) + '</b></div>'; }).join("") : empty()) + '</div>';
       h += histHtml(r) + '<div class="gx-sheet-foot">';
@@ -1342,6 +1393,7 @@
     else if (t === "client" || t === "supplier" || t === "employee") d = r ? copy(r) : { name: "", phone: "", note: "" };
     else if (t === "payment") { var p = String(extra || "").split(":"); d = merge(base, { side: p[0], party: p.slice(1).join(":"), amount: Math.max(0, ((p[0] === "client" ? clientBalances() : supplierBalances())[p.slice(1).join(":")] || 0)) || "" }); }
     else if (t === "adjust") d = { item: extra, real: "", note: "" };
+    else if (t === "debt") d = merge(base, { side: extra === "supplier" ? "supplier" : "client", party: "", newName: "", newPhone: "", amount: "" });
     if (r) { d.paidTouched = true; delete d._hist; delete d._opFull; }
     S.modal = { t: t, id: id || null, d: d, big: t === "sale" || t === "purchase" };
     render();
@@ -1397,7 +1449,8 @@
   }
   function saveParty(k) {
     var d = S.modal.d; if (!String(d.name || "").trim()) return toast(L("name") + " : " + L("required"));
-    write(k, S.modal.id || rid(k.charAt(0) + "_"), { name: String(d.name).trim().slice(0, 80), phone: String(d.phone || "").slice(0, 30), note: String(d.note || "").slice(0, 200) });
+    var old = S.modal.id ? getE(k, S.modal.id) : null;
+    write(k, S.modal.id || rid(k.charAt(0) + "_"), merge({ name: String(d.name).trim().slice(0, 80), phone: String(d.phone || "").slice(0, 30), note: String(d.note || "").slice(0, 200) }, old && old.debts ? { debts: old.debts } : {}));
     done();
   }
   function saveEmployee() {
@@ -1407,8 +1460,9 @@
   }
   function savePayment() {
     var d = S.modal.d; if (num(d.amount) <= 0) return toast(L("amount") + " : " + L("required"));
-    write("payment", rid("y_"), { side: d.side, party: d.party, amount: num(d.amount), mode: d.mode, d: d.d || today(), note: String(d.note || "").slice(0, 200) });
-    done();
+    var pid = rid("y_");
+    write("payment", pid, { side: d.side, party: d.party, amount: num(d.amount), mode: d.mode, d: d.d || today(), note: String(d.note || "").slice(0, 200) });
+    S.modal = { t: "payok", id: pid }; render();
   }
   function saveAdjust() {
     var d = S.modal.d; if (String(d.real).trim() === "") return toast(L("realQty") + " : " + L("required"));
@@ -1507,6 +1561,8 @@
         case "save-party": saveParty(v); break;
         case "save-employee": saveEmployee(); break;
         case "save-payment": savePayment(); break;
+        case "save-debt": saveDebt(); break;
+        case "new-debt": openForm("debt", null, v); break;
         case "save-adjust": saveAdjust(); break;
         case "import-items": importSounsouniItems(); break;
         case "csv": csvExport(); break;
@@ -1835,6 +1891,9 @@
       if (p.side === "client") add(p.d, "R" + String(p.id).slice(-5).toUpperCase(), L("payments") + " — " + partyName("client", p.party), [[treso(p.mode), num(p.amount), 0], ["411", 0, num(p.amount)]]);
       else add(p.d, "P" + String(p.id).slice(-5).toUpperCase(), L("payments") + " — " + partyName("supplier", p.party), [["401", num(p.amount), 0], [treso(p.mode), 0, num(p.amount)]]);
     });
+    // Dettes notées à part (crédits anciens, avant la Gestion) : à-nouveaux.
+    live("client").forEach(function (c) { (c.debts || []).forEach(function (x) { add(x.d, "AN" + String(x.id).slice(-4).toUpperCase(), L("debtLine") + " — " + c.name, [["411", num(x.amount), 0], ["101", 0, num(x.amount)]]); }); });
+    live("supplier").forEach(function (c) { (c.debts || []).forEach(function (x) { add(x.d, "AN" + String(x.id).slice(-4).toUpperCase(), L("debtLine") + " — " + c.name, [["101", num(x.amount), 0], ["401", 0, num(x.amount)]]); }); });
     E.sort(function (a, b) { return a.d < b.d ? -1 : a.d > b.d ? 1 : 0; });
     return E;
   }
@@ -1995,7 +2054,7 @@
       ".gx-picker{border:1px dashed var(--bd);border-radius:14px;padding:8px;margin-bottom:6px}.gx-pick-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;max-height:170px;overflow-y:auto}",
       ".gx-pick-list button{border:1px solid var(--bd);background:var(--bg);color:var(--tx);border-radius:10px;padding:7px 10px;font-size:12.5px;font-weight:700;text-align:left;max-width:100%}.gx-pick-list button small{display:block;font-weight:500;color:var(--dim);font-size:11px}.gx-pick-list .gx-other{color:var(--g)}",
       ".gx-meta{font-size:11.5px;color:var(--dim);margin-top:10px}.gx-hist{font-size:11.5px;color:var(--dim);margin-top:6px}.gx-hist div{padding:3px 0}",
-      ".gx-entry h3{margin:0 0 10px}.gx-entry-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.gx-wide .gx-entry-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.gx-entry-grid button{display:flex;align-items:flex-start;gap:8px;text-align:left;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:10px;color:var(--tx);min-width:0}.gx-entry-grid button>i{font-size:18px;color:var(--g);margin-top:2px;flex:0 0 20px;text-align:center}.gx-entry-grid span{display:flex;flex-direction:column;min-width:0}.gx-entry-grid b{font-size:13.5px}.gx-entry-grid small{font-size:11.5px;opacity:.7;line-height:1.25}.gx-entry-grid .gx-entry-main{grid-column:1/-1;background:var(--g);border-color:var(--g);color:#fff}.gx-entry-grid .gx-entry-main>i{color:#fff}.gx-entry-grid .gx-entry-main small{opacity:.9}.gx-sub{margin:14px 0 4px;font-size:14px}.gx-info-row{display:flex;align-items:flex-end;gap:8px}.gx-info-row .gx-field{flex:1;min-width:0}.gx-show{flex:0 0 auto;margin-bottom:12px;font-size:12.5px}.gx-tva-box{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:13px;margin-top:6px}.gx-tva-box div{display:flex;gap:10px}.gx-docopts{border:1px solid var(--bd);border-radius:12px;padding:10px;margin:8px 0;display:flex;flex-direction:column;gap:6px;font-size:13.5px}.gx-logo-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.gx-logo-prev{width:56px;height:56px;object-fit:contain;border:1px solid var(--bd);border-radius:10px;background:#fff}.gx-logo-empty{display:flex;align-items:center;justify-content:center;color:#999;font-size:22px}.gx-receipt{border:1px solid var(--bd);border-radius:12px;padding:16px 14px;text-align:left;background:#fff;color:#111;box-shadow:0 2px 10px rgba(0,0,0,.06)}" + RC_CSS + "@media(max-width:380px){.gx-receipt .rc-stamp svg{width:92px;height:92px}}",
+      ".gx-payok{text-align:center;margin:4px 0 12px}.gx-payok>i{font-size:44px;color:var(--g)}.gx-payok h2{margin:6px 0 2px}.gx-payok .gx-amount{font-size:26px;font-weight:900;color:var(--g)}.gx-where{margin-top:10px;font-size:13px}.gx-where ul{margin:6px 0 0;padding-left:18px}.gx-where li{margin:3px 0}.gx-entry h3{margin:0 0 10px}.gx-entry-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.gx-wide .gx-entry-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.gx-entry-grid button{display:flex;align-items:flex-start;gap:8px;text-align:left;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:10px;color:var(--tx);min-width:0}.gx-entry-grid button>i{font-size:18px;color:var(--g);margin-top:2px;flex:0 0 20px;text-align:center}.gx-entry-grid span{display:flex;flex-direction:column;min-width:0}.gx-entry-grid b{font-size:13.5px}.gx-entry-grid small{font-size:11.5px;opacity:.7;line-height:1.25}.gx-entry-grid .gx-entry-main{grid-column:1/-1;background:var(--g);border-color:var(--g);color:#fff}.gx-entry-grid .gx-entry-main>i{color:#fff}.gx-entry-grid .gx-entry-main small{opacity:.9}.gx-sub{margin:14px 0 4px;font-size:14px}.gx-info-row{display:flex;align-items:flex-end;gap:8px}.gx-info-row .gx-field{flex:1;min-width:0}.gx-show{flex:0 0 auto;margin-bottom:12px;font-size:12.5px}.gx-tva-box{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:13px;margin-top:6px}.gx-tva-box div{display:flex;gap:10px}.gx-docopts{border:1px solid var(--bd);border-radius:12px;padding:10px;margin:8px 0;display:flex;flex-direction:column;gap:6px;font-size:13.5px}.gx-logo-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.gx-logo-prev{width:56px;height:56px;object-fit:contain;border:1px solid var(--bd);border-radius:10px;background:#fff}.gx-logo-empty{display:flex;align-items:center;justify-content:center;color:#999;font-size:22px}.gx-receipt{border:1px solid var(--bd);border-radius:12px;padding:16px 14px;text-align:left;background:#fff;color:#111;box-shadow:0 2px 10px rgba(0,0,0,.06)}" + RC_CSS + "@media(max-width:380px){.gx-receipt .rc-stamp svg{width:92px;height:92px}}",
       "@media (max-width:360px){.gx-fgrid{grid-template-columns:1fr}.gx-kpi b{font-size:15px}}"
     ].join("\n");
     var st = document.createElement("style"); st.id = "gx-css"; st.textContent = css; document.head.appendChild(st);
