@@ -57,3 +57,7 @@ returns bigint language sql set search_path = public as $$
 $$;
 revoke all on function public.sns_gestion_extend(text, text, int) from public, anon, authenticated;
 grant execute on function public.sns_gestion_extend(text, text, int) to service_role;
+
+-- Pixel Meta des boutiques : metaPixelId ajouté aux champs publics
+-- (migration public_profile_meta_pixel_2026_10_31 ; fonction
+-- sounsouni_public_profile, liste blanche + 'metaPixelId').

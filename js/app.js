@@ -6443,6 +6443,7 @@ function blockedByMissingInternationalLogistics(product) {
 }
 
 function addToCart(productId, qty, color, size) {
+  try { var pxp = findProductById(productId); if (pxp) snsPixel(pxp.sellerId, "AddToCart", { content_ids: [pxp.id], content_type: "product", value: (Number(pxp.price) || 0) * (Number(qty) || 1), currency: "XOF" }); } catch (e) {}
   if (isDigitalProduct(findProductById(productId))) { openDigitalBuy(productId); return; }
   var product = null;
   for (var i = 0; i < state.products.length; i++) {
@@ -7205,6 +7206,7 @@ function finalizeOrder(order, opts) {
       }
     }
   }
+  try { var pxBy = {}; (order.items || []).forEach(function(it) { if (!it || !it.sellerId) return; var g = pxBy[it.sellerId] || (pxBy[it.sellerId] = { ids: [], v: 0 }); g.ids.push(it.productId); g.v += (Number(it.price) || 0) * (Number(it.qty) || 1); }); Object.keys(pxBy).forEach(function(sid) { snsPixel(sid, "Purchase", { content_ids: pxBy[sid].ids, content_type: "product", value: pxBy[sid].v, currency: "XOF" }); }); } catch (e) {}
   state.orders.unshift(order);
   if (!state.quickBuyItem) state.cart = state.cart.filter(function(it) { return it.buyerId !== state.profile.id; });
   state.quickBuyItem = null;
@@ -9440,6 +9442,16 @@ function renderLigdiWaiting() {
   } catch (e) {}
 })();
 function nativeInAppBrowser() {
+  // Application Windows (Sounsouni.exe) : fenêtre de paiement intégrée, même
+  // fonctionnement que le navigateur intégré du téléphone.
+  if (window.SnsDesktop && window.SnsDesktop.openPayment) {
+    var D = window.SnsDesktop;
+    return {
+      openInWebView: function(o) { return D.openPayment(o.url); },
+      addListener: function(name, fn) { return D.onPayment(name === "browserClosed" ? "closed" : "nav", fn); },
+      close: function() { try { D.closePayment(); } catch (e) {} }
+    };
+  }
   try {
     var C = window.Capacitor;
     if (!(C && C.isNativePlatform && C.isNativePlatform() && C.Plugins)) return null;
@@ -12620,6 +12632,7 @@ function render() {
     }
   }
   window._lastRenderedView = state.view;
+  snsPixelOnRender();
   // Garde-fou : le marché est réservé aux acheteurs — si on s'y retrouve
   // (fermeture d'une fenêtre en glissement, etc.) alors qu'un autre rôle
   // était actif, on corrige ici même, sans passer par switchRole() pour
@@ -13005,6 +13018,7 @@ function buildHTML() {
   if (state.adminParcelDetailId) html += renderAdminParcelDetailModal();
   if (state.showNotifPanel) html += renderNotifPanel();
   if (state.showRoleMenu) html += renderRoleMenuModal();
+  if (state.showMetaCatalog) html += renderMetaCatalogModal();
   if (state.showVendorHub) html += renderVendorHubModal();
   if (state.showProfileScreen) html += renderProfileModal();
   html += renderContractGate();
@@ -14080,6 +14094,61 @@ function renderGestionRoleSection() {
   });
   if (canCreate) html += '<button type="button" class="link-btn" style="width:100%;text-align:center;font-size:12px;" data-action="gx-create"><i class="fa-solid fa-plus"></i> ' + t("gx_create") + '</button>';
   return html;
+}
+
+// ---- Catalogue Facebook / Instagram / WhatsApp de la boutique (31/10/2026) ----
+// Le fichier c/<boutique>.csv est fabriqué par GitHub toutes les 10 min
+// (tools/make-share-pages.mjs) : rien sur Supabase. Le vendeur colle le lien
+// une fois dans Meta Commerce Manager. Pixel Meta facultatif (metaPixelId).
+function metaCatalogUrl(sellerId) { return "https://sounsouni.pro/c/" + encodeURIComponent(sellerId) + ".csv"; }
+function renderMetaCatalogModal() {
+  var me = state.profile; if (!me) return "";
+  var url = metaCatalogUrl(me.id);
+  var html = '<div class="modal-overlay" data-action="close-meta-catalog"><div class="modal-sheet">';
+  html += '<button class="modal-close" data-action="close-meta-catalog"><i class="fa-solid fa-xmark"></i></button>';
+  html += '<div class="section-title" style="margin-bottom:10px;"><i class="fa-brands fa-facebook"></i> ' + t("meta_title") + '</div>';
+  html += '<div style="font-size:12.5px;color:var(--text-dim);line-height:1.5;margin-bottom:12px;">' + t("meta_intro") + '</div>';
+  html += '<div style="font-weight:700;font-size:13px;margin-bottom:6px;">' + t("meta_link") + '</div>';
+  html += '<div style="display:flex;gap:6px;margin-bottom:14px;"><input class="input" readonly style="flex:1 1 auto;width:auto;min-width:0;margin:0;font-size:12px;" value="' + esc(url) + '"><button class="btn-primary" style="flex:0 0 auto;width:auto;padding:0 16px;margin:0;" data-action="copy-meta-link"><i class="fa-solid fa-copy"></i></button></div>';
+  html += '<div style="font-weight:700;font-size:13px;margin-bottom:6px;">' + t("meta_steps_title") + '</div><ol style="font-size:12.5px;line-height:1.55;padding-left:18px;margin:0 0 14px;">';
+  for (var i = 1; i <= 5; i++) html += '<li>' + t("meta_step_" + i) + '</li>';
+  html += '</ol><div style="font-size:11.5px;color:var(--text-dim);margin-bottom:14px;"><i class="fa-solid fa-circle-info"></i> ' + t("meta_note") + '</div>';
+  html += '<div style="font-weight:700;font-size:13px;margin-bottom:6px;">' + t("meta_pixel_title") + '</div>';
+  html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:6px;">' + t("meta_pixel_text") + '</div>';
+  html += '<div style="display:flex;gap:6px;"><input class="input" id="meta-pixel-input" inputmode="numeric" maxlength="20" placeholder="123456789012345" style="flex:1 1 auto;width:auto;min-width:0;margin:0;" value="' + esc(me.metaPixelId || "") + '"><button class="btn-primary" style="flex:0 0 auto;width:auto;padding:0 16px;margin:0;" data-action="save-meta-pixel">' + t("ad_save") + '</button></div>';
+  html += '</div></div>';
+  return html;
+}
+// Pixel Meta du vendeur : chargé seulement quand on regarde SES articles.
+function snsPixelFor(sellerId) {
+  var a = null; for (var i = 0; i < (state.accounts || []).length; i++) { if (state.accounts[i] && state.accounts[i].id === sellerId) { a = state.accounts[i]; break; } }
+  var pid = a ? String(a.metaPixelId || "") : "";
+  return /^\d{8,20}$/.test(pid) ? pid : null;
+}
+function snsPixel(sellerId, ev, data) {
+  var pid = snsPixelFor(sellerId); if (!pid) return;
+  try {
+    if (!window.fbq) {
+      var n = window.fbq = function() { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments); };
+      if (!window._fbq) window._fbq = n; n.push = n; n.loaded = true; n.version = "2.0"; n.queue = [];
+      var sc = document.createElement("script"); sc.async = true; sc.src = "https://connect.facebook.net/en_US/fbevents.js"; document.head.appendChild(sc);
+    }
+    window._snsPixels = window._snsPixels || {};
+    if (!window._snsPixels[pid]) { window._snsPixels[pid] = 1; window.fbq("init", pid); window.fbq("trackSingle", pid, "PageView"); }
+    window.fbq("trackSingle", pid, ev, data || {});
+  } catch (e) {}
+}
+function snsPixelOnRender() {
+  try {
+    if (state.detailProductId && state.detailProductId !== window._pxLastProd) {
+      window._pxLastProd = state.detailProductId;
+      var pp = findProductById(state.detailProductId);
+      if (pp) snsPixel(pp.sellerId, "ViewContent", { content_ids: [pp.id], content_type: "product", content_name: String(pp.name || ""), value: Number(pp.price) || 0, currency: "XOF" });
+    }
+    if (!state.detailProductId) window._pxLastProd = null;
+    if (state.view === "shop" && state.shopFilterSellerId && state.shopFilterSellerId !== window._pxLastShop) { window._pxLastShop = state.shopFilterSellerId; snsPixel(state.shopFilterSellerId, "ViewContent", { content_type: "product_group" }); }
+    if (state.view !== "shop") window._pxLastShop = null;
+  } catch (e) {}
 }
 
 function renderRoleMenuModal() {
@@ -18979,6 +19048,10 @@ function renderSeller() {
   html += '<button class="btn-secondary" style="margin-bottom:14px;' + (shopBoosted ? 'border-color:#f6c343;color:#a67c00;' : '') + '" data-action="open-boost-modal" data-target-type="shop" data-value="' + state.profile.id + '">';
   html += '<i class="fa-solid fa-rocket"></i> ' + (shopBoosted ? t("seller_boost_shop_active") : t("seller_boost_shop"));
   html += '</button>';
+  var gxOwned = (gestionState().companies || []).filter(function(c) { return c.isOwner; })[0];
+  html += '<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">';
+  html += '<button class="btn-secondary" style="flex:1 1 140px;min-width:0;" data-action="' + (gxOwned ? 'gx-open' : 'gx-create') + '" data-value="' + (gxOwned ? esc(gxOwned.id) : '') + '"><i class="fa-solid fa-book"></i> ' + t("gx_my") + '</button>';
+  html += '<button class="btn-secondary" style="flex:1 1 140px;min-width:0;" data-action="open-meta-catalog"><i class="fa-brands fa-facebook"></i> ' + t("meta_btn") + '</button></div>';
   if (state.profile.sellerType !== "international") {
     html += '<button class="link-btn" style="width:100%;text-align:center;margin-bottom:10px;" data-action="view-seller-policy"><i class="fa-solid fa-file-lines"></i> Relire la politique d\'utilisation</button>';
   }
@@ -27585,6 +27658,16 @@ root.addEventListener("click", function(e) {
     case "submit-admin-gate": submitAdminGate(); break;
     case "switch-role": switchRole(value); break;
     case "gx-open": gestionOpen(value); break;
+    case "open-meta-catalog": state.showMetaCatalog = true; render(); break;
+    case "close-meta-catalog": state.showMetaCatalog = false; render(); break;
+    case "copy-meta-link": { var mu = metaCatalogUrl(state.profile.id); try { navigator.clipboard.writeText(mu).then(function() { showToast("✅ " + t("meta_copied")); }, function() { prompt("", mu); }); } catch (e) { prompt("", mu); } break; }
+    case "save-meta-pixel": {
+      var mpv = String((document.getElementById("meta-pixel-input") || {}).value || "").replace(/\s/g, "");
+      if (mpv && !/^\d{8,20}$/.test(mpv)) { showToast("❌ " + t("meta_pixel_bad")); break; }
+      state.profile.metaPixelId = mpv || null;
+      for (var mpi = 0; mpi < state.accounts.length; mpi++) { if (state.accounts[mpi].id === state.profile.id) { state.accounts[mpi].metaPixelId = state.profile.metaPixelId; break; } }
+      save(); saveDoc("accounts", state.profile); showToast("✅ " + t("gx_admin_saved")); render(); break;
+    }
     case "gx-admin-reload": state.gxAdmin = null; render(); break;
     case "gx-admin-mode": if (state.gxAdmin && state.gxAdmin.config) { state.gxAdmin.config.mode = value; render(); } break;
     case "gx-admin-save": {

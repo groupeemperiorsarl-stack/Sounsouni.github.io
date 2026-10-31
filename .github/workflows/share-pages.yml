@@ -24,7 +24,7 @@ jobs:
         run: |
           git config user.name "sounsouni-bot"
           git config user.email "bot@sounsouni.pro"
-          git add -A p
+          git add -A p c
           if git diff --cached --quiet; then echo "Rien de nouveau"; exit 0; fi
           git commit -m "Pages de partage des articles (mise à jour automatique)"
           git pull --rebase -q origin main

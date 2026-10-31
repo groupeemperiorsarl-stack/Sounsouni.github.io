@@ -1,7 +1,7 @@
 {
   "name": "sounsouni-desktop",
   "productName": "Sounsouni",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Sounsouni pour ordinateur",
   "author": "Sounsouni",
   "main": "main.js",
@@ -16,9 +16,28 @@
   "build": {
     "appId": "pro.sounsouni.desktop",
     "productName": "Sounsouni",
-    "files": ["main.js", "offline.html", "build/icon.png"],
-    "directories": { "buildResources": "build", "output": "dist" },
-    "win": { "target": "nsis", "icon": "build/icon.png", "artifactName": "Sounsouni-Setup.exe" },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "perMachine": false, "createDesktopShortcut": true, "createStartMenuShortcut": true, "shortcutName": "Sounsouni" }
+    "files": [
+      "main.js",
+      "preload.js",
+      "offline.html",
+      "build/icon.png"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png",
+      "artifactName": "Sounsouni-Setup.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Sounsouni"
+    }
   }
 }

@@ -56,6 +56,34 @@ ${price ? `<meta property="product:price:amount" content="${Math.round(Number(p.
   keep.add(`${id}.html`);
   if (!fs.existsSync(file) || fs.readFileSync(file, "utf8") !== page) { fs.writeFileSync(file, page); written++; }
 }
+// ---- Catalogues Facebook / Instagram / WhatsApp (31/10/2026) ----
+// c/<boutique>.csv : un catalogue par boutique, au format « flux de données »
+// de Meta (Commerce Manager le relit tout seul chaque jour). c/sounsouni.csv :
+// tous les articles, pour les publicités de Sounsouni.
+const csvCell = (v) => { const s = String(v ?? "").replace(/\r?\n|\r/g, " ").trim(); return /[",]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+const HEAD = ["id", "title", "description", "availability", "condition", "price", "link", "image_link", "additional_image_link", "brand", "product_type"];
+const bySeller = new Map(), all = [];
+for (const { id, data: p } of rows) {
+  if (!p || !safeId(id) || p.banned || p.deleted || p.hidden) continue;
+  if (p.moderationStatus === "pending" || p.moderationStatus === "rejected") continue;
+  if (!(Number(p.price) > 0)) continue;
+  const imgs = (Array.isArray(p.images) ? p.images : []).filter((u) => typeof u === "string" && /^https:\/\//.test(u));
+  if (!imgs.length) continue;
+  const shop = String(p.shopName || p.sellerName || "Sounsouni").slice(0, 100);
+  const desc = (String(p.description || "").replace(/\s+/g, " ").trim() || String(p.name || "")).slice(0, 4900);
+  const line = [id, String(p.name || "Article").slice(0, 150), desc, typeof p.stock === "number" && p.stock <= 0 ? "out of stock" : "in stock", p.condition === "occasion" ? "used" : "new",
+    Math.round(Number(p.price)) + " XOF", `${SITE}/p/${id}.html?ref=fb`, imgs[0], imgs.slice(1, 10).join(","), shop, String(p.category || "").slice(0, 120)].map(csvCell).join(",");
+  all.push(line);
+  const sid = String(p.sellerId || "");
+  if (safeId(sid)) { if (!bySeller.has(sid)) bySeller.set(sid, []); bySeller.get(sid).push(line); }
+}
+fs.mkdirSync("c", { recursive: true });
+const keepC = new Set();
+const writeCsv = (name, lines) => { const body = HEAD.join(",") + "\n" + lines.join("\n") + "\n"; const f = "c/" + name; keepC.add(name); if (!fs.existsSync(f) || fs.readFileSync(f, "utf8") !== body) fs.writeFileSync(f, body); };
+writeCsv("sounsouni.csv", all);
+for (const [sid, lines] of bySeller) writeCsv(sid + ".csv", lines);
+for (const f of fs.readdirSync("c")) if (f.endsWith(".csv") && !keepC.has(f)) fs.unlinkSync("c/" + f);
+console.log(`catalogues : ${keepC.size} (articles : ${all.length})`);
 let removed = 0;
 for (const f of fs.readdirSync("p")) if (f.endsWith(".html") && !keep.has(f)) { fs.unlinkSync("p/" + f); removed++; }
 console.log(`articles : ${keep.size}, pages écrites : ${written}, supprimées : ${removed}`);

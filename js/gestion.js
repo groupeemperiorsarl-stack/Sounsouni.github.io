@@ -55,7 +55,14 @@
     leaveConfirm: "Quitter cette entreprise ? Vous n'y aurez plus accès.", removeConfirm: "Retirer cette personne ? Elle n'aura plus accès.",
     receiptThanks: "Merci pour votre achat !", unpaid: "Non payé", partial: "Partiel", ok: "Payé", mustOnline: "Il faut une connexion pour cette action.",
     invitedOk: "Invitation envoyée. La personne doit accepter dans « Changer de rôle ».", noAccountYet: "Ce numéro n'a pas encore de compte Sounsouni : l'invitation l'attendra.",
-    address: "Adresse", tableView: "Tableau", hideZero: "Masquer stock 0", sortBy: "Trier", alerts: "Alertes", seller: "Vendeur"
+    address: "Adresse", tableView: "Tableau",
+    ohada: "Comptabilité", ohadaOn: "Activer la comptabilité SYSCOHADA", ohadaOff: "Désactiver SYSCOHADA", ohadaHint: "Les écritures sont faites automatiquement à partir de vos ventes, achats, dépenses et paiements : rien à ressaisir.",
+    journal: "Journal", ledger: "Grand livre", trial: "Balance", incomeSt: "Compte de résultat", balanceSh: "Bilan", account: "Compte", label: "Libellé", debit: "Débit", credit2: "Crédit",
+    totals: "Totaux", soldeD: "Solde débiteur", soldeC: "Solde créditeur", charges: "Charges", produits: "Produits", actif: "Actif", passif: "Passif", resultat: "Résultat de l'exercice",
+    stockVar: "Variation des stocks", balanced: "Équilibré", notBalanced: "Non équilibré", ohadaNote: "Stock évalué au dernier prix d'achat de chaque article. À faire vérifier par votre expert-comptable avant dépôt officiel.",
+    printer: "Imprimante", printFmt: "Format d'impression", fmtA4: "Page normale (A4)", fmt80: "Ticket 80 mm", fmt58: "Ticket 58 mm", printerSel: "Imprimante de cet ordinateur", printerAsk: "Me demander à chaque fois",
+    rawbt: "Imprimante Bluetooth (application RawBT)", rawbtHint: "Sur téléphone Android : installez l'application gratuite « RawBT » (Play Store), reliez-la à votre imprimante à tickets Bluetooth, puis cochez cette case.",
+    testPrint: "Imprimer un essai", printErr: "Impression impossible", printSent: "Envoyé à l'imprimante", reportPrint: "Imprimer", hideZero: "Masquer stock 0", sortBy: "Trier", alerts: "Alertes", seller: "Vendeur"
   };
   var EN = {
     app: "Sounsouni Business", home: "Home", sales: "Sales", purchases: "Purchases", expenses: "Expenses", items: "Items & stock", clients: "Customers",
@@ -94,7 +101,14 @@
     removeConfirm: "Remove this person? They will lose access.", receiptThanks: "Thank you for your purchase!", unpaid: "Unpaid", partial: "Partial", ok: "Paid",
     mustOnline: "This action needs a connection.", invitedOk: "Invitation sent. The person must accept in “Switch role”.",
     noAccountYet: "This number has no Sounsouni account yet: the invitation will wait.", tableView: "Table", hideZero: "Hide zero stock", sortBy: "Sort",
-    alerts: "Alerts", seller: "Seller", address: "Address", om: "Orange Money", moov: "Moov Money", wave: "Wave", bank: "Bank"
+    alerts: "Alerts", seller: "Seller", address: "Address",
+    ohada: "Accounting", ohadaOn: "Turn on SYSCOHADA accounting", ohadaOff: "Turn off SYSCOHADA", ohadaHint: "Entries are made automatically from your sales, purchases, expenses and payments: nothing to type again.",
+    journal: "Journal", ledger: "General ledger", trial: "Trial balance", incomeSt: "Income statement", balanceSh: "Balance sheet", account: "Account", label: "Label", debit: "Debit", credit2: "Credit",
+    totals: "Totals", soldeD: "Debit balance", soldeC: "Credit balance", charges: "Expenses", produits: "Income", actif: "Assets", passif: "Liabilities & equity", resultat: "Profit for the period",
+    stockVar: "Change in inventory", balanced: "Balanced", notBalanced: "Not balanced", ohadaNote: "Stock valued at each item's latest purchase price. Have it checked by your accountant before any official filing.",
+    printer: "Printer", printFmt: "Print format", fmtA4: "Normal page (A4)", fmt80: "80 mm ticket", fmt58: "58 mm ticket", printerSel: "Printer of this computer", printerAsk: "Ask me every time",
+    rawbt: "Bluetooth printer (RawBT app)", rawbtHint: "On Android phones: install the free “RawBT” app (Play Store), connect it to your Bluetooth ticket printer, then tick this box.",
+    testPrint: "Test print", printErr: "Printing failed", printSent: "Sent to the printer", reportPrint: "Print", om: "Orange Money", moov: "Moov Money", wave: "Wave", bank: "Bank"
   };
   function L(k) { var en = (H().lang && H().lang() || "fr") !== "fr"; return (en ? EN[k] : FR[k]) || FR[k] || k; }
   var MODES = ["cash", "om", "moov", "wave", "bank"];
@@ -441,13 +455,14 @@
   // ---------------- Affichage ----------------
   var NAV = [
     ["home", "fa-house"], ["sales", "fa-cash-register"], ["items", "fa-boxes-stacked"], ["expenses", "fa-money-bill-wave"], ["purchases", "fa-truck-ramp-box"],
-    ["clients", "fa-users"], ["suppliers", "fa-industry"], ["employees", "fa-id-badge"], ["reports", "fa-chart-column"], ["members", "fa-user-shield"], ["settings", "fa-gear"]
+    ["clients", "fa-users"], ["suppliers", "fa-industry"], ["employees", "fa-id-badge"], ["reports", "fa-chart-column"], ["ohada", "fa-scale-balanced"], ["members", "fa-user-shield"], ["settings", "fa-gear"]
   ];
   function allowedPages() {
     var r = S.role;
-    if (r === "partenaire") return ["home", "reports", "members"];
+    var oh = !!setting("ohada", false);
+    if (r === "partenaire") return oh ? ["home", "reports", "ohada", "members"] : ["home", "reports", "members"];
     if (r === "caissier") return ["home", "sales", "items", "clients", "members"];
-    return NAV.map(function (n) { return n[0]; });
+    return NAV.map(function (n) { return n[0]; }).filter(function (p) { return p !== "ohada" || oh; });
   }
   function render() {
     if (!S || !root) return;
@@ -503,6 +518,8 @@
     var m = map[S.page];
     if (m && can(m[0] === "client" ? "client" : m[0])) h += '<button class="gx-btn gx-primary" data-a="new" data-v="' + m[0] + '"><i class="fa-solid fa-plus"></i> ' + L(m[1]) + '</button>';
     if (S.page === "reports") h += '<button class="gx-btn" data-a="csv"><i class="fa-solid fa-file-csv"></i> ' + L("exportCsv") + '</button>';
+    if (S.page === "ohada") h += '<button class="gx-btn" data-a="csv-ohada"><i class="fa-solid fa-file-csv"></i> ' + L("exportCsv") + '</button>';
+    if (S.page === "reports" || S.page === "ohada") h += '<button class="gx-btn" data-a="print-page"><i class="fa-solid fa-print"></i> ' + L("reportPrint") + '</button>';
     return h;
   }
   function page() {
@@ -519,6 +536,7 @@
       case "members": return pMembers();
       case "settings": return pSettings();
       case "more": return pMore();
+      case "ohada": return pOhada();
     }
     return "";
   }
@@ -682,7 +700,7 @@
       items.forEach(function (i) { t += '<tr><td>' + esc(i.name) + '</td><td class="r">' + qtyFmt(i.qty) + '</td><td class="r">' + money(i.total) + '</td><td class="r ' + (i.margin < 0 ? "red" : "green") + '">' + money(i.margin) + '</td></tr>'; });
       return t + '</tbody></table></div>';
     })() : empty()) + '</div>';
-    h += '<div class="gx-card gx-soon"><i class="fa-solid fa-scale-balanced"></i> <b>' + L("syscohada") + '</b> <em class="gx-tag">' + L("soon") + '</em></div>';
+    if (!setting("ohada", false)) h += '<div class="gx-card gx-soon"><i class="fa-solid fa-scale-balanced"></i> <b>' + L("syscohada") + '</b> — ' + L("ohadaHint") + (can("settings") ? ' <button class="gx-btn gx-small" data-a="ohada-toggle">' + L("ohadaOn") + '</button>' : '') + '</div>';
     return h;
   }
   function pMore() {
@@ -743,7 +761,9 @@
     h += '</div><div class="gx-card"><h3>' + L("pin") + '</h3>';
     if (localPin()) h += '<button class="gx-btn" data-a="pin-remove">' + L("removePin") + '</button>';
     else h += '<div class="gx-form-inline"><input id="gx-newpin" type="password" inputmode="numeric" maxlength="8" placeholder="1234"><button class="gx-btn" data-a="pin-set">' + L("setPin") + '</button></div>';
-    h += '</div><div class="gx-card gx-soon"><i class="fa-solid fa-scale-balanced"></i> <b>' + L("syscohada") + '</b> <em class="gx-tag">' + L("soon") + '</em></div></div>';
+    h += '</div><div class="gx-card"><h3><i class="fa-solid fa-scale-balanced"></i> ' + L("syscohada") + '</h3><p class="gx-hint">' + L("ohadaHint") + '</p>';
+    if (can("settings")) h += '<button class="gx-btn' + (setting("ohada", false) ? '' : ' gx-primary') + '" data-a="ohada-toggle">' + (setting("ohada", false) ? L("ohadaOff") : L("ohadaOn")) + '</button>';
+    h += '</div>' + printerCard() + '</div>';
     return h;
   }
   function renderPin() {
@@ -1125,6 +1145,11 @@
         case "save-adjust": saveAdjust(); break;
         case "import-items": importSounsouniItems(); break;
         case "csv": csvExport(); break;
+        case "csv-ohada": csvOhada(); break;
+        case "print-page": printPage(); break;
+        case "print-test": printTest(); break;
+        case "oh-tab": S.ohTab = v; render(); break;
+        case "ohada-toggle": { var on = !setting("ohada", false); write("settings", "main", merge(clean(getE("settings", "main") || {}, ["openingCash", "phone", "address", "ohada"]), { ohada: on })); if (on) S.page = "ohada"; render(); break; }
         case "backup-dl": backupDownload(); break;
         case "backup-share": backupShare(); break;
         case "pay": if (H().payGestion) { var cid = S.cid; close(); H().payGestion(cid); } break;
@@ -1151,7 +1176,7 @@
           break;
         case "save-settings": {
           var nm = (document.getElementById("gx-set-name") || {}).value || "";
-          if (can("settings")) write("settings", "main", merge(clean(getE("settings", "main") || {}, ["openingCash", "phone", "address"]), { openingCash: num((document.getElementById("gx-set-cash") || {}).value), phone: (document.getElementById("gx-set-phone") || {}).value || "", address: (document.getElementById("gx-set-addr") || {}).value || "" }));
+          if (can("settings")) write("settings", "main", merge(clean(getE("settings", "main") || {}, ["openingCash", "phone", "address", "ohada"]), { openingCash: num((document.getElementById("gx-set-cash") || {}).value), phone: (document.getElementById("gx-set-phone") || {}).value || "", address: (document.getElementById("gx-set-addr") || {}).value || "" }));
           if (isChef() && nm.trim() && nm.trim() !== S.name) api("rename", { companyId: S.cid, name: nm.trim() }).then(function (r) { if (r.success) { S.name = nm.trim(); render(); if (H().refreshRoles) H().refreshRoles(); } else toast("❌ " + L("mustOnline")); });
           done(); break;
         }
@@ -1205,6 +1230,7 @@
     root.addEventListener("change", function (ev) {
       var el = ev.target; if (!S) return;
       if (el.id === "gx-restore" && el.files && el.files[0]) { restoreFile(el.files[0]); el.value = ""; return; }
+      if (el.id === "gx-pfmt" || el.id === "gx-pdev" || el.id === "gx-prawbt") { var pc = printCfg(); if (el.id === "gx-pfmt") pc.fmt = el.value; else if (el.id === "gx-pdev") pc.printer = el.value; else pc.rawbt = el.checked; setPrintCfg(pc); toast("✅ " + L("saved")); return; }
       if (el.getAttribute("data-a") === "member-role") {
         api("member_update", { companyId: S.cid, phone: el.getAttribute("data-v"), role: el.value }).then(function (r) { if (!r.success) toast("❌ " + L("mustOnline")); S.members = null; render(); });
         return;
@@ -1220,12 +1246,208 @@
     el.textContent = money(tot);
     if (!S.modal.d.paidTouched) { S.modal.d.paid = S.modal.d.mode === "credit" ? 0 : tot; var pi = document.getElementById("paid"); if (pi) pi.value = S.modal.d.paid; }
   }
+  // ---------------- Impression ----------------
+  // Réglage propre à CET appareil : format (A4, ticket 80 ou 58 mm),
+  // imprimante choisie (application Windows), RawBT (téléphone Android).
+  function printCfg() { try { return JSON.parse(localStorage.getItem("sns_gx_print") || "{}") || {}; } catch (e) { return {}; } }
+  function setPrintCfg(c) { try { localStorage.setItem("sns_gx_print", JSON.stringify(c)); } catch (e) {} }
+  function isAndroid() { return /Android/i.test(navigator.userAgent); }
+  function printerCard() {
+    var c = printCfg(), d = window.SnsDesktop, h = '<div class="gx-card"><h3><i class="fa-solid fa-print"></i> ' + L("printer") + '</h3>';
+    h += '<label class="gx-field">' + L("printFmt") + '<select id="gx-pfmt">' + [["a4", L("fmtA4")], ["t80", L("fmt80")], ["t58", L("fmt58")]].map(function (o) { return '<option value="' + o[0] + '"' + ((c.fmt || "a4") === o[0] ? " selected" : "") + '>' + o[1] + '</option>'; }).join("") + '</select></label>';
+    if (d && d.listPrinters) {
+      h += '<label class="gx-field">' + L("printerSel") + '<select id="gx-pdev"><option value="">' + L("printerAsk") + '</option>';
+      (S.printers || []).forEach(function (p) { h += '<option value="' + esc(p.name) + '"' + (c.printer === p.name ? " selected" : "") + '>' + esc(p.displayName || p.name) + (p.isDefault ? " ★" : "") + '</option>'; });
+      h += '</select></label>';
+      if (!S.printers) { S.printers = []; d.listPrinters().then(function (l) { if (!S) return; S.printers = l || []; if (S.page === "settings") render(); }); }
+    } else if (isAndroid()) {
+      h += '<label class="gx-check" style="margin-bottom:6px"><input type="checkbox" id="gx-prawbt"' + (c.rawbt ? " checked" : "") + '> ' + L("rawbt") + '</label><p class="gx-hint">' + L("rawbtHint") + '</p>';
+    }
+    h += '<button class="gx-btn" data-a="print-test"><i class="fa-solid fa-receipt"></i> ' + L("testPrint") + '</button></div>';
+    return h;
+  }
+  function docHtml(body, fmt) {
+    var w = fmt === "t58" ? 58 : fmt === "t80" ? 80 : 0;
+    var css = w ? "@page{size:" + w + "mm auto;margin:0}body{width:" + (w - 6) + "mm;margin:0 3mm;font-family:'Courier New',monospace;font-size:" + (w === 58 ? 10.5 : 12) + "px;color:#000}h2{font-size:1.3em;text-align:center;margin:4px 0}p{margin:2px 0}.c{text-align:center}.l{display:flex;justify-content:space-between;gap:4px}.l span{flex:1;min-width:0;word-break:break-word}.sep{border-top:1px dashed #000;margin:4px 0}.tot{font-size:1.25em;font-weight:bold}"
+      : "@page{size:A4;margin:14mm}body{font-family:Arial,sans-serif;font-size:12px;color:#111}h1,h2{margin:0 0 8px}table{width:100%;border-collapse:collapse;margin:8px 0}th,td{border:1px solid #bbb;padding:5px 7px;text-align:left}td.r,th.r{text-align:right}.l{display:flex;justify-content:space-between;border-bottom:1px dashed #ccc;padding:4px 0}.tot{font-size:16px;font-weight:bold;text-align:right;margin-top:8px}.c{text-align:center}.sep{border-top:1px solid #999;margin:8px 0}.muted{color:#666}";
+    return '<!doctype html><html><head><meta charset="utf-8"><title>Sounsouni</title><style>' + css + '</style></head><body>' + body + '</body></html>';
+  }
+  function ticketBody(r) {
+    var c = r.client ? getE("client", r.client) : null, h = '<h2>' + esc(S.name) + '</h2>';
+    if (setting("address", "")) h += '<p class="c">' + esc(setting("address", "")) + '</p>';
+    if (setting("phone", "")) h += '<p class="c">' + esc(setting("phone", "")) + '</p>';
+    h += '<div class="sep"></div><p>' + L("receipt") + ' N° ' + esc(String(r.id).slice(-6).toUpperCase()) + '</p><p>' + dateFr(r.d) + (r._bn ? ' · ' + esc(r._bn) : '') + '</p>' + (c ? '<p>' + L("client") + ' : ' + esc(c.name) + '</p>' : '') + '<div class="sep"></div>';
+    saleLines(r).forEach(function (l) { h += '<div class="l"><span>' + qtyFmt(l.qty) + ' x ' + esc(l.name) + '</span><b>' + money(num(l.qty) * num(l.price)) + '</b></div>'; });
+    h += '<div class="sep"></div><div class="l tot"><span>' + L("total") + '</span><span>' + money(r.total) + '</span></div><div class="l"><span>' + L("paid") + ' (' + esc(r.mode === "sounsouni" ? "Sounsouni" : modeLabel(r.mode)) + ')</span><span>' + money(r.paid) + '</span></div>';
+    if (num(r.total) - num(r.paid) > 0) h += '<div class="l"><span>' + L("rest") + '</span><span>' + money(num(r.total) - num(r.paid)) + '</span></div>';
+    return h + '<div class="sep"></div><p class="c">' + L("receiptThanks") + '</p><p class="c">Sounsouni Gestion</p>';
+  }
+  function ticketText(r) {
+    var W = printCfg().fmt === "t58" ? 32 : 42, out = [];
+    var fold = function (s) { return String(s || "").normalize ? String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\x20-\x7e]/g, "") : String(s || ""); };
+    var center = function (s) { s = fold(s).slice(0, W); var p = Math.max(0, Math.floor((W - s.length) / 2)); return new Array(p + 1).join(" ") + s; };
+    var two = function (a, b) { a = fold(a); b = fold(b); var sp = W - b.length - 1; if (a.length > sp) { out.push(a.slice(0, W)); a = ""; } return a + new Array(Math.max(1, W - a.length - b.length) + 1).join(" ") + b; };
+    var line = new Array(W + 1).join("-");
+    out.push(center(S.name)); if (setting("phone", "")) out.push(center(setting("phone", "")));
+    out.push(line, fold(L("receipt") + " " + String(r.id).slice(-6).toUpperCase() + "  " + dateFr(r.d)), line);
+    saleLines(r).forEach(function (l) { out.push(two(qtyFmt(l.qty) + " x " + l.name, money(num(l.qty) * num(l.price)))); });
+    out.push(line, two(L("total"), money(r.total)), two(L("paid"), money(r.paid)));
+    if (num(r.total) - num(r.paid) > 0) out.push(two(L("rest"), money(num(r.total) - num(r.paid))));
+    out.push(line, center(L("receiptThanks")), "", "", "");
+    return out.join("\n");
+  }
+  function printDoc(body, opts) {
+    opts = opts || {};
+    var c = printCfg(), fmt = opts.a4 ? "a4" : (c.fmt || "a4"), d = window.SnsDesktop, html = docHtml(body, fmt);
+    if (d && d.print) {
+      d.print(html, { deviceName: c.printer || undefined, silent: !!c.printer, widthMm: fmt === "t58" ? 58 : fmt === "t80" ? 80 : 0 })
+        .then(function (r) { toast(r && r.ok ? "🖨️ " + L("printSent") : "❌ " + L("printErr") + (r && r.error && r.error !== "cancelled" ? " (" + r.error + ")" : "")); });
+      return;
+    }
+    if (!opts.a4 && c.rawbt && isAndroid() && opts.text) {
+      var b64 = btoa(unescape(encodeURIComponent(opts.text)));
+      window.location.href = "rawbt:base64," + b64;
+      return;
+    }
+    var fr = document.createElement("iframe");
+    fr.style.cssText = "position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0";
+    document.body.appendChild(fr);
+    var dd = fr.contentWindow.document; dd.open(); dd.write(html); dd.close();
+    setTimeout(function () { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { toast("❌ " + L("printErr")); } setTimeout(function () { fr.remove(); }, 60000); }, 300);
+  }
   function printReceipt() {
-    var el = document.getElementById("gx-receipt-print"); if (!el) return;
-    var w = window.open("", "_blank", "width=420,height=640");
-    if (!w) { window.print(); return; }
-    w.document.write('<html><head><meta charset="utf-8"><title>' + L("receipt") + '</title><style>body{font-family:sans-serif;padding:12px;max-width:360px;margin:auto}h2{margin:4px 0}.gx-line{display:flex;justify-content:space-between;border-bottom:1px dashed #ccc;padding:4px 0}.gx-total{font-size:18px;text-align:right;margin:8px 0}p{margin:4px 0}</style></head><body>' + el.innerHTML + '<script>window.onload=function(){window.print();}<\/script></body></html>');
-    w.document.close();
+    var r = S.modal && getE("sale", S.modal.id); if (!r) return;
+    printDoc(ticketBody(r), { text: ticketText(r) });
+  }
+  function printTest() {
+    var r = { id: "TEST00", d: today(), lines: [{ name: "Article d'essai", qty: 2, price: 1500 }], total: 3000, paid: 3000, mode: "cash", _bn: (profile() || {}).name };
+    printDoc(ticketBody(r), { text: ticketText(r) });
+  }
+  function printPage() {
+    var el = root.querySelector(".gx-content"); if (!el) return;
+    var clone = el.cloneNode(true);
+    Array.prototype.forEach.call(clone.querySelectorAll("button, input, select, .gx-periods, .gx-custom, .gx-tabs"), function (x) { if (x.closest(".gx-periods") || x.closest(".gx-tabs") || x.tagName !== "BUTTON" || !x.closest("table")) x.remove(); });
+    var r = periodRange(S.period);
+    printDoc('<h1>' + esc(S.name) + '</h1><p class="muted">' + esc(L(S.page === "ohada" ? (S.ohTab || "journal") : "reports")) + ' — ' + L("from") + ' ' + dateFr(r[0]) + ' ' + L("to") + ' ' + dateFr(r[1]) + '</p>' + clone.innerHTML.replace(/<i class="fa[^"]*"><\/i>/g, ""), { a4: true });
+  }
+
+  // ---------------- Comptabilité SYSCOHADA (écritures automatiques) ----------------
+  var ACC = {
+    "101": "Capital", "311": "Marchandises", "401": "Fournisseurs", "411": "Clients", "4118": "Sounsouni (ventes en ligne à encaisser)",
+    "521": "Banques", "5521": "Orange Money", "5522": "Moov Money", "5523": "Wave", "571": "Caisse",
+    "601": "Achats de marchandises", "6031": "Variation des stocks de marchandises", "605": "Autres achats (eau, électricité, fournitures)",
+    "618": "Autres frais de transport", "622": "Locations et charges locatives", "624": "Entretien, réparations et maintenance",
+    "628": "Frais de télécommunications", "641": "Impôts et taxes", "658": "Charges diverses", "661": "Rémunérations du personnel",
+    "701": "Ventes de marchandises", "706": "Services vendus"
+  };
+  var CAT_ACC = { loyer: "622", transport: "618", elec: "605", sal: "661", com: "628", tax: "641", march: "605", rep: "624", autre: "658" };
+  function treso(mode) { return mode === "om" ? "5521" : mode === "moov" ? "5522" : mode === "wave" ? "5523" : mode === "bank" ? "521" : mode === "sounsouni" ? "4118" : "571"; }
+  function isSvcLine(l) { var it = l.item && getE("item", l.item); return !!(it && it.type === "service"); }
+  function stockValueAt(dEnd) {
+    var q = {};
+    live("adjust").forEach(function (a) { if (a.d <= dEnd) q[a.item] = (q[a.item] || 0) + num(a.qty); });
+    live("purchase").forEach(function (p) { if (p.d <= dEnd) (p.lines || []).forEach(function (l) { if (l.item) q[l.item] = (q[l.item] || 0) + num(l.qty); }); });
+    live("sale").forEach(function (s) { if (s.d <= dEnd) saleLines(s).forEach(function (l) { if (l.item) q[l.item] = (q[l.item] || 0) - num(l.qty); }); });
+    var v = 0; for (var id in q) { var it = getE("item", id); if (it && it.type !== "service") v += Math.max(0, q[id]) * num(it.cost); }
+    return Math.round(v);
+  }
+  function isOpening(a) { return String(a.note || "") === FR.initialStock || String(a.note || "") === EN.initialStock; }
+  // Toutes les écritures jusqu'à dEnd (date incluse) ; chaque écriture = { d, ref, lib, lines:[[compte, débit, crédit]] }
+  function entries(dEnd) {
+    var E = [], add = function (d, ref, lib, lines) { lines = lines.filter(function (x) { return Math.round(x[1]) || Math.round(x[2]); }); if (lines.length && d <= dEnd) E.push({ d: d, ref: ref, lib: lib, lines: lines }); };
+    var st = getE("settings", "main");
+    if (st && num(st.openingCash)) add(new Date(st._created || Date.now()).toISOString().slice(0, 10), "OUV", L("openingCash"), [["571", num(st.openingCash), 0], ["101", 0, num(st.openingCash)]]);
+    live("adjust").forEach(function (a) { if (!isOpening(a) || num(a.qty) <= 0) return; var it = getE("item", a.item); var v = Math.round(num(a.qty) * (it ? num(it.cost) : 0)); if (v) add(a.d, "STK", L("initialStock") + " — " + (it ? it.name : ""), [["311", v, 0], ["101", 0, v]]); });
+    live("sale").forEach(function (s) {
+      var svc = 0, art = 0; saleLines(s).forEach(function (l) { var v = num(l.qty) * num(l.price); if (isSvcLine(l)) svc += v; else art += v; });
+      var tot = num(s.total), k = tot && (svc + art) ? tot / (svc + art) : 1, paid = Math.min(num(s.paid), tot);
+      var lib = L("sales") + (s.client ? " — " + partyName("client", s.client) : "") + (s.note ? " — " + s.note : "");
+      add(s.d, "V" + String(s.id).slice(-5).toUpperCase(), lib, [[treso(s.mode), paid, 0], [s.mode === "sounsouni" ? "4118" : "411", tot - paid, 0], ["701", 0, Math.round(art * k)], ["706", 0, tot - Math.round(art * k)]]);
+    });
+    live("purchase").forEach(function (p) {
+      var tot = num(p.total), paid = Math.min(num(p.paid), tot);
+      add(p.d, "A" + String(p.id).slice(-5).toUpperCase(), L("purchases") + (p.supplier ? " — " + partyName("supplier", p.supplier) : ""), [["601", tot, 0], [treso(p.mode), 0, paid], ["401", 0, tot - paid]]);
+    });
+    live("expense").forEach(function (x) {
+      add(x.d, "D" + String(x.id).slice(-5).toUpperCase(), catLabel(x.cat || "autre") + (x.employee ? " — " + partyName("employee", x.employee) : "") + (x.note ? " — " + x.note : ""), [[CAT_ACC[x.cat] || "658", num(x.amount), 0], [treso(x.mode), 0, num(x.amount)]]);
+    });
+    live("payment").forEach(function (p) {
+      if (p.side === "client") add(p.d, "R" + String(p.id).slice(-5).toUpperCase(), L("payments") + " — " + partyName("client", p.party), [[treso(p.mode), num(p.amount), 0], ["411", 0, num(p.amount)]]);
+      else add(p.d, "P" + String(p.id).slice(-5).toUpperCase(), L("payments") + " — " + partyName("supplier", p.party), [["401", num(p.amount), 0], [treso(p.mode), 0, num(p.amount)]]);
+    });
+    E.sort(function (a, b) { return a.d < b.d ? -1 : a.d > b.d ? 1 : 0; });
+    return E;
+  }
+  function dayBefore(d) { var t = new Date(d + "T12:00:00"); t.setDate(t.getDate() - 1); return t.toISOString().slice(0, 10); }
+  // Inventaire de fin de période : variation des stocks (6031) pour [d1, d2].
+  function variationEntry(d1, d2, all) {
+    var si = d1 <= "0001" ? 0 : stockValueAt(dayBefore(d1)), sf = stockValueAt(d2), apports = 0;
+    all.forEach(function (e) { if (e.ref === "STK" && e.d >= d1 && e.d <= d2) apports += e.lines[0][1]; });
+    var v = Math.round(si + apports - sf); // > 0 : le stock a baissé (charge)
+    return { d: d2, ref: "INV", lib: L("stockVar") + " (" + L("stock") + " " + money(sf) + ")", lines: v >= 0 ? [["6031", v, 0], ["311", 0, v]] : [["311", -v, 0], ["6031", 0, -v]], si: si, sf: sf };
+  }
+  function balances(list) { var b = {}; list.forEach(function (e) { e.lines.forEach(function (x) { var a = b[x[0]] || (b[x[0]] = { d: 0, c: 0 }); a.d += x[1]; a.c += x[2]; }); }); return b; }
+  function accLabel(a) { return a + " " + (ACC[a] || ""); }
+  function pOhada() {
+    var r = periodRange(S.period), tab = S.ohTab || "journal";
+    var all = entries(r[1]), inPer = all.filter(function (e) { return e.d >= r[0]; });
+    var varE = variationEntry(r[0], r[1], all), perAll = inPer.concat([varE]);
+    var h = periodBar() + '<div class="gx-tabs">';
+    ["journal", "ledger", "trial", "incomeSt", "balanceSh"].forEach(function (t) { h += '<button class="' + (tab === t ? 'on' : '') + '" data-a="oh-tab" data-v="' + t + '">' + L(t) + '</button>'; });
+    h += '</div><p class="gx-hint">' + L("ohadaNote") + '</p>';
+    var tbl = function (head, rows, foot) {
+      var t = '<div class="gx-table-wrap"><table class="gx-table gx-acc"><thead><tr>' + head.map(function (c) { return '<th' + (c.r ? ' class="r"' : '') + '>' + c.t + '</th>'; }).join("") + '</tr></thead><tbody>';
+      t += rows.length ? rows.map(function (rw) { return '<tr' + (rw.cls ? ' class="' + rw.cls + '"' : '') + '>' + rw.c.map(function (v, i) { return '<td' + (head[i].r ? ' class="r"' : '') + '>' + v + '</td>'; }).join("") + '</tr>'; }).join("") : '<tr><td colspan="' + head.length + '">' + L("noData") + '</td></tr>';
+      if (foot) t += '<tr class="gx-foot">' + foot.map(function (v, i) { return '<td' + (head[i].r ? ' class="r"' : '') + '>' + v + '</td>'; }).join("") + '</tr>';
+      return t + '</tbody></table></div>';
+    };
+    var m = function (n) { return n ? money(n) : ""; };
+    if (tab === "journal") {
+      var rows = [], td = 0, tc = 0;
+      perAll.forEach(function (e) { e.lines.forEach(function (x, i) { td += x[1]; tc += x[2]; rows.push({ cls: i === 0 ? "gx-first" : "", c: [i === 0 ? dateFr(e.d) : "", i === 0 ? esc(e.ref) : "", esc(accLabel(x[0])), i === 0 ? esc(e.lib) : "", m(x[1]), m(x[2])] }); }); });
+      h += tbl([{ t: L("date") }, { t: "N°" }, { t: L("account") }, { t: L("label") }, { t: L("debit"), r: 1 }, { t: L("credit2"), r: 1 }], rows, ["", "", "", L("totals") + " — " + (Math.round(td) === Math.round(tc) ? "✅ " + L("balanced") : "❌ " + L("notBalanced")), money(td), money(tc)]);
+    } else if (tab === "ledger" || tab === "trial") {
+      var b = balances(perAll), accs = Object.keys(b).sort();
+      if (tab === "trial") {
+        var T = [0, 0, 0, 0];
+        h += tbl([{ t: L("account") }, { t: L("debit"), r: 1 }, { t: L("credit2"), r: 1 }, { t: L("soldeD"), r: 1 }, { t: L("soldeC"), r: 1 }], accs.map(function (a) {
+          var x = b[a], sd = Math.max(0, x.d - x.c), sc = Math.max(0, x.c - x.d); T[0] += x.d; T[1] += x.c; T[2] += sd; T[3] += sc;
+          return { c: [esc(accLabel(a)), m(x.d), m(x.c), m(sd), m(sc)] };
+        }), [L("totals"), money(T[0]), money(T[1]), money(T[2]), money(T[3])]);
+      } else {
+        accs.forEach(function (a) {
+          var rows2 = [], sold = 0;
+          perAll.forEach(function (e) { e.lines.forEach(function (x) { if (x[0] !== a) return; sold += x[1] - x[2]; rows2.push({ c: [dateFr(e.d), esc(e.ref), esc(e.lib), m(x[1]), m(x[2]), money(sold)] }); }); });
+          h += '<div class="gx-card"><h3>' + esc(accLabel(a)) + '</h3>' + tbl([{ t: L("date") }, { t: "N°" }, { t: L("label") }, { t: L("debit"), r: 1 }, { t: L("credit2"), r: 1 }, { t: L("balance"), r: 1 }], rows2, null) + '</div>';
+        });
+        if (!accs.length) h += empty();
+      }
+    } else if (tab === "incomeSt") {
+      var b2 = balances(perAll), ch = [], pr = [], tch = 0, tpr = 0;
+      Object.keys(b2).sort().forEach(function (a) { var x = b2[a]; if (a.charAt(0) === "6") { var v = x.d - x.c; tch += v; ch.push({ c: [esc(accLabel(a)), money(v)] }); } else if (a.charAt(0) === "7") { var v2 = x.c - x.d; tpr += v2; pr.push({ c: [esc(accLabel(a)), money(v2)] }); } });
+      h += '<div class="gx-grid2"><div>' + tbl([{ t: L("charges") }, { t: L("amount"), r: 1 }], ch, [L("totals"), money(tch)]) + '</div><div>' + tbl([{ t: L("produits") }, { t: L("amount"), r: 1 }], pr, [L("totals"), money(tpr)]) + '</div></div>';
+      h += '<div class="gx-kpis">' + kpi(L("resultat"), money(tpr - tch), tpr - tch < 0 ? "red" : "green", "fa-scale-balanced") + '</div>';
+    } else {
+      // Bilan à la date de fin : tout depuis le début + inventaire final
+      var cum = all.concat([variationEntry("0000-01-01", r[1], all)]), b3 = balances(cum), act = [], pas = [], ta = 0, tp = 0, res = 0;
+      Object.keys(b3).sort().forEach(function (a) {
+        var x = b3[a], s = x.d - x.c, c1 = a.charAt(0);
+        if (c1 === "6") { res -= s; return; } if (c1 === "7") { res -= s; return; }
+        if (a === "101" || a === "401" || ((c1 === "5") && s < 0)) { pas.push({ c: [esc(accLabel(a)), money(-s)] }); tp += -s; }
+        else { act.push({ c: [esc(accLabel(a)), money(s)] }); ta += s; }
+      });
+      pas.push({ cls: "gx-first", c: [L("resultat"), money(res)] }); tp += res;
+      h += '<div class="gx-grid2"><div>' + tbl([{ t: L("actif") }, { t: L("amount"), r: 1 }], act, [L("totals"), money(ta)]) + '</div><div>' + tbl([{ t: L("passif") }, { t: L("amount"), r: 1 }], pas, [L("totals"), money(tp)]) + '</div></div>';
+      h += '<p class="gx-hint">' + (Math.round(ta) === Math.round(tp) ? "✅ " + L("balanced") : "❌ " + L("notBalanced")) + ' — ' + L("to") + ' ' + dateFr(r[1]) + '</p>';
+    }
+    return h;
+  }
+  function csvOhada() {
+    var r = periodRange(S.period), all = entries(r[1]), list = all.filter(function (e) { return e.d >= r[0]; }).concat([variationEntry(r[0], r[1], all)]);
+    var out = [["Date", "Piece", "Compte", "Intitule", "Libelle", "Debit", "Credit"]];
+    list.forEach(function (e) { e.lines.forEach(function (x) { out.push([e.d, e.ref, x[0], ACC[x[0]] || "", e.lib, Math.round(x[1]) || "", Math.round(x[2]) || ""]); }); });
+    var csv = "﻿" + out.map(function (r2) { return r2.map(function (v) { var s2 = String(v == null ? "" : v); return /[";\n]/.test(s2) ? '"' + s2.replace(/"/g, '""') + '"' : s2; }).join(";"); }).join("\r\n");
+    var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = "journal-syscohada-" + r[0] + "-" + r[1] + ".csv"; document.body.appendChild(a); a.click(); setTimeout(function () { a.remove(); }, 1500);
   }
 
   // ---------------- Styles ----------------
@@ -1233,7 +1455,7 @@
     if (document.getElementById("gx-css")) return;
     var css = [
       "html.gx-open,html.gx-open body{overflow:hidden}",
-      "#gx-root{position:fixed;inset:0;z-index:2000;display:none;font-family:'Plus Jakarta Sans',Inter,system-ui,sans-serif;--g:#2e7d32;--g2:#7bcb3a;--bg:#f3f6f1;--card:#fff;--tx:#1a1a2e;--dim:#6b7280;--bd:#e5e9e2;--red:#d93848;--warn:#c77700;background:var(--bg);color:var(--tx);font-size:14px}",
+      "#gx-root{position:fixed;inset:0;z-index:99000;display:none;font-family:'Plus Jakarta Sans',Inter,system-ui,sans-serif;--g:#2e7d32;--g2:#7bcb3a;--bg:#f3f6f1;--card:#fff;--tx:#1a1a2e;--dim:#6b7280;--bd:#e5e9e2;--red:#d93848;--warn:#c77700;background:var(--bg);color:var(--tx);font-size:14px}",
       "#gx-root.gx-dark{--bg:#10140f;--card:#1a2019;--tx:#eef2ea;--dim:#9aa59a;--bd:#2a3229}",
       "#gx-root *{box-sizing:border-box}#gx-modal{display:contents}",
       "#gx-root button{font-family:inherit;cursor:pointer}",
@@ -1291,6 +1513,8 @@
       ".gx-grid2{display:grid;grid-template-columns:1fr;gap:0 14px}.gx-wide .gx-grid2{grid-template-columns:1fr 1fr}",
       ".gx-bars{display:flex;align-items:flex-end;gap:4px;height:150px;overflow-x:auto;padding-top:6px}.gx-bar{flex:1 0 18px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:4px}.gx-bar i{display:block;width:100%;background:linear-gradient(180deg,var(--g2),var(--g));border-radius:5px 5px 2px 2px;min-height:2px}.gx-bar span{font-size:9.5px;color:var(--dim);white-space:nowrap}",
       ".gx-more{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.gx-more button{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px 6px;display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--tx);font-size:12px;font-weight:700}.gx-more button i{font-size:22px;color:var(--g)}",
+      ".gx-tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px}.gx-tabs button{flex:0 0 auto;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:10px;padding:8px 12px;font-size:12.5px;font-weight:700}.gx-tabs button.on{background:#163a19;color:#fff;border-color:#163a19}",
+      ".gx-acc td{font-size:12.5px;padding:7px 10px}.gx-acc tbody tr{cursor:default}.gx-acc tr.gx-first td{border-top:2px solid var(--bd)}.gx-acc tr.gx-foot td{font-weight:800;background:rgba(123,203,58,.1)}",
       ".gx-soon{color:var(--dim)}.gx-hint{font-size:12.5px;color:var(--dim)}",
       ".gx-form-inline{display:flex;gap:8px;flex-wrap:wrap}.gx-form-inline input,.gx-form-inline select{flex:1 1 160px;min-width:0;padding:10px;border-radius:12px;border:1px solid var(--bd);background:var(--card);color:var(--tx);font-size:14px}",
       ".gx-field{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:700;color:var(--dim);margin-bottom:10px;min-width:0}.gx-field input,.gx-field select,.gx-row-v select{padding:10px;border-radius:11px;border:1px solid var(--bd);background:var(--card);color:var(--tx);font-size:15px;font-weight:600;min-width:0;width:100%}",
