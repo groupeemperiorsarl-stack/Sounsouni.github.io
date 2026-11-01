@@ -871,7 +871,11 @@ const COLOR_PRESETS = [
   { name: "Kaki", hex: "#78866b" }, { name: "Bordeaux", hex: "#800020" },
 ];
 
-const CITIES = ["Bamako", "Ségou", "Sikasso", "Mopti", "Kayes", "Koutiala"];
+// District de Bamako + les 19 régions du Mali (découpage de 2023), dans
+// l'ordre officiel. Hors Bamako : envoi par car, retrait à la gare routière
+// du chef-lieu (prix fixé par l'Admin, ville par ville).
+const CITIES = ["Bamako", "Kayes", "Koulikoro", "Sikasso", "Ségou", "Mopti", "Tombouctou", "Gao", "Kidal", "Taoudénit", "Ménaka",
+  "Nioro", "Kita", "Dioïla", "Nara", "Bougouni", "Koutiala", "San", "Douentza", "Bandiagara"];
 
 // Villes hors Mali — ajoutées par l'administration au fur et à mesure de
 // l'expansion (voir renderAdminInternationalCities). Chacune porte son
@@ -904,6 +908,11 @@ const DELIVERY_FEES = {
   "Kayes": { "Centre-ville": 3000, "Périphérie": 3800, "Autre": 3800 },
   "Koutiala": { "Centre-ville": 2500, "Périphérie": 3200, "Autre": 3200 },
 };
+// Nouvelles régions : même grille indicative que les autres chefs-lieux
+// (le vrai prix du car est celui que l'Admin renseigne pour chaque ville).
+["Koulikoro", "Tombouctou", "Gao", "Kidal", "Taoudénit", "Ménaka", "Nioro", "Kita", "Dioïla", "Nara", "Bougouni", "San", "Douentza", "Bandiagara"].forEach(function(c) {
+  if (!DELIVERY_FEES[c]) DELIVERY_FEES[c] = { "Centre-ville": 3000, "Périphérie": 3800, "Autre": 3800 };
+});
 
 const DEFAULT_DELIVERY_FEE = 2000;
 
