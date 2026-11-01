@@ -1,0 +1,57 @@
+name: Rendu de l'écran de démarrage (Blender)
+on:
+  push:
+    branches: [render-splash]
+    paths: ["tools/ecrans-demarrage/blender/**", ".github/workflows/render-splash.yml"]
+permissions:
+  contents: write
+jobs:
+  rendu:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Outils
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq libxi6 libxxf86vm1 libxfixes3 libxrender1 libgl1 libsm6 libxkbcommon0 libegl1 >/dev/null
+          pip install -q bpy==5.2.3 numpy scipy pillow
+          sudo mkdir -p /root/blend && sudo chmod 777 /root /root/blend
+          cp tools/ecrans-demarrage/blender/*.png /root/blend/
+      - name: Rendu des images de cette part
+        env: { VT: Standard, SUNROT: "0", ELEV: "4", EXPO: "-0.7", FILL: "1.6" }
+        run: |
+          cd tools/ecrans-demarrage/blender; mkdir -p fr fp
+          N=192; FPS=24
+          for i in $(seq ${{ matrix.part }} 20 $((N-1))); do
+            f=$(printf "%04d" $i); t=$(python -c "print($i/$FPS)")
+            T=$t python anim.py marche final $PWD/fr/$f.png 540 32 > /dev/null 2>&1 || { echo "échec $f"; exit 1; }
+            python post.py fr/$f.png fp/$f.png; echo "$f fait"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: part-${{ matrix.part }}
+          path: tools/ecrans-demarrage/blender/fp/*.png
+  video:
+    needs: rendu
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: parts }
+      - name: Assembler la vidéo
+        run: |
+          mkdir -p fp && cp parts/*/*.png fp/ && ls fp | wc -l
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+          ffmpeg -y -loglevel error -framerate 24 -i fp/%04d.png -c:v libx264 -preset slow -crf 20 -pix_fmt yuv420p -movflags +faststart demarrage.mp4
+          mkdir -p out && mv demarrage.mp4 out/ && cp fp/0000.png fp/0026.png fp/0045.png fp/0065.png fp/0100.png fp/0191.png out/
+      - name: Envoyer le résultat sur la branche render-out
+        run: |
+          cd out && git init -q && git checkout -q -b render-out
+          git config user.name "sounsouni-bot" && git config user.email "bot@sounsouni.pro"
+          git add -A && git commit -qm "Rendu de l'écran de démarrage"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" render-out
