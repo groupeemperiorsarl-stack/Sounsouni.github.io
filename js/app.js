@@ -10691,7 +10691,11 @@ function relaisShopsList() {
 // Liste des points de retrait, triée par proximité si une position est fournie.
 function nearestRelaisShops(lat, lng, quartier) {
   var shops = relaisShopsList();
-  if (quartier) shops = shops.filter(function(s) { return s.quartier === quartier; });
+  // Le quartier d'une boutique Point de Retrait est enregistré dans
+  // shopQuartier (formulaire de demande) ; « quartier » sert de repli pour
+  // d'anciens comptes. Avant, seul « quartier » (vide) était lu : la liste
+  // devenait vide dès que l'acheteur choisissait son quartier.
+  if (quartier) shops = shops.filter(function(s) { return (s.shopQuartier || s.quartier) === quartier; });
   var withDistance = shops.map(function(s) {
     return { shop: s, distance: distanceKm(lat, lng, s.shopLat, s.shopLng) };
   });
