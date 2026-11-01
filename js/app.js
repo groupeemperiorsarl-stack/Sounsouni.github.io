@@ -33073,7 +33073,7 @@ function snsSplashHtml(asOverlay) {
     '<div class="sns-e-glint" style="-webkit-mask-image:url(' + SNS_SP_IMG.fruit + ');mask-image:url(' + SNS_SP_IMG.fruit + ')"></div>' +
     '<div class="sns-e-leaf" style="background-image:url(' + SNS_SP_IMG.leaf + ')"></div></div>' +
     '<div class="sns-e-seed"></div><canvas class="sns-e-fx" width="780" height="1688"></canvas>' +
-    '<div class="sns-e-word">' + letters + '</div><div class="sns-e-tag">Le marché digital du Mali</div>' +
+    '<div class="sns-e-word">' + letters + '</div><div class="sns-e-tag">Le marché ouest-africain né au Mali</div><div class="sns-e-tag2">Toute l\'Afrique en un clic</div>' +
     '<div class="sns-e-bar"><i></i></div><div class="sns-e-slow">Connexion lente, on continue…</div></div>' +
     '<div class="sns-e-flash"></div></div>';
 }
@@ -33097,7 +33097,7 @@ function snsSplashStart(el) {
   var st = q(".sns-e-stage"), dawn = q(".sns-e-dawn"), stars = q(".sns-e-stars"), fx = q(".sns-e-fx"), flash = q(".sns-e-flash");
   var sun = q(".sns-e-sun"), rays = q(".sns-e-rays"), fw = q(".sns-e-fruitwrap"), leaf = q(".sns-e-leaf"), glint = q(".sns-e-glint");
   var shadow = q(".sns-e-shadow"), seed = q(".sns-e-seed"), tag = q(".sns-e-tag"), bar = q(".sns-e-bar"), bari = q(".sns-e-bar i");
-  var letters = el.querySelectorAll(".sns-e-word span");
+  var letters = el.querySelectorAll(".sns-e-word span"), tag2 = q(".sns-e-tag2");
   var sx = stars.getContext("2d"), fc = fx.getContext("2d"), dpr = Math.min(2, window.devicePixelRatio || 1), W = 0, H = 0, sc = 1;
   var fit = function () {
     W = el.clientWidth || window.innerWidth; H = el.clientHeight || window.innerHeight;
@@ -33133,7 +33133,8 @@ function snsSplashStart(el) {
       letters[i].style.opacity = snsTw(t, s0, .5, 0, 1);
       letters[i].style.transform = "translateY(" + snsTw(t, s0, .7, 60, 0, bk) + "px) rotateX(" + snsTw(t, s0, .7, -90, 0, bk) + "deg)";
     }
-    tag.style.opacity = snsTw(t, 4.0, .9, 0, 1, E.out3); tag.style.letterSpacing = snsTw(t, 4.0, .9, 1, .32, E.out3) + "em";
+    tag.style.opacity = snsTw(t, 3.8, .9, 0, 1, E.out3); tag.style.letterSpacing = snsTw(t, 3.8, .9, .6, .14, E.out3) + "em";
+    tag2.style.opacity = snsTw(t, 4.35, .7, 0, 1, E.out3); tag2.style.transform = "translateY(" + snsTw(t, 4.35, .7, 12, 0, E.back(1.8)) + "px)";
     bar.style.opacity = snsTw(t, 3.9, .4, 0, 1);
     bari.style.width = (t < 5 ? snsTw(t, 3.9, 1.1, 0, 88, E.qio) : Math.min(97, 88 + (t - 5) * .6)) + "%";
     // étoiles (plein écran), s'effacent avec l'aube

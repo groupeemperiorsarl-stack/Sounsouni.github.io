@@ -5101,7 +5101,8 @@ body.dark-mode .cat-pill { color: #f3ead2; background: linear-gradient(180deg, #
 .sns-e-flash{position:absolute;inset:0;opacity:0;background:radial-gradient(circle at 50% 66%,rgba(255,240,200,.95),rgba(255,220,150,0) 55%);pointer-events:none}
 .sns-e-word{position:absolute;left:0;right:0;top:600px;text-align:center;font-family:SnsFredoka,"Fredoka",system-ui,sans-serif;font-weight:700;font-size:56px;line-height:1.1;white-space:nowrap;perspective:400px;filter:drop-shadow(0 4px 10px rgba(60,20,0,.55))}
 .sns-e-word span{display:inline-block;opacity:0;background:linear-gradient(#fffbe6,#ffd36b);-webkit-background-clip:text;background-clip:text;color:transparent}
-.sns-e-tag{position:absolute;left:0;right:0;top:670px;text-align:center;font-family:SnsMont,"Montserrat",system-ui,sans-serif;font-weight:700;font-size:12.5px;letter-spacing:.32em;text-transform:uppercase;color:#ffe9b0;text-shadow:0 2px 6px rgba(60,20,0,.6);opacity:0;white-space:nowrap}
+.sns-e-tag{position:absolute;left:0;right:0;top:668px;text-align:center;font-family:SnsMont,"Montserrat",system-ui,sans-serif;font-weight:700;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:#ffe9b0;text-shadow:0 2px 6px rgba(60,20,0,.6);opacity:0;white-space:nowrap}
+.sns-e-tag2{position:absolute;left:0;right:0;top:694px;text-align:center;font-family:SnsFredoka,"Fredoka",system-ui,sans-serif;font-weight:700;font-size:21px;color:#fff;text-shadow:0 2px 8px rgba(60,20,0,.65);opacity:0;white-space:nowrap}
 .sns-e-bar{position:absolute;left:95px;top:770px;width:200px;height:4px;border-radius:4px;background:rgba(255,255,255,.2);overflow:hidden;opacity:0}
 .sns-e-bar i{display:block;height:100%;width:0;border-radius:4px;background:linear-gradient(90deg,#fff3c4,#ffd54f);box-shadow:0 0 10px rgba(255,213,79,.8)}
 .sns-e-slow{position:absolute;left:0;right:0;top:786px;text-align:center;font:600 12.5px system-ui,sans-serif;color:#ffe9b0;display:none}
