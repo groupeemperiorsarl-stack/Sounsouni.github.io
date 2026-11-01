@@ -33060,7 +33060,7 @@ function renderSplashScreen() {
 // (requestAnimationFrame), sans bibliothèque. Scène dessinée pour 390×844,
 // mise à l'échelle de l'écran ; ciel et terre débordent sur les côtés.
 var SNS_SP_IMG = { fruit: "img/e/16fcc21b503f.webp", leaf: "img/e/46edff4ff165.webp", sound: "img/e/aaa445f37745.mp3" };
-var SNS_SPLASH_MIN_MS = 5000;
+var SNS_SPLASH_MIN_MS = 8000;
 var SNS_AWAY_SPLASH_MS = 5 * 60 * 1000;
 function snsSplashHtml(asOverlay) {
   var letters = "", w = "Sounsouni";
@@ -33136,7 +33136,7 @@ function snsSplashStart(el) {
     tag.style.opacity = snsTw(t, 3.8, .9, 0, 1, E.out3); tag.style.letterSpacing = snsTw(t, 3.8, .9, .6, .14, E.out3) + "em";
     tag2.style.opacity = snsTw(t, 4.35, .7, 0, 1, E.out3); tag2.style.transform = "translateY(" + snsTw(t, 4.35, .7, 12, 0, E.back(1.8)) + "px)";
     bar.style.opacity = snsTw(t, 3.9, .4, 0, 1);
-    bari.style.width = (t < 5 ? snsTw(t, 3.9, 1.1, 0, 88, E.qio) : Math.min(97, 88 + (t - 5) * .6)) + "%";
+    bari.style.width = (t < 8 ? snsTw(t, 3.9, 4.1, 0, 92, E.qio) : Math.min(98, 92 + (t - 8) * .5)) + "%";
     // étoiles (plein écran), s'effacent avec l'aube
     sx.setTransform(dpr, 0, 0, dpr, 0, 0); sx.clearRect(0, 0, W, H);
     var night = Math.max(0, 1 - Math.max(0, t - 1.0) / 1.6);
@@ -34074,7 +34074,7 @@ setTimeout(function() {
   }
 }, 15000);
 
-setTimeout(function() { _splashMinTimeDone = true; trySplashFinish(); }, 5000);
+setTimeout(function() { _splashMinTimeDone = true; trySplashFinish(); }, SNS_SPLASH_MIN_MS);
 
 function bootAppWithLocalData() {
   if (window.__bootMark) window.__bootMark("démarrage des données");
