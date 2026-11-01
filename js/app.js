@@ -2494,6 +2494,24 @@ function submitBecomeRelais() {
     if (state.accounts[i].id === state.profile.id) { state.accounts[i] = { ...state.profile }; break; }
   }
 
+  // La fiche de candidature elle-même (elle manquait : la demande échouait
+  // avec « application is not defined » et rien ne partait). Les
+  // coordonnées GPS exactes et l'adresse détaillée n'y sont pas : elles
+  // partent à part, plus bas, vers la collection protégée.
+  var application = {
+    id: uid(),
+    accountId: state.profile.id,
+    accountName: state.profile.name,
+    accountPhone: state.profile.phone,
+    country: state.profile.country || "Mali",
+    shopName: d.shopName.trim(),
+    commune: d.useAutreQuartier ? null : d.commune,
+    quartier: d.useAutreQuartier ? d.autreQuartierNom.trim() : d.quartier,
+    isAutreQuartier: !!d.useAutreQuartier,
+    hasVerificationDocs: true, // la vraie photo part séparément, voir plus bas
+    status: "pending",
+    createdAt: Date.now()
+  };
   state.relaisApplications.push(application);
 
   if (d.useAutreQuartier) {
