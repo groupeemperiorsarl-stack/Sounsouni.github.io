@@ -32,6 +32,48 @@ const SHELL_FILES = [
   "./icons/icon-512-maskable.png"
 ];
 
+// Écran de démarrage (pomme cannelle) : images, son et polices gardés sur le
+// téléphone dès l'installation — l'animation démarre tout de suite, même
+// avec une connexion faible ou coupée.
+const SPLASH_FILES = [
+  "./img/e/16fcc21b503f.webp", "./img/e/46edff4ff165.webp", "./img/e/aaa445f37745.mp3",
+  "./img/e/44b62c8b9ce2.woff2", "./img/e/486c7fa9e908.woff2"
+];
+// Bibliothèques venant d'autres sites (Supabase, icônes...) : gardées aussi,
+// sinon le démarrage attend leur téléchargement à chaque ouverture.
+const CDN_RE = /^https:\/\/(cdn\.jsdelivr\.net\/npm\/(@supabase\/supabase-js|idiomorph)|cdnjs\.cloudflare\.com\/ajax\/libs\/font-awesome)\//;
+
+// Met dans le téléphone tous les fichiers dont une version de la page a
+// besoin (code, style, images, bibliothèques) — appelé à l'installation et
+// à chaque nouvelle version de la page reçue en arrière-plan.
+function precacheFromHtml(html) {
+  var urls = SPLASH_FILES.map(function (f) { return new URL(f, self.location.href).href; });
+  var re = /(?:src|href)="([^"]+)"/g, m;
+  while ((m = re.exec(html))) {
+    var u;
+    try { u = new URL(m[1], self.location.href); } catch (e) { continue; }
+    if ((u.origin === self.location.origin && /^\/(js|css|img\/e)\//.test(u.pathname)) || CDN_RE.test(u.href)) urls.push(u.href);
+  }
+  return caches.open(ASSET_CACHE).then(function (cache) {
+    return Promise.all(urls.map(function (u) {
+      return cache.match(u).then(function (hit) {
+        if (hit) return;
+        return fetch(u).then(function (res) {
+          if (!res || !res.ok || res.status !== 200) return;
+          return cache.put(u, res).then(function () {
+            // Les anciennes versions du même fichier ne servent plus : on les efface.
+            var nu = new URL(u);
+            if (nu.origin !== self.location.origin) return;
+            return cache.keys().then(function (keys) {
+              keys.forEach(function (k) { var ku = new URL(k.url); if (ku.pathname === nu.pathname && ku.search !== nu.search) cache.delete(k); });
+            });
+          });
+        }).catch(function () {});
+      });
+    }));
+  });
+}
+
 self.addEventListener("install", function (event) {
   event.waitUntil(
     caches.open(CACHE_NAME).then(function (cache) {
@@ -44,7 +86,9 @@ self.addEventListener("install", function (event) {
       return Promise.all(requests.map(function (req) {
         return fetch(req).then(function (res) { return cache.put(req, res); });
       }));
-    })
+    }).then(function () {
+      return caches.match("./index.html").then(function (r) { return r ? r.text().then(precacheFromHtml) : null; });
+    }).catch(function () {})
   );
   self.skipWaiting();
 });
@@ -88,6 +132,18 @@ self.addEventListener("fetch", function (event) {
     );
     return;
   }
+  if (event.request.method === "GET" && CDN_RE.test(url)) {
+    event.respondWith(
+      caches.open(ASSET_CACHE).then(function (cache) {
+        return cache.match(url).then(function (hit) {
+          var net = fetch(url).then(function (res) { if (res && res.ok && res.status === 200) cache.put(url, res.clone()); return res; });
+          if (hit) { event.waitUntil(net.catch(function () {})); return hit; }
+          return net;
+        });
+      })
+    );
+    return;
+  }
   if (url.indexOf(self.location.origin) !== 0) return;
   if (event.request.method !== "GET") return;
 
@@ -96,7 +152,31 @@ self.addEventListener("fetch", function (event) {
   // copie déjà gardée par le navigateur (cache: "no-store") — c'est ce
   // détail précis qui manquait, et qui pouvait faire réafficher une
   // ancienne version de l'app même après un nouveau déploiement.
+  // Page principale : on démarre TOUT DE SUITE sur la copie gardée dans le
+  // téléphone (l'animation s'affiche sans attendre le réseau), et on va
+  // chercher la nouvelle version en arrière-plan : elle servira à
+  // l'ouverture suivante. Sans copie (toute première ouverture) : réseau.
+  // Les autres pages (doc.html, confidentialité...) : réseau d'abord.
   if (event.request.mode === "navigate") {
+    var navPath = new URL(url).pathname;
+    if (navPath === "/" || navPath === "/index.html") {
+      event.respondWith(
+        caches.open(CACHE_NAME).then(function (cache) {
+          return cache.match("./index.html").then(function (hit) {
+            var net = fetch(event.request, { cache: "no-store" }).then(function (res) {
+              if (res && res.ok && res.status === 200 && !res.redirected) {
+                cache.put("./index.html", res.clone());
+                res.clone().text().then(precacheFromHtml).catch(function () {});
+              }
+              return res;
+            });
+            if (hit) { event.waitUntil(net.catch(function () {})); return hit; }
+            return net.catch(function () { return caches.match("./index.html"); });
+          });
+        })
+      );
+      return;
+    }
     event.respondWith(
       fetch(event.request, { cache: "no-store" }).catch(function () {
         return caches.match("./index.html");
