@@ -1,0 +1,21 @@
+ÉCRANS DE DÉMARRAGE SOUNSOUNI (1er novembre 2026)
+=================================================
+4 écrans proposés à Issa. Choisi : n° 1 « Éclosion » (avec le son doux).
+Les 3 autres sont gardés ici pour plus tard (saisons, fêtes, campagnes).
+
+  c1.html  Éclosion                 graine qui tombe, le fruit pousse au lever du soleil (EN SERVICE)
+  c2.html  Harmattan d'or           milliers de grains de sable doré qui forment le fruit en 3D (three.js)
+  c3.html  Mosaïque d'écailles      écailles qui se retournent en vague et révèlent le fruit (three.js)
+  c4.html  Bogolan, le marché s'ouvre  battants bogolan, articles qui plongent dans le panier
+
+Images : fruit.png (pomme cannelle détourée par rembg), fruit_noleaf.png, leaf.png.
+Sons : sound.py (sons des 4 vidéos), sound_doux.py (son doux d'Éclosion, celui de l'application).
+
+Refaire les vidéos :
+  npm install (three, gsap, polices)  ;  python3 -m http.server 8899 (dans ce dossier)
+  python3 render.py c1 30   → c1_silent.mp4, puis ajouter le son avec ffmpeg (-i c1_doux.wav)
+
+Dans l'application : js/app.js (snsSplashHtml, snsSplashStart, snsSplashSound) et
+css/app.css (« Écran de démarrage Éclosion »). L'animation y est recalculée sans
+bibliothèque, à partir du temps écoulé. Pour passer à un autre écran, porter son
+fichier cN.html de la même manière.

@@ -1,0 +1,100 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="base.css">
+<style>
+#stage{perspective:900px;background:#1a0d05}
+#light{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 46%,#ffe7a6 0%,#f7b54a 22%,#c0661c 48%,#4a210a 78%,#1a0d05 100%)}
+#beams{position:absolute;left:50%;top:-200px;width:900px;height:1300px;margin-left:-450px;background:repeating-conic-gradient(from 180deg at 50% 0%,rgba(255,250,220,.12) 0deg 3deg,transparent 3deg 9deg);-webkit-mask:linear-gradient(#000 0%,rgba(0,0,0,.4) 60%,transparent 90%);opacity:0}
+.door{position:absolute;top:0;width:196px;height:844px;overflow:hidden;box-shadow:0 0 40px rgba(0,0,0,.6);backface-visibility:hidden}
+#dl{left:0;transform-origin:0 50%}#dr{right:0;transform-origin:100% 50%}
+.door svg{position:absolute;inset:0}
+#seam{position:absolute;left:192px;top:0;width:6px;height:844px;background:linear-gradient(transparent,#fff3c4 20%,#ffd36b 50%,#fff3c4 80%,transparent);filter:blur(2px);box-shadow:0 0 30px 10px rgba(255,210,110,.8);opacity:0}
+#spot{position:absolute;left:50%;top:-80px;width:520px;height:700px;margin-left:-260px;background:linear-gradient(rgba(255,248,215,.5),rgba(255,230,160,.12) 70%,transparent);clip-path:polygon(42% 0,58% 0,100% 100%,0 100%);filter:blur(6px);opacity:0}
+#fruitWrap{position:absolute;left:65px;top:265px;width:260px;height:270.5px;transform-style:preserve-3d;z-index:10}
+#fruit{position:absolute;inset:0;background:url(fruit.png) center/100% 100% no-repeat;filter:drop-shadow(0 20px 22px rgba(60,20,0,.55))}
+#shadow{position:absolute;left:85px;top:520px;width:220px;height:30px;border-radius:50%;background:radial-gradient(rgba(50,20,0,.6),rgba(50,20,0,0) 70%)}
+.ico{position:absolute;left:0;top:0;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff8e1,#ffd36b 60%,#d7902a);box-shadow:0 6px 14px rgba(70,30,0,.45),inset 0 -3px 6px rgba(150,80,0,.4);display:flex;align-items:center;justify-content:center}
+.ico svg{width:38px;height:38px}
+#flash{position:absolute;inset:0;background:radial-gradient(circle at 50% 40%,rgba(255,250,225,1),rgba(255,230,160,0) 60%);opacity:0;z-index:20}
+canvas{position:absolute;inset:0;width:390px;height:844px;z-index:12;pointer-events:none}
+.word{top:575px;z-index:25;font-size:60px}
+.word span{background:linear-gradient(#fff6dc,#ffcf5c 60%,#e08a1e);-webkit-background-clip:text;color:transparent;filter:drop-shadow(0 4px 0 #5a2a0c) drop-shadow(0 8px 16px rgba(40,10,0,.6))}
+.tag{top:652px;z-index:25;color:#fff1cf;text-shadow:0 2px 6px rgba(40,10,0,.7)}
+#orn{position:absolute;left:105px;top:676px;width:180px;height:14px;z-index:25}
+.bar{top:770px;z-index:25}
+</style></head><body><div id="stage">
+<div id="light"></div><div id="beams"></div><div id="spot"></div>
+<div id="shadow"></div><div id="fruitWrap"><div id="fruit"></div></div>
+<div id="icons"></div><canvas id="cv" width="780" height="1688"></canvas>
+<div class="door" id="dl"></div><div class="door" id="dr"></div><div id="seam"></div><div id="flash"></div>
+<div class="word" id="word"></div><div class="tag" id="tag">Le marché digital du Mali</div>
+<svg id="orn" viewBox="0 0 180 14"><path d="M0 7 L10 1 L20 7 L30 13 L40 7 L50 1 L60 7 L70 13 L80 7 L90 1 L100 7 L110 13 L120 7 L130 1 L140 7 L150 13 L160 7 L170 1 L180 7" fill="none" stroke="#ffd36b" stroke-width="2"/></svg>
+<div class="bar" id="bar"><i id="bari"></i></div></div>
+<script src="node_modules/gsap/dist/gsap.min.js"></script>
+<script>
+document.getElementById("word").innerHTML=[..."Sounsouni"].map(c=>`<span>${c}</span>`).join("");
+function R(i){let x=Math.sin(i*127.1+311.7)*43758.5453;return x-Math.floor(x)}
+// ---- tissu bogolan (motifs traditionnels : zigzags, points, croix, losanges, spirales)
+function bogolan(seed){
+ const C="#efe1c3",B="#3a2312";let s=`<svg viewBox="0 0 196 844" xmlns="http://www.w3.org/2000/svg"><defs><filter id="n${seed}"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="${seed}"/><feColorMatrix values="0 0 0 0 .2  0 0 0 0 .1  0 0 0 0 .02  0 0 0 .35 0"/></filter></defs><rect width="196" height="844" fill="${B}"/>`;
+ let y=0,band=0;
+ while(y<844){const h=[46,30,58,24,40][band%5];
+  s+=`<rect x="0" y="${y}" width="196" height="3" fill="${C}"/>`;
+  const t=band%5;
+  if(t==0){for(let x=0;x<196;x+=20)s+=`<path d="M${x} ${y+40} L${x+10} ${y+8} L${x+20} ${y+40}" fill="none" stroke="${C}" stroke-width="3"/>`;}
+  if(t==1){for(let x=6;x<196;x+=14)s+=`<circle cx="${x}" cy="${y+15}" r="3.2" fill="${C}"/>`;}
+  if(t==2){for(let x=0;x<196;x+=40){const cx=x+20,cy=y+29;s+=`<path d="M${cx} ${cy-22} L${cx+16} ${cy} L${cx} ${cy+22} L${cx-16} ${cy}Z" fill="none" stroke="${C}" stroke-width="3"/><circle cx="${cx}" cy="${cy}" r="4" fill="${C}"/>`;}}
+  if(t==3){for(let x=8;x<196;x+=22)s+=`<path d="M${x-6} ${y+12}h12M${x} ${y+6}v12" stroke="${C}" stroke-width="3"/>`;}
+  if(t==4){for(let x=0;x<196;x+=33){const cx=x+16,cy=y+20;s+=`<path d="M${cx} ${cy} m-2 0 a2 2 0 1 1 4 0 a5 5 0 1 1 -10 0 a8 8 0 1 1 16 0 a11 11 0 1 1 -22 0" fill="none" stroke="${C}" stroke-width="2.4"/>`;}}
+  s+=`<rect x="0" y="${y+h-3}" width="196" height="3" fill="${C}"/>`;y+=h+8;band++;}
+ s+=`<rect width="196" height="844" filter="url(#n${seed})"/></svg>`;return s;}
+document.getElementById("dl").innerHTML=bogolan(3);document.getElementById("dr").innerHTML=bogolan(3);
+document.getElementById("dr").firstChild.style.transform="scaleX(-1)";
+// ---- articles du marché
+const P={phone:'<rect x="7" y="2" width="10" height="20" rx="2.5" fill="#5a2a0c"/><rect x="8.6" y="4.5" width="6.8" height="13" rx="1" fill="#ffe9a8"/>',
+ dress:'<path d="M9 2h6l-1 4 5 15H5l5-15z" fill="#b8321e"/><path d="M7 14h10M6.3 17.5h11.4" stroke="#ffe9a8" stroke-width="1.4"/>',
+ shoe:'<path d="M3 15c3 0 6-2 7-6l3 2c2 2 5 3 8 3v4H3z" fill="#5a2a0c"/><path d="M3 18h18" stroke="#ffe9a8" stroke-width="1.5"/>',
+ bag:'<path d="M5 8h14l-1.3 13H6.3z" fill="#2e7d32"/><path d="M9 8V6a3 3 0 0 1 6 0v2" fill="none" stroke="#5a2a0c" stroke-width="1.8"/>',
+ moto:'<circle cx="6" cy="17" r="3.3" fill="none" stroke="#5a2a0c" stroke-width="2"/><circle cx="18" cy="17" r="3.3" fill="none" stroke="#5a2a0c" stroke-width="2"/><path d="M6 17l4-6h5l3 6M14 7h3l1 4" fill="none" stroke="#5a2a0c" stroke-width="2"/><rect x="8" y="6" width="5" height="4" fill="#b8321e"/>',
+ watch:'<rect x="9" y="1" width="6" height="22" rx="2" fill="#5a2a0c"/><circle cx="12" cy="12" r="5.5" fill="#ffe9a8" stroke="#5a2a0c" stroke-width="1.6"/><path d="M12 9v3.4l2 1.2" stroke="#5a2a0c" stroke-width="1.4" fill="none"/>',
+ food:'<circle cx="12" cy="14" r="7" fill="#d84315"/><path d="M12 7c0-2 2-4 4-4" stroke="#2e7d32" stroke-width="2" fill="none"/><path d="M10 7l2 1 2-1" stroke="#2e7d32" stroke-width="2" fill="none"/>'};
+const keys=Object.keys(P);document.getElementById("icons").innerHTML=keys.map(k=>`<div class="ico"><svg viewBox="0 0 24 24">${P[k]}</svg></div>`).join("");
+const icos=[...document.querySelectorAll(".ico")];
+const tl=gsap.timeline({paused:true});
+tl.set("#fruitWrap",{y:520,rotationX:-35,scale:.8}).set("#shadow",{opacity:0,scaleX:.3}).set(".word span",{opacity:0,scale:3}).set("#tag,#orn,#bar",{opacity:0})
+ .to("#seam",{opacity:1,duration:.5,ease:"power2.in"},.2)
+ .to("#dl",{rotationY:-108,duration:1.25,ease:"power3.inOut"},.75).to("#dr",{rotationY:108,duration:1.25,ease:"power3.inOut"},.75)
+ .to("#seam",{opacity:0,scaleX:8,duration:.5},.8)
+ .to("#beams",{opacity:1,duration:1.2},1.0).to("#beams",{rotation:6,duration:6,ease:"sine.inOut"},1.0)
+ .to("#spot",{opacity:1,duration:.8},1.3)
+ .to("#fruitWrap",{y:0,rotationX:0,scale:1,duration:1.3,ease:"back.out(1.3)"},1.45)
+ .to("#shadow",{opacity:1,scaleX:1,duration:1},1.7)
+ .to("#flash",{opacity:.9,duration:.08},4.05).to("#flash",{opacity:0,duration:.6},4.13)
+ .fromTo("#fruitWrap",{scale:1},{scale:1.08,duration:.15,yoyo:true,repeat:1,ease:"power2.out",immediateRender:false},4.05)
+ .to(".word span",{opacity:1,scale:1,duration:.45,stagger:.05,ease:"power4.in"},4.15)
+ .fromTo("#stage",{x:0},{x:3,duration:.05,yoyo:true,repeat:5,ease:"none",immediateRender:false},4.6)
+ .to("#tag",{opacity:1,duration:.6},4.95).to("#orn",{opacity:1,duration:.6},5.1)
+ .to("#bar",{opacity:1,duration:.4},5.2).fromTo("#bari",{width:"0%"},{width:"100%",duration:1.8,ease:"power1.inOut"},5.2);
+const cv=document.getElementById("cv").getContext("2d");
+const sm=(a,b,x)=>{x=Math.min(1,Math.max(0,(x-a)/(b-a)));return x*x*(3-2*x)};
+const RIM={x:195,y:345};
+window.frame=function(t){
+ tl.seek(t,false);
+ // orbite des articles puis plongée dans le panier
+ icos.forEach((el,i)=>{
+  const st=2.2+i*.08,dive=3.35+i*.1;const a=i/keys.length*Math.PI*2+ (t-st)*2.2;
+  const app=sm(st,st+.5,t),dv=sm(dive,dive+.42,t);
+  let x=195+Math.cos(a)*158,y=392+Math.sin(a)*74,depth=Math.sin(a);
+  x=x+(RIM.x-x)*dv;y=y+(RIM.y-y)*dv-Math.sin(dv*Math.PI)*90;
+  const sc=(0.82+0.3*depth)*(1-dv*.8)*app;
+  el.style.transform=`translate(${x}px,${y}px) scale(${sc})`;el.style.opacity=app*(1-sm(.85,1,dv));el.style.zIndex=depth>0&&dv<.5?15:5;
+ });
+ cv.clearRect(0,0,780,1688);cv.save();cv.scale(2,2);
+ // poussières dans la lumière
+ const lit=sm(1,2,t);for(let i=0;i<60;i++){const x=(R(i)*390+t*(8+R(i+3)*14))%390,y=(R(i+1)*700+Math.sin(t+i)*12);cv.globalAlpha=lit*(.25+.5*R(i+2))*(.6+.4*Math.sin(t*2+i));cv.fillStyle="#fff2c8";cv.beginPath();cv.arc(x,y,.8+R(i+4)*1.6,0,7);cv.fill();}
+ // étincelles quand un article tombe dans le panier
+ for(let k=0;k<keys.length;k++){const t0=3.35+k*.1+.42;const e=t-t0;if(e>0&&e<.7){for(let j=0;j<14;j++){const a=-Math.PI*R(k*20+j),sp=40+R(j+k)*90;const x=RIM.x+Math.cos(a)*sp*e,y=RIM.y+Math.sin(a)*sp*e+60*e*e;cv.globalAlpha=1-e/.7;cv.fillStyle=j%2?"#fff6c8":"#ffc845";cv.beginPath();cv.arc(x,y,1.6+R(j)*1.6,0,7);cv.fill();}}}
+ // grand éclat final
+ if(t>4.05&&t<5){const e=(t-4.05)/0.95;for(let j=0;j<40;j++){const a=R(j+500)*Math.PI*2,sp=120+R(j+600)*220;cv.globalAlpha=(1-e)*.9;cv.fillStyle=j%3?"#ffe08a":"#fff";cv.beginPath();cv.arc(195+Math.cos(a)*sp*e,400+Math.sin(a)*sp*e,1.5+R(j)*2,0,7);cv.fill();}}
+ cv.restore();
+};
+window.DUR=7;frame(0);
+</script></body></html>

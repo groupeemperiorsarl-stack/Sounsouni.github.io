@@ -33051,50 +33051,119 @@ function renderSplashScreen() {
 // revient dans l'application après 5 minutes ou plus d'absence. Il dure au
 // moins 5 secondes et reste tant que le chargement n'est pas fini. Pour une
 // absence plus courte, c'est la mascotte (femme en pagne) qui s'affiche.
-var SNS_SPLASH_FRUIT = "img/e/e50ba17d20c9.webp";
+// Écran choisi : « Éclosion » (1er novembre 2026). Une graine tombe sur la
+// terre du Sahel au lever du soleil, la pomme cannelle pousse, la feuille se
+// déplie, des lucioles tournent, puis « Sounsouni » s'écrit. Les 3 autres
+// écrans proposés (Harmattan d'or, Mosaïque d'écailles, Bogolan) sont gardés
+// dans tools/ecrans-demarrage/ pour plus tard (saisons, fêtes…).
+// L'animation est calculée image par image à partir du temps écoulé
+// (requestAnimationFrame), sans bibliothèque. Scène dessinée pour 390×844,
+// mise à l'échelle de l'écran ; ciel et terre débordent sur les côtés.
+var SNS_SP_IMG = { fruit: "img/e/16fcc21b503f.webp", leaf: "img/e/46edff4ff165.webp", sound: "img/e/aaa445f37745.mp3" };
 var SNS_SPLASH_MIN_MS = 5000;
 var SNS_AWAY_SPLASH_MS = 5 * 60 * 1000;
 function snsSplashHtml(asOverlay) {
-  var word = "Sounsouni", letters = "";
-  for (var i = 0; i < word.length; i++) letters += '<span style="animation-delay:' + (1.35 + i * 0.09).toFixed(2) + 's">' + word.charAt(i) + '</span>';
-  var sparks = "";
-  for (var k = 0; k < 16; k++) {
-    var left = (6 + (k * 53) % 88), dur = 3.2 + (k % 5) * 0.55, delay = (k * 0.37) % 4.2, size = 3 + (k % 3) * 2;
-    sparks += '<i style="left:' + left + '%;width:' + size + 'px;height:' + size + 'px;animation-duration:' + dur.toFixed(2) + 's;animation-delay:' + delay.toFixed(2) + 's"></i>';
-  }
-  var dots = "";
-  for (var d = 0; d < 7; d++) dots += '<b style="--a:' + (d * 51) + 'deg;animation-delay:' + (1 + d * 0.12).toFixed(2) + 's"></b>';
+  var letters = "", w = "Sounsouni";
+  for (var i = 0; i < w.length; i++) letters += "<span>" + w.charAt(i) + "</span>";
   return '<div class="splash-screen sns-sp' + (asOverlay ? ' sns-sp-ov' : '') + '" role="status" aria-label="Sounsouni">' +
-    '<div class="sns-sp-bg"></div><div class="sns-sp-motif"></div><div class="sns-sp-rays"></div><div class="sns-sp-sparks">' + sparks + '</div>' +
-    '<div class="sns-sp-center"><div class="sns-sp-medal-wrap"><div class="sns-sp-ring r1"></div><div class="sns-sp-ring r2"></div><div class="sns-sp-orbit">' + dots + '</div>' +
-    '<div class="sns-sp-medal"><img src="' + SNS_SPLASH_FRUIT + '" alt="" onerror="this.src=SOUNSOUNI_SPLASH_IMG"><div class="sns-sp-shine"></div></div></div>' +
-    '<div class="sns-sp-word">' + letters + '</div><div class="sns-sp-tag">Le marché digital du Mali</div></div>' +
-    '<div class="sns-sp-foot"><div class="sns-sp-bar"><i></i></div><div class="sns-sp-msg"><span>Préparation de votre marché…</span><span>Chargement des articles…</span><span>Mise à jour de vos commandes…</span><span>Presque prêt…</span></div><div class="sns-sp-slow">Connexion lente, on continue…</div></div></div>';
+    '<div class="sns-e-sky"></div><div class="sns-e-dawn"></div><canvas class="sns-e-stars"></canvas>' +
+    '<div class="sns-e-stage"><div class="sns-e-rays"></div><div class="sns-e-sun"></div>' +
+    '<div class="sns-e-ground"><svg viewBox="0 0 430 60" preserveAspectRatio="none"><path d="M0 40 C60 10 120 12 190 30 C260 48 330 8 430 26 L430 60 L0 60Z" fill="#b8682b"/></svg></div>' +
+    '<div class="sns-e-shadow"></div><div class="sns-e-fruitwrap"><div class="sns-e-fruit" style="background-image:url(' + SNS_SP_IMG.fruit + ')"></div>' +
+    '<div class="sns-e-glint" style="-webkit-mask-image:url(' + SNS_SP_IMG.fruit + ');mask-image:url(' + SNS_SP_IMG.fruit + ')"></div>' +
+    '<div class="sns-e-leaf" style="background-image:url(' + SNS_SP_IMG.leaf + ')"></div></div>' +
+    '<div class="sns-e-seed"></div><canvas class="sns-e-fx" width="780" height="1688"></canvas>' +
+    '<div class="sns-e-word">' + letters + '</div><div class="sns-e-tag">Le marché digital du Mali</div>' +
+    '<div class="sns-e-bar"><i></i></div><div class="sns-e-slow">Connexion lente, on continue…</div></div>' +
+    '<div class="sns-e-flash"></div></div>';
 }
-// Petit son doux de marque (fabriqué ici, sans fichier) : 4 notes de type balafon.
+// Courbes d'animation (mêmes que dans la vidéo validée).
+var SNS_EASE = {
+  lin: function (x) { return x; },
+  in3: function (x) { return x * x * x; },
+  out3: function (x) { return 1 - Math.pow(1 - x, 3); },
+  out4: function (x) { return 1 - Math.pow(1 - x, 4); },
+  sio: function (x) { return -(Math.cos(Math.PI * x) - 1) / 2; },
+  qio: function (x) { return x < .5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2; },
+  back: function (k) { return function (x) { var c3 = k + 1; return 1 + c3 * Math.pow(x - 1, 3) + k * Math.pow(x - 1, 2); }; },
+  elastic: function (x) { if (x === 0 || x === 1) return x; var p = 0.55, s = p / (2 * Math.PI) * Math.asin(1); return Math.pow(2, -10 * x) * Math.sin((x - s) * (2 * Math.PI) / p) + 1; }
+};
+function snsTw(t, start, dur, a, b, ease) { var x = Math.min(1, Math.max(0, (t - start) / dur)); return a + (b - a) * (ease || SNS_EASE.lin)(x); }
+function snsRnd(i) { var x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+function snsSplashStart(el) {
+  if (!el || el._snsRun) return;
+  el._snsRun = true;
+  var q = function (c) { return el.querySelector(c); };
+  var st = q(".sns-e-stage"), dawn = q(".sns-e-dawn"), stars = q(".sns-e-stars"), fx = q(".sns-e-fx"), flash = q(".sns-e-flash");
+  var sun = q(".sns-e-sun"), rays = q(".sns-e-rays"), fw = q(".sns-e-fruitwrap"), leaf = q(".sns-e-leaf"), glint = q(".sns-e-glint");
+  var shadow = q(".sns-e-shadow"), seed = q(".sns-e-seed"), tag = q(".sns-e-tag"), bar = q(".sns-e-bar"), bari = q(".sns-e-bar i");
+  var letters = el.querySelectorAll(".sns-e-word span");
+  var sx = stars.getContext("2d"), fc = fx.getContext("2d"), dpr = Math.min(2, window.devicePixelRatio || 1), W = 0, H = 0, sc = 1;
+  var fit = function () {
+    W = el.clientWidth || window.innerWidth; H = el.clientHeight || window.innerHeight;
+    sc = Math.min(W / 390, H / 844); st.style.transform = "translate(-50%,-50%) scale(" + sc + ")";
+    stars.width = Math.round(W * dpr); stars.height = Math.round(H * dpr);
+  };
+  fit();
+  var t0 = performance.now();
+  var draw = function () {
+    if (!el.parentNode || el.classList.contains("sns-sp-static")) { el._snsRun = false; return; }
+    if (el.clientWidth !== W || el.clientHeight !== H) fit();
+    var t = (performance.now() - t0) / 1000, E = SNS_EASE;
+    // graine qui tombe, éclair d'impact
+    seed.style.transform = "translateY(" + snsTw(t, .25, .85, -40, 540, E.in3) + "px) scale(" + snsTw(t, 1.1, .15, 1, 2.5) + ")";
+    seed.style.opacity = t < 1.1 ? 1 : snsTw(t, 1.1, .15, 1, 0);
+    flash.style.opacity = t < 1.18 ? snsTw(t, 1.1, .08, 0, 1) : snsTw(t, 1.18, .7, 1, 0, E.out3);
+    // aube, soleil, rayons
+    dawn.style.opacity = snsTw(t, 1.0, 2.2, 0, 1, E.sio);
+    sun.style.top = snsTw(t, 1.1, 2.4, 620, 170, E.out3) + "px";
+    rays.style.opacity = snsTw(t, 1.6, 1.4, 0, 1, E.out3);
+    rays.style.transform = "rotate(" + Math.max(0, (t - 1) * 40 / 6) + "deg)";
+    // le fruit pousse
+    var breathe = t > 4.6 ? -3 + 3 * Math.cos((t - 4.6) * Math.PI / 1.2) : 0;
+    fw.style.clipPath = fw.style.webkitClipPath = "inset(" + snsTw(t, 1.2, 1.5, 100, 0, E.out4) + "% -10% 0 -10%)";
+    fw.style.transform = "translateY(" + (snsTw(t, 1.2, 1.6, 30, 0, E.elastic) + breathe) + "px) scale(" + snsTw(t, 1.2, 1.6, .55, 1, E.elastic) + ")";
+    shadow.style.opacity = snsTw(t, 1.3, 1.2, 0, 1, E.out3); shadow.style.transform = "scaleX(" + snsTw(t, 1.3, 1.2, 0, 1, E.out3) + ")";
+    leaf.style.transform = "scale(" + snsTw(t, 2.45, .9, 0, 1, E.back(2.6)) + ") rotate(" + snsTw(t, 2.45, .9, -50, 0, E.back(2.6)) + "deg)";
+    var gk = t < 2.9 ? -1 : ((t - 2.9) % 2.5) / 1.1;
+    glint.style.backgroundPosition = (gk < 0 || gk > 1 ? 100 : 100 - 150 * E.qio(gk)) + "% 0";
+    // texte
+    for (var i = 0; i < letters.length; i++) {
+      var s0 = 3.15 + i * .07, bk = E.back(2);
+      letters[i].style.opacity = snsTw(t, s0, .5, 0, 1);
+      letters[i].style.transform = "translateY(" + snsTw(t, s0, .7, 60, 0, bk) + "px) rotateX(" + snsTw(t, s0, .7, -90, 0, bk) + "deg)";
+    }
+    tag.style.opacity = snsTw(t, 4.0, .9, 0, 1, E.out3); tag.style.letterSpacing = snsTw(t, 4.0, .9, 1, .32, E.out3) + "em";
+    bar.style.opacity = snsTw(t, 3.9, .4, 0, 1);
+    bari.style.width = (t < 5 ? snsTw(t, 3.9, 1.1, 0, 88, E.qio) : Math.min(97, 88 + (t - 5) * .6)) + "%";
+    // étoiles (plein écran), s'effacent avec l'aube
+    sx.setTransform(dpr, 0, 0, dpr, 0, 0); sx.clearRect(0, 0, W, H);
+    var night = Math.max(0, 1 - Math.max(0, t - 1.0) / 1.6);
+    if (night > 0) for (var k = 0; k < 120; k++) { sx.globalAlpha = night * (.3 + .7 * (.5 + .5 * Math.sin(t * 3 + k))) * (.4 + snsRnd(k + 77) * .6); sx.fillStyle = "#fff"; sx.beginPath(); sx.arc(snsRnd(k) * W, snsRnd(k + 300) * H * .62, .6 + snsRnd(k + 9) * 1.3, 0, 7); sx.fill(); }
+    // poussière, onde au sol, lucioles (dans la scène)
+    fc.setTransform(2, 0, 0, 2, 0, 0); fc.clearRect(0, 0, 390, 844);
+    if (t > 1.1 && t < 3.2) { var kk = t - 1.1; for (var d = 0; d < 70; d++) { var a = Math.PI * (.05 + .9 * snsRnd(d)), sp = 60 + snsRnd(d + 5) * 160; fc.globalAlpha = Math.max(0, .8 - kk * .42); fc.fillStyle = d % 3 ? "#e3a35d" : "#ffe2a3"; fc.beginPath(); fc.arc(195 + Math.cos(a) * sp * kk * (d % 2 ? 1 : -1), 560 - Math.sin(a) * sp * kk * 1.1 + 120 * kk * kk, 1 + snsRnd(d + 3) * 2.4, 0, 7); fc.fill(); } }
+    if (t > 1.1 && t < 2.3) { var rk = (t - 1.1) / 1.2; fc.globalAlpha = (1 - rk) * .8; fc.strokeStyle = "#ffe7a8"; fc.lineWidth = 2.5 * (1 - rk) + .5; fc.beginPath(); fc.ellipse(195, 562, 20 + 170 * rk, 5 + 30 * rk, 0, 0, 7); fc.stroke(); }
+    if (t > 2.6) { var ff = Math.min(1, (t - 2.6) / .8); for (var f = 0; f < 22; f++) { var r = 110 + snsRnd(f) * 60, an = t * (.5 + snsRnd(f + 2) * .7) + f * 1.7, x = 195 + Math.cos(an) * r, y = 430 + Math.sin(an) * r * .55 - 20 * Math.sin(t * 2 + f); var g = fc.createRadialGradient(x, y, 0, x, y, 7); g.addColorStop(0, "rgba(255,250,200,1)"); g.addColorStop(1, "rgba(255,210,90,0)"); fc.globalAlpha = ff * (.5 + .5 * Math.sin(t * 5 + f * 2)); fc.fillStyle = g; fc.beginPath(); fc.arc(x, y, 7, 0, 7); fc.fill(); } }
+    fc.globalAlpha = 1;
+    requestAnimationFrame(draw);
+  };
+  draw();
+}
+// Son doux (nappe, harpe, kalimba) — fichier de 6 s, coupable avec localStorage sns_splash_mute = "1".
 function snsSplashSound() {
   try {
     if (localStorage.getItem("sns_splash_mute") === "1") return;
-    var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-    var ctx = window._snsAudioCtx || (window._snsAudioCtx = new AC());
-    var play = function () {
-      var t0 = ctx.currentTime + 0.05, master = ctx.createGain(); master.gain.value = 0.16; master.connect(ctx.destination);
-      [[523.25, 0], [659.25, 0.14], [783.99, 0.28], [1046.5, 0.46]].forEach(function (n) {
-        [1, 3.98].forEach(function (h, hi) {
-          var o = ctx.createOscillator(), g = ctx.createGain(); o.type = hi ? "triangle" : "sine"; o.frequency.value = n[0] * h;
-          var st = t0 + n[1], peak = hi ? 0.18 : 1;
-          g.gain.setValueAtTime(0.0001, st); g.gain.exponentialRampToValueAtTime(peak, st + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, st + (hi ? 0.25 : 0.9));
-          o.connect(g); g.connect(master); o.start(st); o.stop(st + 1);
-        });
-      });
-    };
-    if (ctx.state === "suspended") ctx.resume().then(play).catch(function () {}); else play();
+    var a = window._snsSplashAudio || (window._snsSplashAudio = new Audio(SNS_SP_IMG.sound));
+    a.volume = 0.85; a.currentTime = 0;
+    var p = a.play(); if (p && p.catch) p.catch(function () {});
   } catch (e) {}
 }
 // Fondu de sortie : on fige l'écran (sans rejouer l'entrée) puis il s'efface.
 function snsSplashFadeOut(el) {
   if (!el) return;
   el.classList.add("sns-sp-static", "sns-sp-out");
+  try { if (window._snsSplashAudio && !window._snsSplashAudio.paused) { var au = window._snsSplashAudio, v = au.volume, iv = setInterval(function () { v -= .08; if (v <= 0) { au.pause(); clearInterval(iv); } else au.volume = v; }, 60); } } catch (e) {}
   setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 650);
 }
 var _snsSplashOv = null, _snsSplashOvAt = 0, _snsSplashSlowT = null;
@@ -33102,6 +33171,7 @@ function snsSplashOverlayShow() {
   if (_snsSplashOv && _snsSplashOv.parentNode) return;
   var wrap = document.createElement("div"); wrap.innerHTML = snsSplashHtml(true);
   _snsSplashOv = wrap.firstChild; document.body.appendChild(_snsSplashOv); _snsSplashOvAt = Date.now();
+  snsSplashStart(_snsSplashOv);
   snsSplashSound();
   clearTimeout(_snsSplashSlowT);
   _snsSplashSlowT = setTimeout(function () { if (_snsSplashOv) _snsSplashOv.classList.add("sns-sp-isslow"); }, 15000);
@@ -33201,7 +33271,8 @@ var _splashFinished = false;
 
 applyScaleMotif();
 root.innerHTML = renderSplashScreen();
-setTimeout(snsSplashSound, 700);
+snsSplashStart(root.querySelector(".sns-sp"));
+setTimeout(snsSplashSound, 150);
 setTimeout(function () { var sp = document.querySelector("#root .sns-sp"); if (sp && !_splashFinished) sp.classList.add("sns-sp-isslow"); }, 15000);
   if (window.__bootMark) window.__bootMark("logo affiché");
 refreshAutoExchangeRateIfNeeded();
@@ -33943,7 +34014,7 @@ function trySplashFinish() {
   if (_splashMinTimeDone && _splashAppDataReady) {
     _splashFinished = true;
     // Copie figée de l'écran posée par-dessus, qui s'efface en douceur pendant que l'app s'affiche dessous.
-    try { var spOld = document.querySelector("#root .sns-sp"); if (spOld) { var spCopy = spOld.cloneNode(true); spCopy.classList.add("sns-sp-ov", "sns-sp-static"); document.body.appendChild(spCopy); setTimeout(function () { snsSplashFadeOut(spCopy); }, 60); } } catch (eFade) {}
+    try { var spOld = document.querySelector("#root .sns-sp"); if (spOld) { var spCopy = spOld.cloneNode(true); spCopy.classList.add("sns-sp-ov", "sns-sp-static"); document.body.appendChild(spCopy); var cvO = spOld.querySelectorAll("canvas"), cvN = spCopy.querySelectorAll("canvas"); for (var ci = 0; ci < cvO.length; ci++) { try { cvN[ci].width = cvO[ci].width; cvN[ci].height = cvO[ci].height; cvN[ci].getContext("2d").drawImage(cvO[ci], 0, 0); } catch (eC) {} } setTimeout(function () { snsSplashFadeOut(spCopy); }, 60); } } catch (eFade) {}
     // Chaque étape ci-dessous est isolée : si l'une plante, on l'enregistre
     // et on continue — l'écran DOIT s'afficher quoi qu'il arrive. Avant, une
     // seule erreur ici laissait le logo de chargement à l'écran pour toujours.

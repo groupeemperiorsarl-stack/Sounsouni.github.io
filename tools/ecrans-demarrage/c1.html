@@ -1,0 +1,74 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="base.css">
+<style>
+#sky{position:absolute;inset:0;background:linear-gradient(#0b1033 0%,#1d1a4a 45%,#3b2459 70%,#6b3a4f 100%)}
+#dawn{position:absolute;inset:0;opacity:0;background:linear-gradient(#173b6b 0%,#3f7fb0 38%,#f3b562 68%,#ffcf7a 78%,#ffd98f 100%)}
+#sun{position:absolute;left:50%;width:520px;height:520px;margin-left:-260px;border-radius:50%;background:radial-gradient(circle,rgba(255,244,190,1) 0%,rgba(255,210,110,.9) 14%,rgba(255,170,60,.45) 32%,rgba(255,140,40,0) 62%)}
+#rays{position:absolute;left:50%;width:1100px;height:1100px;margin-left:-550px;background:repeating-conic-gradient(from 0deg,rgba(255,240,180,.16) 0deg 5deg,transparent 5deg 15deg);-webkit-mask:radial-gradient(circle,#000 0,rgba(0,0,0,.5) 25%,transparent 55%);opacity:0}
+#ground{position:absolute;left:-20px;right:-20px;top:560px;bottom:0;background:linear-gradient(#b8682b 0%,#8f4a1c 35%,#5a2a10 100%)}
+#ground svg{position:absolute;left:0;top:-38px;width:430px;height:60px}
+#fruitWrap{position:absolute;left:70px;top:300px;width:250px;height:260px;transform-origin:50% 100%}
+#fruit{position:absolute;inset:0;background:url(fruit_noleaf.png) center/100% 100% no-repeat}
+#glint{position:absolute;inset:0;-webkit-mask:url(fruit_noleaf.png) center/100% 100% no-repeat;background:linear-gradient(105deg,transparent 35%,rgba(255,255,220,.85) 50%,transparent 65%);background-size:300% 100%;background-position:100% 0;mix-blend-mode:screen}
+#leaf{position:absolute;left:139.6px;top:0;width:112.8px;height:77.9px;background:url(leaf.png) center/100% 100% no-repeat;transform-origin:12% 38%}
+#shadow{position:absolute;left:95px;top:548px;width:200px;height:26px;border-radius:50%;background:radial-gradient(rgba(40,15,0,.55),rgba(40,15,0,0) 70%)}
+#seed{position:absolute;left:187px;top:0;width:16px;height:22px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#fff7cf,#ffc845 55%,#b87b12);box-shadow:0 0 18px 6px rgba(255,210,90,.75)}
+#flash{position:absolute;inset:0;background:radial-gradient(circle at 50% 66%,rgba(255,240,200,.95),rgba(255,220,150,0) 55%);opacity:0}
+canvas{position:absolute;inset:0;width:390px;height:844px}
+.word{top:600px;filter:drop-shadow(0 4px 10px rgba(60,20,0,.55));perspective:400px}
+.word span{background:linear-gradient(#fffbe6,#ffd36b);-webkit-background-clip:text;color:transparent}
+.tag{top:670px;color:#ffe9b0;text-shadow:0 2px 6px rgba(60,20,0,.6)}
+.bar{top:770px}
+</style></head><body><div id="stage">
+<div id="sky"></div><div id="dawn"></div><div id="rays"></div><div id="sun"></div>
+<canvas id="cv" width="780" height="1688"></canvas>
+<div id="ground"><svg viewBox="0 0 430 60" preserveAspectRatio="none"><path d="M0 40 C60 10 120 12 190 30 C260 48 330 8 430 26 L430 60 L0 60Z" fill="#b8682b"/></svg></div>
+<div id="shadow"></div>
+<div id="fruitWrap"><div id="fruit"></div><div id="glint"></div><div id="leaf"></div></div>
+<div id="seed"></div><div id="flash"></div>
+<canvas id="cv2" width="780" height="1688"></canvas>
+<div class="word" id="word"></div><div class="tag" id="tag">Le marché digital du Mali</div>
+<div class="bar" id="bar"><i id="bari"></i></div>
+</div>
+<script src="node_modules/gsap/dist/gsap.min.js"></script>
+<script>
+const W="Sounsouni";document.getElementById("word").innerHTML=[...W].map(c=>`<span>${c}</span>`).join("");
+function rnd(i){let x=Math.sin(i*127.1+311.7)*43758.5453;return x-Math.floor(x)}
+const tl=gsap.timeline({paused:true,defaults:{ease:"power2.out"}});
+tl.set("#sun",{top:620}).set("#rays",{top:60})
+ .set("#fruitWrap",{clipPath:"inset(100% -10% 0 -10%)",scale:.55,y:30}).set("#leaf",{scale:0,rotation:-50})
+ .set("#shadow",{scaleX:0,opacity:0}).set(".word span",{y:60,opacity:0,rotationX:-90}).set("#tag",{opacity:0,letterSpacing:"1em"}).set("#bar",{opacity:0})
+ .fromTo("#seed",{y:-40,opacity:1},{y:540,duration:0.85,ease:"power2.in"},0.25)
+ .to("#seed",{opacity:0,scale:2.5,duration:0.15},1.1)
+ .to("#flash",{opacity:1,duration:0.08},1.1).to("#flash",{opacity:0,duration:0.7},1.18)
+ .to("#dawn",{opacity:1,duration:2.2,ease:"sine.inOut"},1.0)
+ .to("#sun",{top:170,duration:2.4,ease:"power2.out"},1.1)
+ .to("#rays",{opacity:1,duration:1.4},1.6).to("#rays",{rotation:40,duration:6,ease:"none"},1.0)
+ .to("#fruitWrap",{clipPath:"inset(0% -10% 0 -10%)",duration:1.5,ease:"power3.out"},1.2)
+ .to("#fruitWrap",{scale:1,y:0,duration:1.6,ease:"elastic.out(1,0.55)"},1.2)
+ .to("#shadow",{scaleX:1,opacity:1,duration:1.2},1.3)
+ .to("#leaf",{scale:1,rotation:0,duration:0.9,ease:"back.out(2.6)"},2.45)
+ .fromTo("#glint",{backgroundPosition:"100% 0"},{backgroundPosition:"-50% 0",duration:1.1,ease:"power1.inOut"},2.9)
+ .to(".word span",{y:0,opacity:1,rotationX:0,duration:0.7,stagger:0.07,ease:"back.out(2)"},3.15)
+ .to("#tag",{opacity:1,letterSpacing:"0.32em",duration:0.9},4.0)
+ .to("#bar",{opacity:1,duration:0.4},4.3).fromTo("#bari",{width:"0%"},{width:"100%",duration:2.6,ease:"power1.inOut"},4.3)
+ .fromTo("#glint",{backgroundPosition:"100% 0"},{backgroundPosition:"-50% 0",duration:1.1,ease:"power1.inOut",immediateRender:false},5.4)
+ .to("#fruitWrap",{y:-6,duration:1.2,yoyo:true,repeat:1,ease:"sine.inOut"},4.6);
+const cv=document.getElementById("cv").getContext("2d"),cv2=document.getElementById("cv2").getContext("2d");
+window.frame=function(t){
+ tl.seek(t,false);
+ cv.clearRect(0,0,780,1688);cv.save();cv.scale(2,2);
+ // étoiles (s'effacent avec l'aube)
+ const night=Math.max(0,1-Math.max(0,t-1.0)/1.6);
+ for(let i=0;i<90;i++){const x=rnd(i)*390,y=rnd(i+300)*520,tw=.5+.5*Math.sin(t*3+i);cv.globalAlpha=night*(.3+.7*tw)*(.4+rnd(i+77)*.6);cv.fillStyle="#fff";cv.beginPath();cv.arc(x,y,.6+rnd(i+9)*1.3,0,7);cv.fill();}
+ cv.restore();
+ cv2.clearRect(0,0,780,1688);cv2.save();cv2.scale(2,2);
+ // poussière à l'impact
+ if(t>1.1&&t<3.2){const k=(t-1.1);for(let i=0;i<70;i++){const a=Math.PI*(0.05+0.9*rnd(i)),sp=60+rnd(i+5)*160,x=195+Math.cos(a)*sp*k*(i%2?1:-1),y=560-Math.sin(a)*sp*k*1.1+120*k*k;cv2.globalAlpha=Math.max(0,.8-k*.42);cv2.fillStyle=i%3?"#e3a35d":"#ffe2a3";cv2.beginPath();cv2.arc(x,y,1+rnd(i+3)*2.4,0,7);cv2.fill();}}
+ // anneau d'onde au sol
+ if(t>1.1&&t<2.3){const k=(t-1.1)/1.2;cv2.globalAlpha=(1-k)*.8;cv2.strokeStyle="#ffe7a8";cv2.lineWidth=2.5*(1-k)+.5;cv2.beginPath();cv2.ellipse(195,562,20+170*k,5+30*k,0,0,7);cv2.stroke();}
+ // lucioles autour du fruit
+ if(t>2.6){const f=Math.min(1,(t-2.6)/0.8);for(let i=0;i<22;i++){const r=110+rnd(i)*60,a=t*(0.5+rnd(i+2)*.7)+i*1.7,x=195+Math.cos(a)*r,y=430+Math.sin(a)*r*.55-20*Math.sin(t*2+i);const g=cv2.createRadialGradient(x,y,0,x,y,7);g.addColorStop(0,"rgba(255,250,200,1)");g.addColorStop(1,"rgba(255,210,90,0)");cv2.globalAlpha=f*(.5+.5*Math.sin(t*5+i*2));cv2.fillStyle=g;cv2.beginPath();cv2.arc(x,y,7,0,7);cv2.fill();}}
+ cv2.restore();
+};
+window.DUR=7;frame(0);
+</script></body></html>

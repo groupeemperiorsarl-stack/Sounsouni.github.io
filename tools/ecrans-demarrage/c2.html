@@ -1,0 +1,88 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="base.css">
+<style>
+#gl{position:absolute;inset:0;width:390px;height:844px}
+#vig{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 45%,rgba(0,0,0,0) 40%,rgba(0,0,0,.55) 100%);pointer-events:none}
+.word{top:560px;perspective:500px}
+.word span{background:linear-gradient(180deg,#fff9e0 10%,#ffd36b 55%,#e8a33a 90%);-webkit-background-clip:text;color:transparent;filter:drop-shadow(0 0 14px rgba(255,200,90,.55))}
+.tag{top:632px;color:#f4dc9a}
+#sweep{position:absolute;left:0;right:0;top:556px;height:80px;background:linear-gradient(100deg,transparent 40%,rgba(255,255,230,.9) 50%,transparent 60%);background-size:300% 100%;mix-blend-mode:overlay;opacity:0}
+.bar{top:760px}
+</style>
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+</head><body><div id="stage"><canvas id="gl"></canvas><div id="vig"></div>
+<div class="word" id="word"></div><div class="tag" id="tag">Le marché digital du Mali</div><div class="bar" id="bar"><i id="bari"></i></div></div>
+<script src="node_modules/gsap/dist/gsap.min.js"></script>
+<script type="module">
+import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+window.READY=false;
+document.getElementById("word").innerHTML=[..."Sounsouni"].map(c=>`<span>${c}</span>`).join("");
+const W=390,H=844,FW=260,FH=FW*641/616,CY=110;
+const renderer=new THREE.WebGLRenderer({canvas:document.getElementById("gl"),antialias:true,preserveDrawingBuffer:true});
+renderer.setPixelRatio(2);renderer.setSize(W,H,false);renderer.setClearColor(0x04160a,1);
+const scene=new THREE.Scene();
+const cam=new THREE.PerspectiveCamera(40,W/H,1,5000);const D=(H/2)/Math.tan(THREE.MathUtils.degToRad(20));
+// fond : dégradé radial
+const bgMat=new THREE.ShaderMaterial({depthWrite:false,uniforms:{uT:{value:0}},vertexShader:`varying vec2 v;void main(){v=uv;gl_Position=vec4(position.xy,0.999,1.);}`,
+ fragmentShader:`varying vec2 v;uniform float uT;void main(){vec2 p=v-vec2(.5,.56);p.x*=.46;float d=length(p);vec3 c=mix(vec3(.05,.17,.07),vec3(.004,.022,.01),smoothstep(0.,.6,d));c+=vec3(.20,.13,.02)*smoothstep(.45,0.,d)*smoothstep(2.6,4.2,uT)*.6;gl_FragColor=vec4(c,1.);}`});
+const bg=new THREE.Mesh(new THREE.PlaneGeometry(2,2),bgMat);bg.frustumCulled=false;scene.add(bg);
+const img=new Image();img.src="fruit.png";await img.decode();
+const c=document.createElement("canvas");c.width=616;c.height=641;const cx=c.getContext("2d");cx.drawImage(img,0,0);const px=cx.getImageData(0,0,616,641).data;
+const pos=[],tgt=[],col=[],rnd=[];const STEP=4;
+function R(i){let x=Math.sin(i*127.1+311.7)*43758.5453;return x-Math.floor(x)}
+let n=0;
+for(let y=0;y<641;y+=STEP)for(let x=0;x<616;x+=STEP){const i=(y*616+x)*4;if(px[i+3]<140)continue;
+ tgt.push((x/616-.5)*FW,CY+(.5-y/641)*FH,0);col.push(px[i]/255,px[i+1]/255,px[i+2]/255);rnd.push(R(n),R(n+7e3),R(n+1.4e4),1-y/641);pos.push(0,0,0);n++;}
+const g=new THREE.BufferGeometry();g.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));g.setAttribute("aT",new THREE.Float32BufferAttribute(tgt,3));
+g.setAttribute("aC",new THREE.Float32BufferAttribute(col,3));g.setAttribute("aR",new THREE.Float32BufferAttribute(rnd,4));
+const mat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,uniforms:{uT:{value:0},uFade:{value:1}},
+vertexShader:`attribute vec3 aT;attribute vec3 aC;attribute vec4 aR;uniform float uT;varying vec3 vC;varying float vA;
+float eo(float x){return 1.-pow(1.-x,3.);}
+void main(){
+ float d=.15+aR.w*1.25+aR.x*.45;float k=clamp((uT-d)/1.55,0.,1.);float e=eo(k);
+ float ang=aR.y*6.283+uT*(1.1+aR.z*1.4);float rad=180.+aR.x*420.-uT*40.;
+ vec3 ch=vec3(cos(ang)*rad*.75-260.*(1.-uT*.25),sin(ang)*rad*.35+ (aR.w-.5)*500.-180.+uT*90.,sin(ang*1.7)*260.+aR.z*-400.);
+ ch.x+=sin(uT*2.+aR.x*20.)*40.;
+ vec3 p=mix(ch,aT,e);
+ // vent : certains grains repartent en poussière
+ float off=step(.9,aR.z)*smoothstep(4.2,6.5,uT);p+=vec3(off*(160.+aR.x*240.),off*(60.+aR.y*120.),0.);
+ // scintillement final
+ p.z+=sin(uT*6.+aR.x*40.)*3.*e;
+ vec4 mv=modelViewMatrix*vec4(p,1.);gl_Position=projectionMatrix*mv;
+ gl_PointSize=min(7.,(mix(5.0,3.0,e)+aR.y*1.2)*(1160./-mv.z));
+ vC=mix(vec3(1.,.78,.32),aC*1.15+vec3(.04,.03,0.),smoothstep(.55,1.,k));vA=mix(.6,.75,e)*(1.-off*.6)*smoothstep(250.,700.,-mv.z);}`,
+fragmentShader:`uniform float uFade;varying vec3 vC;varying float vA;void main(){vec2 c=gl_PointCoord-.5;float r=length(c);if(r>.5)discard;float a=smoothstep(.5,.0,r);gl_FragColor=vec4(vC*a,a*vA*uFade);}`});
+const pts=new THREE.Points(g,mat);scene.add(pts);
+// poussière d'ambiance
+const dn=600,dp=new Float32Array(dn*3),dr=new Float32Array(dn);for(let i=0;i<dn;i++){dp[i*3]=(R(i+9e4)-.5)*900;dp[i*3+1]=(R(i+8e4)-.5)*1400;dp[i*3+2]=-R(i+7e4)*900;dr[i]=R(i+6e4);}
+const dg=new THREE.BufferGeometry();dg.setAttribute("position",new THREE.BufferAttribute(dp,3));dg.setAttribute("aR",new THREE.BufferAttribute(dr,1));
+const dmat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,uniforms:{uT:{value:0}},vertexShader:`attribute float aR;uniform float uT;varying float vA;void main(){vec3 p=position;p.x+=uT*(40.+aR*60.);p.y+=sin(uT+aR*9.)*20.;vec4 mv=modelViewMatrix*vec4(p,1.);gl_Position=projectionMatrix*mv;gl_PointSize=min(4.,(1.5+aR*2.5)*(1160./-mv.z));vA=.25+.35*sin(uT*3.+aR*30.);}`,
+fragmentShader:`varying float vA;void main(){float r=length(gl_PointCoord-.5);if(r>.5)discard;gl_FragColor=vec4(vec3(1.,.85,.5)*smoothstep(.5,0.,r),vA*smoothstep(.5,0.,r));}`});
+scene.add(new THREE.Points(dg,dmat));
+// fruit net
+const tex=new THREE.Texture(img);tex.needsUpdate=true;tex.colorSpace=THREE.SRGBColorSpace;
+const fruitMat=new THREE.MeshBasicMaterial({map:tex,transparent:true,opacity:0,depthWrite:false});
+const fruit=new THREE.Mesh(new THREE.PlaneGeometry(FW,FH),fruitMat);fruit.position.y=CY;scene.add(fruit);
+const halo=new THREE.Mesh(new THREE.PlaneGeometry(700,700),new THREE.ShaderMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,uniforms:{uA:{value:0}},vertexShader:`varying vec2 v;void main(){v=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,fragmentShader:`varying vec2 v;uniform float uA;void main(){float d=length(v-.5);gl_FragColor=vec4(vec3(1.,.75,.3)*smoothstep(.5,0.,d)*.22*uA,1.);}`}));
+halo.position.set(0,CY,-30);scene.add(halo);
+const comp=new EffectComposer(renderer);comp.setPixelRatio(2);comp.setSize(W,H);comp.addPass(new RenderPass(scene,cam));
+const bloom=new UnrealBloomPass(new THREE.Vector2(W*2,H*2),0.7,0.45,0.42);comp.addPass(bloom);comp.addPass(new OutputPass());
+const tl=gsap.timeline({paused:true});
+tl.set(".word span",{opacity:0,y:30,filter:"blur(10px)",scale:1.4}).set("#tag",{opacity:0,letterSpacing:"1em"}).set("#bar",{opacity:0})
+ .to(".word span",{opacity:1,y:0,filter:"blur(0px) drop-shadow(0 0 14px rgba(255,200,90,.55))",scale:1,duration:.8,stagger:.06,ease:"power3.out"},3.3)
+
+ .to("#tag",{opacity:1,letterSpacing:"0.32em",duration:1,ease:"power2.out"},4.1)
+ .to("#bar",{opacity:1,duration:.4},4.5).fromTo("#bari",{width:"0%"},{width:"100%",duration:2.3,ease:"power1.inOut"},4.5);
+const sm=(a,b,x)=>{x=Math.min(1,Math.max(0,(x-a)/(b-a)));return x*x*(3-2*x)};
+window.frame=function(t){
+ tl.seek(t,false);mat.uniforms.uT.value=t;dmat.uniforms.uT.value=t;bgMat.uniforms.uT.value=t;
+ const a=0.75*(1-sm(0,3.4,t))+0.04*Math.sin(t*.8);cam.position.set(Math.sin(a)*D,40*(1-sm(0,3.4,t)),Math.cos(a)*D);cam.lookAt(0,CY*0.25,0);
+ const f=sm(3.0,3.9,t);fruitMat.opacity=f;mat.uniforms.uFade.value=1-f*.75;halo.material.uniforms.uA.value=sm(2.4,3.6,t)*(1+.15*Math.sin(t*3));
+ fruit.scale.setScalar(1+.012*Math.sin(t*2.2)*f);bloom.strength=0.7-.35*f+.22*Math.max(0,1-Math.abs(t-3.55)/.35);
+ comp.render();
+};
+window.DUR=7;frame(0);window.READY=true;
+</script></body></html>

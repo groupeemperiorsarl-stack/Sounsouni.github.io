@@ -1,0 +1,13 @@
+@font-face{font-family:Fredoka;font-weight:600;src:url(fonts/fredoka-latin-600-normal.woff2)}
+@font-face{font-family:Fredoka;font-weight:700;src:url(fonts/fredoka-latin-700-normal.woff2)}
+@font-face{font-family:Mont;font-weight:600;src:url(fonts/montserrat-latin-600-normal.woff2)}
+@font-face{font-family:Mont;font-weight:700;src:url(fonts/montserrat-latin-700-normal.woff2)}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:390px;height:844px;overflow:hidden;background:#000}
+#stage{position:relative;width:390px;height:844px;overflow:hidden}
+.abs{position:absolute}
+.word{position:absolute;left:0;right:0;text-align:center;font-family:Fredoka;font-weight:700;font-size:56px;letter-spacing:.5px;color:#fff;white-space:nowrap}
+.word span{display:inline-block}
+.tag{position:absolute;left:0;right:0;text-align:center;font-family:Mont;font-weight:700;font-size:12.5px;letter-spacing:.32em;text-transform:uppercase;color:#ffe08a}
+.bar{position:absolute;left:95px;width:200px;height:4px;border-radius:4px;background:rgba(255,255,255,.18);overflow:hidden}
+.bar i{display:block;height:100%;width:0;border-radius:4px;background:linear-gradient(90deg,#c8f07a,#ffd54f);box-shadow:0 0 10px rgba(255,213,79,.8)}
