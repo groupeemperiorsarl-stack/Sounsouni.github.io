@@ -33153,7 +33153,7 @@ function renderSplashScreen() {
 // L'animation est calculée image par image à partir du temps écoulé
 // (requestAnimationFrame), sans bibliothèque. Scène dessinée pour 390×844,
 // mise à l'échelle de l'écran ; ciel et terre débordent sur les côtés.
-var SNS_SP_IMG = { fruit: "img/e/16fcc21b503f.webp", leaf: "img/e/46edff4ff165.webp", sound: "img/e/aaa445f37745.mp3" };
+var SNS_SP_IMG = { fruit: "img/e/16fcc21b503f.webp", leaf: "img/e/46edff4ff165.webp", sound: "img/e/d3d0148b41c1.mp3" };
 var SNS_SPLASH_MIN_MS = 8000;
 var SNS_AWAY_SPLASH_MS = 5 * 60 * 1000;
 function snsSplashHtml(asOverlay) {
@@ -33250,7 +33250,7 @@ function snsSplashSound() {
   try {
     if (localStorage.getItem("sns_splash_mute") === "1") return;
     var a = window._snsSplashAudio || (window._snsSplashAudio = new Audio(SNS_SP_IMG.sound));
-    a.volume = 0.85; a.currentTime = 0;
+    a.volume = 0.6; a.currentTime = 0;
     var p = a.play(); if (p && p.catch) p.catch(function () {});
   } catch (e) {}
 }
