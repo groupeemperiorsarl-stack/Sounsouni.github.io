@@ -612,11 +612,14 @@ function hideUploadLoader() {
 // personne dans l'app. Affiche le petit loader mascotte pendant l'opération,
 // comme prévu à l'origine pour ce cas d'usage.
 var _backgroundResyncRunning = false;
-function runBackgroundResync() {
-  if (!FIREBASE_ENABLED || typeof sb === "undefined" || !sb) return;
-  if (_backgroundResyncRunning) return; // évite deux resyncs en même temps
+function runBackgroundResync(opts) {
+  opts = opts || {};
+  if (opts.splash) snsSplashOverlayShow();
+  if (!FIREBASE_ENABLED || typeof sb === "undefined" || !sb) { if (opts.splash) snsSplashOverlayHide(); return; }
+  if (_backgroundResyncRunning) { if (opts.splash) snsSplashOverlayHide(); return; } // évite deux resyncs en même temps
   _backgroundResyncRunning = true;
-  showUploadLoader();
+  var _showL = opts.splash ? function () {} : showUploadLoader, _hideL = opts.splash ? snsSplashOverlayHide : hideUploadLoader;
+  _showL();
   var resyncStartedAt = Date.now();
   // Durée minimale d'affichage de la mascotte, même si la resync réelle va
   // plus vite — un aller-retour de 300ms suivi d'une disparition instantanée
@@ -686,7 +689,7 @@ function runBackgroundResync() {
     _backgroundResyncRunning = false;
     var elapsedResyncMs = Date.now() - resyncStartedAt;
     var remainingDisplayMs = Math.max(0, MIN_LOADER_DISPLAY_MS - elapsedResyncMs);
-    setTimeout(hideUploadLoader, remainingDisplayMs);
+    setTimeout(_hideL, opts.splash ? 0 : remainingDisplayMs);
   });
 }
 
@@ -12581,6 +12584,9 @@ function setupMarketInfiniteScroll() {
 }
 
 function render() {
+  // L'écran de la pomme cannelle reste affiché jusqu'à la fin du démarrage
+  // (au moins 5 s) : aucun affichage ne doit l'écraser avant.
+  if (typeof _splashFinished !== "undefined" && !_splashFinished && document.querySelector("#root > .sns-sp")) return;
   window._renderTick = (window._renderTick || 0) + 1;
   // Depuis le verrouillage, une commande peut arriver sans sa liste
   // d'articles (rangée à part sur le serveur) : jamais de plantage d'écran.
@@ -32972,9 +32978,11 @@ if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App
   // au premier plan (avec le loader mascotte), SANS recharger toute la
   // page — pour ne jamais perdre la position ou un formulaire en cours.
   window.Capacitor.Plugins.App.addListener("appStateChange", function(st) {
-    if (st && st.isActive) {
-      runBackgroundResync();
-    }
+    if (!st) return;
+    if (!st.isActive) { snsMarkHidden(); return; }
+    // 5 minutes ou plus d'absence : la pomme cannelle ; sinon la mascotte.
+    var away = snsAwayMs(); _snsHiddenAt = 0;
+    runBackgroundResync({ splash: away >= SNS_AWAY_SPLASH_MS });
   });
 }
 
@@ -33035,8 +33043,86 @@ function renderSplashScreen() {
     var d = scaleDirs[i];
     scalesHtml += '<div class="splash-scale" style="--sx:' + d.x + 'px;--sy:' + d.y + 'px;animation-delay:' + (i * 0.2) + 's;"></div>';
   }
-  return '<div class="splash-screen"><div class="splash-scales-wrap">' + scalesHtml + '<img loading="lazy" src="' + SOUNSOUNI_SPLASH_IMG + '" class="splash-sounsouni-logo" alt="Sounsouni" /></div></div>';
+  return snsSplashHtml(false);
 }
+
+// ---------- ÉCRAN DE LA POMME CANNELLE (lancement et retour après 5 min) ----------
+// Même écran partout (téléphone, site, Windows) : au lancement, et quand on
+// revient dans l'application après 5 minutes ou plus d'absence. Il dure au
+// moins 5 secondes et reste tant que le chargement n'est pas fini. Pour une
+// absence plus courte, c'est la mascotte (femme en pagne) qui s'affiche.
+var SNS_SPLASH_FRUIT = "img/e/e50ba17d20c9.webp";
+var SNS_SPLASH_MIN_MS = 5000;
+var SNS_AWAY_SPLASH_MS = 5 * 60 * 1000;
+function snsSplashHtml(asOverlay) {
+  var word = "Sounsouni", letters = "";
+  for (var i = 0; i < word.length; i++) letters += '<span style="animation-delay:' + (1.35 + i * 0.09).toFixed(2) + 's">' + word.charAt(i) + '</span>';
+  var sparks = "";
+  for (var k = 0; k < 16; k++) {
+    var left = (6 + (k * 53) % 88), dur = 3.2 + (k % 5) * 0.55, delay = (k * 0.37) % 4.2, size = 3 + (k % 3) * 2;
+    sparks += '<i style="left:' + left + '%;width:' + size + 'px;height:' + size + 'px;animation-duration:' + dur.toFixed(2) + 's;animation-delay:' + delay.toFixed(2) + 's"></i>';
+  }
+  var dots = "";
+  for (var d = 0; d < 7; d++) dots += '<b style="--a:' + (d * 51) + 'deg;animation-delay:' + (1 + d * 0.12).toFixed(2) + 's"></b>';
+  return '<div class="splash-screen sns-sp' + (asOverlay ? ' sns-sp-ov' : '') + '" role="status" aria-label="Sounsouni">' +
+    '<div class="sns-sp-bg"></div><div class="sns-sp-motif"></div><div class="sns-sp-rays"></div><div class="sns-sp-sparks">' + sparks + '</div>' +
+    '<div class="sns-sp-center"><div class="sns-sp-medal-wrap"><div class="sns-sp-ring r1"></div><div class="sns-sp-ring r2"></div><div class="sns-sp-orbit">' + dots + '</div>' +
+    '<div class="sns-sp-medal"><img src="' + SNS_SPLASH_FRUIT + '" alt="" onerror="this.src=SOUNSOUNI_SPLASH_IMG"><div class="sns-sp-shine"></div></div></div>' +
+    '<div class="sns-sp-word">' + letters + '</div><div class="sns-sp-tag">Le marché digital du Mali</div></div>' +
+    '<div class="sns-sp-foot"><div class="sns-sp-bar"><i></i></div><div class="sns-sp-msg"><span>Préparation de votre marché…</span><span>Chargement des articles…</span><span>Mise à jour de vos commandes…</span><span>Presque prêt…</span></div><div class="sns-sp-slow">Connexion lente, on continue…</div></div></div>';
+}
+// Petit son doux de marque (fabriqué ici, sans fichier) : 4 notes de type balafon.
+function snsSplashSound() {
+  try {
+    if (localStorage.getItem("sns_splash_mute") === "1") return;
+    var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    var ctx = window._snsAudioCtx || (window._snsAudioCtx = new AC());
+    var play = function () {
+      var t0 = ctx.currentTime + 0.05, master = ctx.createGain(); master.gain.value = 0.16; master.connect(ctx.destination);
+      [[523.25, 0], [659.25, 0.14], [783.99, 0.28], [1046.5, 0.46]].forEach(function (n) {
+        [1, 3.98].forEach(function (h, hi) {
+          var o = ctx.createOscillator(), g = ctx.createGain(); o.type = hi ? "triangle" : "sine"; o.frequency.value = n[0] * h;
+          var st = t0 + n[1], peak = hi ? 0.18 : 1;
+          g.gain.setValueAtTime(0.0001, st); g.gain.exponentialRampToValueAtTime(peak, st + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, st + (hi ? 0.25 : 0.9));
+          o.connect(g); g.connect(master); o.start(st); o.stop(st + 1);
+        });
+      });
+    };
+    if (ctx.state === "suspended") ctx.resume().then(play).catch(function () {}); else play();
+  } catch (e) {}
+}
+// Fondu de sortie : on fige l'écran (sans rejouer l'entrée) puis il s'efface.
+function snsSplashFadeOut(el) {
+  if (!el) return;
+  el.classList.add("sns-sp-static", "sns-sp-out");
+  setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 650);
+}
+var _snsSplashOv = null, _snsSplashOvAt = 0, _snsSplashSlowT = null;
+function snsSplashOverlayShow() {
+  if (_snsSplashOv && _snsSplashOv.parentNode) return;
+  var wrap = document.createElement("div"); wrap.innerHTML = snsSplashHtml(true);
+  _snsSplashOv = wrap.firstChild; document.body.appendChild(_snsSplashOv); _snsSplashOvAt = Date.now();
+  snsSplashSound();
+  clearTimeout(_snsSplashSlowT);
+  _snsSplashSlowT = setTimeout(function () { if (_snsSplashOv) _snsSplashOv.classList.add("sns-sp-isslow"); }, 15000);
+  setTimeout(snsSplashOverlayHide, 30000); // filet de sécurité
+}
+function snsSplashOverlayHide() {
+  if (!_snsSplashOv) return;
+  var el = _snsSplashOv, wait = Math.max(0, SNS_SPLASH_MIN_MS - (Date.now() - _snsSplashOvAt));
+  setTimeout(function () { if (_snsSplashOv !== el) return; _snsSplashOv = null; clearTimeout(_snsSplashSlowT); snsSplashFadeOut(el); }, wait);
+}
+// Absence : on note quand l'application passe en arrière-plan.
+var _snsHiddenAt = 0;
+function snsMarkHidden() { _snsHiddenAt = Date.now(); try { localStorage.setItem("sns_hidden_at", String(_snsHiddenAt)); } catch (e) {} }
+function snsAwayMs() { var h = _snsHiddenAt; if (!h) { try { h = Number(localStorage.getItem("sns_hidden_at")) || 0; } catch (e) {} } return h ? Date.now() - h : 0; }
+document.addEventListener("visibilitychange", function () {
+  if (document.visibilityState === "hidden") { snsMarkHidden(); return; }
+  // Site et Windows (l'application Android passe par appStateChange) : retour après 5 min ou plus.
+  var isNative = false; try { isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch (e) {}
+  if (isNative || typeof _splashFinished === "undefined" || !_splashFinished) return;
+  if (snsAwayMs() >= SNS_AWAY_SPLASH_MS) { _snsHiddenAt = 0; runBackgroundResync({ splash: true }); }
+});
 
 // ---------- VILLES INTERNATIONALES PRÉ-REMPLIES ----------
 // Recherchées et intégrées directement dans le code (listes officielles :
@@ -33115,6 +33201,8 @@ var _splashFinished = false;
 
 applyScaleMotif();
 root.innerHTML = renderSplashScreen();
+setTimeout(snsSplashSound, 700);
+setTimeout(function () { var sp = document.querySelector("#root .sns-sp"); if (sp && !_splashFinished) sp.classList.add("sns-sp-isslow"); }, 15000);
   if (window.__bootMark) window.__bootMark("logo affiché");
 refreshAutoExchangeRateIfNeeded();
 
@@ -33854,6 +33942,8 @@ function trySplashFinish() {
   if (_splashFinished) return;
   if (_splashMinTimeDone && _splashAppDataReady) {
     _splashFinished = true;
+    // Copie figée de l'écran posée par-dessus, qui s'efface en douceur pendant que l'app s'affiche dessous.
+    try { var spOld = document.querySelector("#root .sns-sp"); if (spOld) { var spCopy = spOld.cloneNode(true); spCopy.classList.add("sns-sp-ov", "sns-sp-static"); document.body.appendChild(spCopy); setTimeout(function () { snsSplashFadeOut(spCopy); }, 60); } } catch (eFade) {}
     // Chaque étape ci-dessous est isolée : si l'une plante, on l'enregistre
     // et on continue — l'écran DOIT s'afficher quoi qu'il arrive. Avant, une
     // seule erreur ici laissait le logo de chargement à l'écran pour toujours.
@@ -33912,7 +34002,7 @@ setTimeout(function() {
   }
 }, 15000);
 
-setTimeout(function() { _splashMinTimeDone = true; trySplashFinish(); }, 5500);
+setTimeout(function() { _splashMinTimeDone = true; trySplashFinish(); }, 5000);
 
 function bootAppWithLocalData() {
   if (window.__bootMark) window.__bootMark("démarrage des données");
