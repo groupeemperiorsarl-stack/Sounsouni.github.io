@@ -37,7 +37,8 @@ const SHELL_FILES = [
 // avec une connexion faible ou coupée.
 const SPLASH_FILES = [
   "./img/e/16fcc21b503f.webp", "./img/e/46edff4ff165.webp", "./img/e/83d96455068c.mp3",
-  "./img/e/44b62c8b9ce2.woff2", "./img/e/486c7fa9e908.woff2"
+  "./img/e/44b62c8b9ce2.woff2", "./img/e/486c7fa9e908.woff2",
+  "./img/e/dabe307e121f.mp4", "./img/e/9e38dc9ad8bd.webp", "./img/e/e58989f1d2f9.webp"
 ];
 // Bibliothèques venant d'autres sites (Supabase, icônes...) : gardées aussi,
 // sinon le démarrage attend leur téléchargement à chaque ouverture.
@@ -189,6 +190,25 @@ self.addEventListener("fetch", function (event) {
   // instantanée), réseau la première fois. Quand une nouvelle version d'un
   // fichier arrive, les anciennes versions de ce même fichier sont effacées.
   var u = new URL(url);
+  // Vidéo gardée dans le téléphone : les lecteurs (surtout iPhone) la
+  // demandent par morceaux (« Range ») — on découpe la copie gardée.
+  var rng = event.request.headers.get("range");
+  if (rng && /^\/img\/e\/[^/]+\.mp4$/.test(u.pathname)) {
+    event.respondWith(
+      caches.open(ASSET_CACHE).then(function (cache) {
+        return cache.match(u.href).then(function (hit) {
+          if (!hit) return fetch(event.request);
+          return hit.arrayBuffer().then(function (buf) {
+            var m = /bytes=(\d*)-(\d*)/.exec(rng) || [], size = buf.byteLength;
+            var start = m[1] ? parseInt(m[1], 10) : 0, end = m[2] ? Math.min(parseInt(m[2], 10), size - 1) : size - 1;
+            if (start >= size) return new Response(null, { status: 416, headers: { "Content-Range": "bytes */" + size } });
+            return new Response(buf.slice(start, end + 1), { status: 206, headers: { "Content-Type": "video/mp4", "Content-Range": "bytes " + start + "-" + end + "/" + size, "Content-Length": String(end - start + 1), "Accept-Ranges": "bytes" } });
+          });
+        });
+      })
+    );
+    return;
+  }
   if (/^\/(js|css|img\/e)\//.test(u.pathname)) {
     event.respondWith(
       caches.open(ASSET_CACHE).then(function (cache) {

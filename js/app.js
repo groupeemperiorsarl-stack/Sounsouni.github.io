@@ -33153,12 +33153,19 @@ function renderSplashScreen() {
 // L'animation est calculée image par image à partir du temps écoulé
 // (requestAnimationFrame), sans bibliothèque. Scène dessinée pour 390×844,
 // mise à l'échelle de l'écran ; ciel et terre débordent sur les côtés.
-var SNS_SP_IMG = { fruit: "img/e/16fcc21b503f.webp", leaf: "img/e/46edff4ff165.webp", sound: "img/e/83d96455068c.mp3" };
+var SNS_SP_IMG = { fruit: "img/e/16fcc21b503f.webp", leaf: "img/e/46edff4ff165.webp", sound: "img/e/83d96455068c.mp3", video: "img/e/dabe307e121f.mp4", poster: "img/e/9e38dc9ad8bd.webp", end: "img/e/e58989f1d2f9.webp" };
 var SNS_SPLASH_MIN_MS = 8000;
 var SNS_AWAY_SPLASH_MS = 5 * 60 * 1000;
 function snsSplashHtml(asOverlay) {
   var letters = "", w = "Sounsouni";
   for (var i = 0; i < w.length; i++) letters += "<span>" + w.charAt(i) + "</span>";
+  // Animation en vidéo (rendu 3D, marché au petit matin) : gardée dans le
+  // téléphone. Le texte et la barre restent écrits par l'application.
+  if (SNS_SP_IMG.video) return '<div class="splash-screen sns-sp sns-sp-v' + (asOverlay ? ' sns-sp-ov' : '') + '" role="status" aria-label="Sounsouni">' +
+    '<div class="sns-v-box"><video class="sns-v-vid" muted playsinline webkit-playsinline preload="auto" poster="' + SNS_SP_IMG.poster + '" src="' + SNS_SP_IMG.video + '"></video>' +
+    '<div class="sns-v-glow"></div></div><div class="sns-e-stage">' +
+    '<div class="sns-e-word">' + letters + '</div><div class="sns-e-tag">Le marché ouest-africain né au Mali</div><div class="sns-e-tag2">Toute l\'Afrique en un clic</div>' +
+    '<div class="sns-e-bar"><i></i></div><div class="sns-e-slow">Connexion lente, on continue…</div></div></div>';
   return '<div class="splash-screen sns-sp' + (asOverlay ? ' sns-sp-ov' : '') + '" role="status" aria-label="Sounsouni">' +
     '<div class="sns-e-sky"></div><div class="sns-e-dawn"></div><canvas class="sns-e-stars"></canvas>' +
     '<div class="sns-e-stage"><div class="sns-e-rays"></div><div class="sns-e-sun"></div>' +
@@ -33184,10 +33191,55 @@ var SNS_EASE = {
 };
 function snsTw(t, start, dur, a, b, ease) { var x = Math.min(1, Math.max(0, (t - start) / dur)); return a + (b - a) * (ease || SNS_EASE.lin)(x); }
 function snsRnd(i) { var x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+// Version vidéo : la vidéo joue une fois (8 s) ; si le chargement dure plus
+// longtemps, l'image finale reste vivante (zoom très lent, soleil qui
+// respire) et la barre continue d'avancer, jusqu'à ce que l'app soit prête.
+function snsSplashStartVideo(el, q) {
+  var st = q(".sns-e-stage"), vid = q(".sns-v-vid"), box = q(".sns-v-box"), tag = q(".sns-e-tag"), tag2 = q(".sns-e-tag2"), bar = q(".sns-e-bar"), bari = q(".sns-e-bar i");
+  var letters = el.querySelectorAll(".sns-e-word span"), W = 0, H = 0;
+  var fit = function () {
+    W = el.clientWidth || window.innerWidth; H = el.clientHeight || window.innerHeight;
+    // la vidéo couvre tout l'écran ; le texte garde la même mise en page que la scène
+    var sc = Math.min(W / 390, H / 844); st.style.transform = "translate(-50%,-50%) scale(" + sc + ")";
+    // écran large (ordinateur, tablette couchée) : la vidéo garde sa forme au centre
+    if (W / H > .62) { var bw = 390 * sc, bh = 844 * sc; box.style.cssText = "left:" + ((W - bw) / 2) + "px;top:" + ((H - bh) / 2) + "px;width:" + bw + "px;height:" + bh + "px;right:auto;bottom:auto"; el.classList.add("sns-v-wide"); }
+    else { box.style.cssText = ""; el.classList.remove("sns-v-wide"); }
+  };
+  fit();
+  var t0 = performance.now(), started = false;
+  var go = function () { if (started) return; started = true; t0 = performance.now(); };
+  try {
+    vid.muted = true; vid.defaultMuted = true;
+    vid.addEventListener("playing", go);
+    vid.addEventListener("ended", function () { el.classList.add("sns-v-live"); });
+    vid.addEventListener("error", function () { vid.poster = SNS_SP_IMG.end; go(); el.classList.add("sns-v-live"); });
+    var pp = vid.play(); if (pp && pp.catch) pp.catch(function () { vid.poster = SNS_SP_IMG.end; go(); el.classList.add("sns-v-live"); });
+  } catch (e) { go(); }
+  // sécurité : si la vidéo ne démarre pas vite, le texte suit quand même son horaire
+  setTimeout(go, 1200);
+  var draw = function () {
+    if (!el.parentNode || el.classList.contains("sns-sp-static")) { el._snsRun = false; try { vid.pause(); } catch (e) {} return; }
+    if (el.clientWidth !== W || el.clientHeight !== H) fit();
+    var t = started ? (performance.now() - t0) / 1000 : 0, E = SNS_EASE;
+    for (var i = 0; i < letters.length; i++) {
+      var s0 = 3.15 + i * .07, bk = E.back(2);
+      letters[i].style.opacity = snsTw(t, s0, .5, 0, 1);
+      letters[i].style.transform = "translateY(" + snsTw(t, s0, .7, 60, 0, bk) + "px) rotateX(" + snsTw(t, s0, .7, -90, 0, bk) + "deg)";
+    }
+    tag.style.opacity = snsTw(t, 3.8, .9, 0, 1, E.out3); tag.style.letterSpacing = snsTw(t, 3.8, .9, .6, .14, E.out3) + "em";
+    tag2.style.opacity = snsTw(t, 4.35, .7, 0, 1, E.out3); tag2.style.transform = "translateY(" + snsTw(t, 4.35, .7, 12, 0, E.back(1.8)) + "px)";
+    bar.style.opacity = snsTw(t, 3.9, .4, 0, 1);
+    bari.style.width = (t < 8 ? snsTw(t, 3.9, 4.1, 0, 92, E.qio) : Math.min(98, 92 + (t - 8) * .5)) + "%";
+    if (t > 8) { var k = Math.min(1, (t - 8) / 20); box.style.transform = "scale(" + (1 + .05 * E.sio(k)) + ")"; if (el.classList.contains("sns-v-wide")) box.style.overflow = "hidden"; }
+    requestAnimationFrame(draw);
+  };
+  draw();
+}
 function snsSplashStart(el) {
   if (!el || el._snsRun) return;
   el._snsRun = true;
   var q = function (c) { return el.querySelector(c); };
+  if (el.classList.contains("sns-sp-v")) { snsSplashStartVideo(el, q); return; }
   var st = q(".sns-e-stage"), dawn = q(".sns-e-dawn"), stars = q(".sns-e-stars"), fx = q(".sns-e-fx"), flash = q(".sns-e-flash");
   var sun = q(".sns-e-sun"), rays = q(".sns-e-rays"), fw = q(".sns-e-fruitwrap"), leaf = q(".sns-e-leaf"), glint = q(".sns-e-glint");
   var shadow = q(".sns-e-shadow"), seed = q(".sns-e-seed"), tag = q(".sns-e-tag"), bar = q(".sns-e-bar"), bari = q(".sns-e-bar i");
@@ -34109,7 +34161,7 @@ function trySplashFinish() {
   if (_splashMinTimeDone && _splashAppDataReady) {
     _splashFinished = true;
     // Copie figée de l'écran posée par-dessus, qui s'efface en douceur pendant que l'app s'affiche dessous.
-    try { var spOld = document.querySelector("#root .sns-sp"); if (spOld) { var spCopy = spOld.cloneNode(true); spCopy.classList.add("sns-sp-ov", "sns-sp-static"); document.body.appendChild(spCopy); var cvO = spOld.querySelectorAll("canvas"), cvN = spCopy.querySelectorAll("canvas"); for (var ci = 0; ci < cvO.length; ci++) { try { cvN[ci].width = cvO[ci].width; cvN[ci].height = cvO[ci].height; cvN[ci].getContext("2d").drawImage(cvO[ci], 0, 0); } catch (eC) {} } setTimeout(function () { snsSplashFadeOut(spCopy); }, 60); } } catch (eFade) {}
+    try { var spOld = document.querySelector("#root .sns-sp"); if (spOld && spOld.classList.contains("sns-sp-v")) { spOld.classList.add("sns-sp-ov", "sns-sp-static"); document.body.appendChild(spOld); setTimeout(function () { snsSplashFadeOut(spOld); }, 60); } else if (spOld) { var spCopy = spOld.cloneNode(true); spCopy.classList.add("sns-sp-ov", "sns-sp-static"); document.body.appendChild(spCopy); var cvO = spOld.querySelectorAll("canvas"), cvN = spCopy.querySelectorAll("canvas"); for (var ci = 0; ci < cvO.length; ci++) { try { cvN[ci].width = cvO[ci].width; cvN[ci].height = cvO[ci].height; cvN[ci].getContext("2d").drawImage(cvO[ci], 0, 0); } catch (eC) {} } setTimeout(function () { snsSplashFadeOut(spCopy); }, 60); } } catch (eFade) {}
     // Chaque étape ci-dessous est isolée : si l'une plante, on l'enregistre
     // et on continue — l'écran DOIT s'afficher quoi qu'il arrive. Avant, une
     // seule erreur ici laissait le logo de chargement à l'écran pour toujours.
