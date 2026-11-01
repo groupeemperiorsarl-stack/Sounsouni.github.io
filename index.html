@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-11-01-i";
+    window.SOUNSOUNI_VERSION = "2026-11-01-j";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -96,6 +96,7 @@
     <title>Sounsouni — Le marché ouest-africain né au Mali | Acheter et vendre en ligne</title>
     <!-- Description lue par Google (sinon il prend un texte au hasard dans la page) -->
     <meta name="description" content="Sounsouni (sounsouni.pro), le marché en ligne ouest-africain né au Mali : achetez et vendez à Bamako et dans toutes les régions, vendeurs vérifiés, livraison Express ou en Point de Retrait, paiement à la livraison, Orange Money ou Moov Money.">
+    <meta name="google-site-verification" content="1rwc0QnsnNqzb8RAY1itccaPRQ5UvTW1vEhmfLN3Byk" />
     <link rel="canonical" href="https://sounsouni.pro/">
     <meta name="robots" content="index, follow, max-image-preview:large">
     <!-- Fiche d'identité lue par Google (nom, logo, adresse, contact) -->
@@ -137,7 +138,7 @@
     <link rel="preload" as="image" href="img/e/46edff4ff165.webp">
     <link rel="preload" as="font" type="font/woff2" crossorigin href="img/e/44b62c8b9ce2.woff2">
     <!-- CSS principal -->
-    <link rel="stylesheet" href="css/app.css?v=2026-11-01-i">
+    <link rel="stylesheet" href="css/app.css?v=2026-11-01-j">
 </head>
 <body>
 <div id="su-upload-loader" role="status" aria-live="polite">
@@ -189,11 +190,11 @@
 
     <!-- JavaScript principal -->
     <!-- Textes : le français toujours (langue de secours), et la langue choisie si c'est une autre -->
-    <script src="js/lang-fr.js?v=2026-11-01-i"></script>
+    <script src="js/lang-fr.js?v=2026-11-01-j"></script>
     <script>(function () { var l = null; try { l = localStorage.getItem("sounsouni_language"); } catch (e) {}
       if (!l) { var n = (navigator.language || navigator.userLanguage || "fr").toLowerCase(); l = n.indexOf("hi") === 0 ? "hi" : (n.indexOf("en") === 0 ? "en" : "fr"); }
-      if (l === "en" || l === "hi") document.write('<script src="js/lang-' + l + '.js?v=2026-11-01-i"><\/script>'); })();</script>
-    <script src="js/app.js?v=2026-11-01-i"></script>
-    <script src="js/sns3d.js?v=2026-11-01-i" defer></script>
+      if (l === "en" || l === "hi") document.write('<script src="js/lang-' + l + '.js?v=2026-11-01-j"><\/script>'); })();</script>
+    <script src="js/app.js?v=2026-11-01-j"></script>
+    <script src="js/sns3d.js?v=2026-11-01-j" defer></script>
 </body>
 </html>
