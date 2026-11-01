@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-11-01-m";
+    window.SOUNSOUNI_VERSION = "2026-11-01-n";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -138,7 +138,7 @@
     <link rel="preload" as="image" href="img/e/46edff4ff165.webp">
     <link rel="preload" as="font" type="font/woff2" crossorigin href="img/e/44b62c8b9ce2.woff2">
     <!-- CSS principal -->
-    <link rel="stylesheet" href="css/app.css?v=2026-11-01-m">
+    <link rel="stylesheet" href="css/app.css?v=2026-11-01-n">
 </head>
 <body>
 <div id="su-upload-loader" role="status" aria-live="polite">
@@ -156,7 +156,12 @@
   </div>
 </div>
 
-    <div id="root"><div id="seo-static" style="max-width:520px;margin:0 auto;padding:40px 20px;text-align:center;font-family:sans-serif;color:#24402a;">
+    <!-- Fond de démarrage : même couleur que la 1re image de l'animation, pour
+         qu'aucun texte n'apparaisse avant elle. -->
+    <div id="root"><div id="seo-static" style="position:fixed;inset:0;background:linear-gradient(#0b1033 0%,#1d1a4a 45%,#3b2459 70%,#6b3a4f 100%);"></div></div>
+    <!-- Texte de présentation lu par Google (et affiché seulement si le
+         navigateur ne lance pas le programme). -->
+    <noscript><div style="max-width:520px;margin:0 auto;padding:40px 20px;text-align:center;font-family:sans-serif;color:#24402a;">
       <img src="favicon-192.png" width="72" height="72" alt="Sounsouni" style="border-radius:18px;">
       <h1 style="font-size:24px;margin:14px 0 6px;color:#2e7d32;">Sounsouni</h1>
       <p style="font-weight:700;margin:0 0 12px;">Le marché ouest-africain né au Mali — toute l'Afrique en un clic</p>
@@ -164,7 +169,7 @@
       <p style="font-size:14px;line-height:1.5;color:#4a5a4c;">Vendeurs : ouvrez votre boutique gratuitement et gérez vos ventes, votre stock et votre comptabilité avec Sounsouni Gestion.</p>
       <p style="font-size:13px;color:#7a8a7c;">Chargement…</p>
       <p style="font-size:12px;"><a href="partenaires.html">Partenaires</a> · <a href="privacy.html">Confidentialité</a></p>
-    </div></div>
+    </div></noscript>
 
     <!-- PWA : manifeste + service worker, activés pour la publication
          sur le Play Store via TWA. Enregistré tout de suite (pas
@@ -190,11 +195,11 @@
 
     <!-- JavaScript principal -->
     <!-- Textes : le français toujours (langue de secours), et la langue choisie si c'est une autre -->
-    <script src="js/lang-fr.js?v=2026-11-01-m"></script>
+    <script src="js/lang-fr.js?v=2026-11-01-n"></script>
     <script>(function () { var l = null; try { l = localStorage.getItem("sounsouni_language"); } catch (e) {}
       if (!l) { var n = (navigator.language || navigator.userLanguage || "fr").toLowerCase(); l = n.indexOf("hi") === 0 ? "hi" : (n.indexOf("en") === 0 ? "en" : "fr"); }
-      if (l === "en" || l === "hi") document.write('<script src="js/lang-' + l + '.js?v=2026-11-01-m"><\/script>'); })();</script>
-    <script src="js/app.js?v=2026-11-01-m"></script>
-    <script src="js/sns3d.js?v=2026-11-01-m" defer></script>
+      if (l === "en" || l === "hi") document.write('<script src="js/lang-' + l + '.js?v=2026-11-01-n"><\/script>'); })();</script>
+    <script src="js/app.js?v=2026-11-01-n"></script>
+    <script src="js/sns3d.js?v=2026-11-01-n" defer></script>
 </body>
 </html>

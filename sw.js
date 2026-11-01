@@ -36,7 +36,7 @@ const SHELL_FILES = [
 // téléphone dès l'installation — l'animation démarre tout de suite, même
 // avec une connexion faible ou coupée.
 const SPLASH_FILES = [
-  "./img/e/16fcc21b503f.webp", "./img/e/46edff4ff165.webp", "./img/e/aaa445f37745.mp3",
+  "./img/e/16fcc21b503f.webp", "./img/e/46edff4ff165.webp", "./img/e/83d96455068c.mp3",
   "./img/e/44b62c8b9ce2.woff2", "./img/e/486c7fa9e908.woff2"
 ];
 // Bibliothèques venant d'autres sites (Supabase, icônes...) : gardées aussi,
