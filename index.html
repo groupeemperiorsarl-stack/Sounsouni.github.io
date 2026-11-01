@@ -8,7 +8,7 @@
     // le programme principal s'arrête net. Il note toutes les erreurs, et si
     // l'écran de chargement est encore affiché au bout de 20 s, il le
     // remplace par un rapport (version chargée + erreurs) à copier.
-    window.SOUNSOUNI_VERSION = "2026-11-01-h";
+    window.SOUNSOUNI_VERSION = "2026-11-01-i";
     // "Petits cailloux" : chaque étape du démarrage est notée tout de suite
     // dans le stockage du navigateur (écriture immédiate, qui survit même si
     // la page se fige ensuite). Si le démarrage précédent n'est jamais allé
@@ -59,7 +59,7 @@
       // été affiché (programme principal refusé par un navigateur trop
       // ancien : sans ce cas, l'écran restait tout noir, sans message).
       var rootEl = document.getElementById("root");
-      if (!document.querySelector(".splash-screen") && rootEl && rootEl.children.length) return;
+      if (!document.querySelector(".splash-screen") && rootEl && rootEl.children.length && !document.getElementById("seo-static")) return;
       var tooOld = (window.__earlyErrors || []).some(function (m) { return /SyntaxError|Invalid regular expression|Unexpected token|Unexpected identifier/i.test(m); });
       var diagOn2 = false;
       try { diagOn2 = localStorage.getItem("sns_diag_enabled") === "1"; } catch (e) {}
@@ -93,9 +93,13 @@
     }, 20000);
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sounsouni - Le Marché Digital du Mali</title>
+    <title>Sounsouni — Le marché ouest-africain né au Mali | Acheter et vendre en ligne</title>
     <!-- Description lue par Google (sinon il prend un texte au hasard dans la page) -->
-    <meta name="description" content="Sounsouni, le marché digital de l&#39;Afrique de l&#39;Ouest, lancé au Mali. Des vendeurs vérifiés, la livraison partout au Mali et le paiement à la livraison.">
+    <meta name="description" content="Sounsouni (sounsouni.pro), le marché en ligne ouest-africain né au Mali : achetez et vendez à Bamako et dans toutes les régions, vendeurs vérifiés, livraison Express ou en Point de Retrait, paiement à la livraison, Orange Money ou Moov Money.">
+    <link rel="canonical" href="https://sounsouni.pro/">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <!-- Fiche d'identité lue par Google (nom, logo, adresse, contact) -->
+    <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "Organization", "@id": "https://sounsouni.pro/#org", "name": "Sounsouni", "alternateName": ["Sounsouni Mali", "Sounsouni.pro"], "url": "https://sounsouni.pro/", "logo": "https://sounsouni.pro/favicon-512.png", "image": "https://sounsouni.pro/og-image.jpg", "description": "Sounsouni (sounsouni.pro), le marché en ligne ouest-africain né au Mali : achetez et vendez à Bamako et dans toutes les régions, vendeurs vérifiés, livraison Express ou en Point de Retrait, paiement à la livraison, Orange Money ou Moov Money.", "email": "direction@sounsouni.pro", "telephone": "+223 93 01 01 23", "address": {"@type": "PostalAddress", "streetAddress": "Sotelco, face à Bougouba", "addressLocality": "Bamako", "addressCountry": "ML"}, "areaServed": "ML"}, {"@context": "https://schema.org", "@type": "WebSite", "@id": "https://sounsouni.pro/#site", "name": "Sounsouni", "alternateName": "Sounsouni Mali", "url": "https://sounsouni.pro/", "inLanguage": "fr", "publisher": {"@id": "https://sounsouni.pro/#org"}}]</script>
     <!-- Logo du site (favicon) : affiché par Google et dans l'onglet du navigateur -->
     <link rel="icon" href="/favicon.ico" sizes="48x48">
     <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png">
@@ -104,8 +108,8 @@
     <!-- Aperçu lors d'un partage de lien (WhatsApp, Facebook...) -->
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Sounsouni">
-    <meta property="og:title" content="Sounsouni - Le Marché Digital du Mali">
-    <meta property="og:description" content="Sounsouni, le marché digital de l&#39;Afrique de l&#39;Ouest, lancé au Mali. Des vendeurs vérifiés, la livraison partout au Mali et le paiement à la livraison.">
+    <meta property="og:title" content="Sounsouni — Le marché ouest-africain né au Mali | Acheter et vendre en ligne">
+    <meta property="og:description" content="Sounsouni (sounsouni.pro), le marché en ligne ouest-africain né au Mali : achetez et vendez à Bamako et dans toutes les régions, vendeurs vérifiés, livraison Express ou en Point de Retrait, paiement à la livraison, Orange Money ou Moov Money.">
     <meta property="og:url" content="https://sounsouni.pro/">
     <meta property="og:image" content="https://sounsouni.pro/og-image.jpg">
     <meta property="og:image:width" content="1200">
@@ -133,7 +137,7 @@
     <link rel="preload" as="image" href="img/e/46edff4ff165.webp">
     <link rel="preload" as="font" type="font/woff2" crossorigin href="img/e/44b62c8b9ce2.woff2">
     <!-- CSS principal -->
-    <link rel="stylesheet" href="css/app.css?v=2026-11-01-h">
+    <link rel="stylesheet" href="css/app.css?v=2026-11-01-i">
 </head>
 <body>
 <div id="su-upload-loader" role="status" aria-live="polite">
@@ -151,7 +155,15 @@
   </div>
 </div>
 
-    <div id="root"></div>
+    <div id="root"><div id="seo-static" style="max-width:520px;margin:0 auto;padding:40px 20px;text-align:center;font-family:sans-serif;color:#24402a;">
+      <img src="favicon-192.png" width="72" height="72" alt="Sounsouni" style="border-radius:18px;">
+      <h1 style="font-size:24px;margin:14px 0 6px;color:#2e7d32;">Sounsouni</h1>
+      <p style="font-weight:700;margin:0 0 12px;">Le marché ouest-africain né au Mali — toute l'Afrique en un clic</p>
+      <p style="font-size:14px;line-height:1.5;color:#4a5a4c;">Achetez et vendez en ligne à Bamako et dans toutes les régions du Mali : mode, téléphones, électronique, beauté, maison, alimentation… Vendeurs vérifiés, livraison Express à domicile ou dans un Point de Retrait près de chez vous, paiement à la livraison, Orange Money ou Moov Money.</p>
+      <p style="font-size:14px;line-height:1.5;color:#4a5a4c;">Vendeurs : ouvrez votre boutique gratuitement et gérez vos ventes, votre stock et votre comptabilité avec Sounsouni Gestion.</p>
+      <p style="font-size:13px;color:#7a8a7c;">Chargement…</p>
+      <p style="font-size:12px;"><a href="partenaires.html">Partenaires</a> · <a href="privacy.html">Confidentialité</a></p>
+    </div></div>
 
     <!-- PWA : manifeste + service worker, activés pour la publication
          sur le Play Store via TWA. Enregistré tout de suite (pas
@@ -177,11 +189,11 @@
 
     <!-- JavaScript principal -->
     <!-- Textes : le français toujours (langue de secours), et la langue choisie si c'est une autre -->
-    <script src="js/lang-fr.js?v=2026-11-01-h"></script>
+    <script src="js/lang-fr.js?v=2026-11-01-i"></script>
     <script>(function () { var l = null; try { l = localStorage.getItem("sounsouni_language"); } catch (e) {}
       if (!l) { var n = (navigator.language || navigator.userLanguage || "fr").toLowerCase(); l = n.indexOf("hi") === 0 ? "hi" : (n.indexOf("en") === 0 ? "en" : "fr"); }
-      if (l === "en" || l === "hi") document.write('<script src="js/lang-' + l + '.js?v=2026-11-01-h"><\/script>'); })();</script>
-    <script src="js/app.js?v=2026-11-01-h"></script>
-    <script src="js/sns3d.js?v=2026-11-01-h" defer></script>
+      if (l === "en" || l === "hi") document.write('<script src="js/lang-' + l + '.js?v=2026-11-01-i"><\/script>'); })();</script>
+    <script src="js/app.js?v=2026-11-01-i"></script>
+    <script src="js/sns3d.js?v=2026-11-01-i" defer></script>
 </body>
 </html>
