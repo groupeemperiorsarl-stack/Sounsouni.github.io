@@ -21,10 +21,61 @@ const FIREBASE_ENABLED = supabaseConfig.url !== "REMPLACEZ_MOI";
 // de l'app) ne peut lire ni modifier les données.
 const APP_SECRET = "4NIfGKEEf82SJi17BZRaedVfJqnJrkOweRYzRyxiHOo";
 
+// ---------- CONNEXION FAIBLE : 3 ESSAIS AUTOMATIQUES ----------
+// Les lectures (articles, comptes, réglages...) qui échouent à cause du
+// réseau sont relancées toutes seules : 2e essai après 2 s, 3e après 4 s,
+// chaque essai limité à 20 s. Après 3 échecs : un bandeau « Connexion
+// faible » avec un bouton « Réessayer ». Les écritures (commande, paiement)
+// ne sont JAMAIS relancées ici, pour ne rien envoyer deux fois.
+var SNS_NET_DELAYS = [2000, 4000];
+function snsRetryFetch(input, init) {
+  var method = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
+  var url = String((input && input.url) || input || "");
+  if (method !== "GET" || url.indexOf("/rest/v1/") === -1) return window.fetch(input, init);
+  var tries = 0;
+  function attempt() {
+    tries++;
+    var opts = Object.assign({}, init || {}), timer = null, ctrl = null;
+    if (!opts.signal && typeof AbortController !== "undefined") {
+      ctrl = new AbortController(); opts.signal = ctrl.signal;
+      timer = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, 20000);
+    }
+    return window.fetch(input, opts).then(function (r) {
+      if (timer) clearTimeout(timer);
+      if (r.status >= 500 && tries < 3) throw new Error("serveur " + r.status);
+      snsNetOk();
+      return r;
+    }, function (err) {
+      if (timer) clearTimeout(timer);
+      throw err;
+    }).catch(function (err) {
+      if (init && init.signal && init.signal.aborted) throw err;
+      if (tries >= 3) { snsNetFail(); throw err; }
+      return new Promise(function (res) { setTimeout(res, SNS_NET_DELAYS[tries - 1]); }).then(attempt);
+    });
+  }
+  return attempt();
+}
+function snsNetFail() {
+  if (document.getElementById("sns-net-weak")) return;
+  var d = document.createElement("div");
+  d.id = "sns-net-weak";
+  d.setAttribute("role", "alert");
+  d.style.cssText = "position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:2147483000;max-width:420px;margin:0 auto;background:#1a1a2e;color:#fff;border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,.25);font-family:inherit;";
+  d.innerHTML = '<div style="font-size:22px;">📶</div><div style="flex:1;min-width:0;font-size:12.5px;line-height:1.4;"><b>' + t("net_weak_title") + '</b><br>' + t("net_weak_text") + '</div>' +
+    '<button type="button" id="sns-net-retry" style="flex-shrink:0;background:#7bcb3a;color:#fff;border:none;border-radius:10px;padding:9px 12px;font-weight:800;font-size:12.5px;">' + t("net_weak_retry") + '</button>';
+  (document.body || document.documentElement).appendChild(d);
+  document.getElementById("sns-net-retry").onclick = function () { location.reload(); };
+}
+function snsNetOk() {
+  var d = document.getElementById("sns-net-weak");
+  if (d) d.parentNode.removeChild(d);
+}
+
 var sb = null;
 if (FIREBASE_ENABLED) {
   sb = supabase.createClient(supabaseConfig.url, supabaseConfig.anonKey, {
-    global: { headers: { "x-app-secret": APP_SECRET } }
+    global: { headers: { "x-app-secret": APP_SECRET }, fetch: snsRetryFetch }
   });
   console.log("🔥 Supabase configuré — mode partagé/cloud actif.");
 } else {
