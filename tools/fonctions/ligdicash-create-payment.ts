@@ -4,6 +4,18 @@
 // depuis le 31/10/2026, abonnement Sounsouni Gestion « gestion »).
 // ============================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Clés LigdiCash : gardées dans le coffre chiffré (Vault) de Supabase, lues au
+// démarrage par la fonction protégée ligdicash_keys (rôle service seulement).
+// Les secrets de fonction (s'ils existent) restent pris en secours.
+const LGK: Record<string, string> = {};
+await (async () => {
+  try {
+    const u = Deno.env.get("SUPABASE_URL"), k = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const r = await fetch(u + "/rest/v1/rpc/ligdicash_keys", { method: "POST", headers: { apikey: k, Authorization: "Bearer " + k, "Content-Type": "application/json" }, body: "{}" });
+    const j = await r.json(); if (j && typeof j === "object" && !Array.isArray(j)) Object.assign(LGK, j);
+  } catch (e) { console.error("clés LigdiCash illisibles", e); }
+})();
+const lgEnv = (n: string) => LGK[n] || Deno.env.get(n) || "";
 const corsHeaders = {
 "Access-Control-Allow-Origin": "*",
 "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-session-token"
@@ -130,9 +142,9 @@ customerName = String(boost.sellerName || "");
 }
 if (amount < 100) return json({ success: false, error: "amount_too_low" }, 400);
 if (amount > 2000000) return json({ success: false, error: "amount_too_high" }, 400);
-const apiKey = Deno.env.get("LIGDICASH_API_KEY"), authToken = Deno.env.get("LIGDICASH_AUTH_TOKEN");
+const apiKey = lgEnv("LIGDICASH_API_KEY"), authToken = lgEnv("LIGDICASH_AUTH_TOKEN");
 if (!apiKey || !authToken) return json({ success: false, error: "ligdicash_not_configured" }, 500);
-const base = Deno.env.get("LIGDICASH_BASE_URL") || "https://app.ligdicash.com";
+const base = lgEnv("LIGDICASH_BASE_URL") || "https://app.ligdicash.com";
 const direct = body.operator === "orange" || body.operator === "moov";
 const opName = body.operator === "moov" ? "moov" : "orange";
 let phone8 = "";

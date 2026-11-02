@@ -8,14 +8,26 @@
 // traiter une seule fois (LigdiCash envoie chaque callback deux fois).
 // ============================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Clés LigdiCash : gardées dans le coffre chiffré (Vault) de Supabase, lues au
+// démarrage par la fonction protégée ligdicash_keys (rôle service seulement).
+// Les secrets de fonction (s'ils existent) restent pris en secours.
+const LGK: Record<string, string> = {};
+await (async () => {
+  try {
+    const u = Deno.env.get("SUPABASE_URL"), k = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const r = await fetch(u + "/rest/v1/rpc/ligdicash_keys", { method: "POST", headers: { apikey: k, Authorization: "Bearer " + k, "Content-Type": "application/json" }, body: "{}" });
+    const j = await r.json(); if (j && typeof j === "object" && !Array.isArray(j)) Object.assign(LGK, j);
+  } catch (e) { console.error("clés LigdiCash illisibles", e); }
+})();
+const lgEnv = (n: string) => LGK[n] || Deno.env.get(n) || "";
 const corsHeaders = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" };
 const reply = (status: number, text = "ok") => new Response(text, { status, headers: corsHeaders });
 // ---- Partie commune (callback + vérification) : confirmer auprès de LigdiCash puis appliquer ----
 const num = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : Number(v) || 0);
 async function confirmInvoice(token: string) {
-  const base = Deno.env.get("LIGDICASH_BASE_URL") || "https://app.ligdicash.com";
+  const base = lgEnv("LIGDICASH_BASE_URL") || "https://app.ligdicash.com";
   return await fetch(base + "/pay/v01/redirect/checkout-invoice/confirm/?invoiceToken=" + encodeURIComponent(token), {
-    headers: { "Apikey": Deno.env.get("LIGDICASH_API_KEY") || "", "Authorization": "Bearer " + (Deno.env.get("LIGDICASH_AUTH_TOKEN") || ""), "Accept": "application/json" }
+    headers: { "Apikey": lgEnv("LIGDICASH_API_KEY") || "", "Authorization": "Bearer " + (lgEnv("LIGDICASH_AUTH_TOKEN") || ""), "Accept": "application/json" }
   }).then((r) => r.json()).catch(() => null);
 }
 // Trace de chaque vérification auprès de LigdiCash (utile en cas de litige),
