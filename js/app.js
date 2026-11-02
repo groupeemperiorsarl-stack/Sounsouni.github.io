@@ -1195,20 +1195,50 @@ function computeAirShippingBreakdown() {
     parcels: parcels, overLimit: false, cfg: cfg, rate: rate };
 }
 
-function getInternationalShippingConfig() {
+// ---------- PAYS PARTENAIRES (vendeurs internationaux, agents, transitaires) ----------
+// L'Inde garde ses réglages d'origine (mêmes identifiants qu'avant) ; chaque
+// autre pays (Chine, France…) a les siens : monnaie, taux, tarifs, taxes, délais.
+var INTL_DEFAULT_COUNTRY = "Inde";
+function intlSlug(cc) { return String(cc || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_"); }
+function intlCountryList() {
+  var doc = (state.settings || []).find(function(x) { return x.id === "intl_countries"; });
+  var list = doc && Array.isArray(doc.list) ? doc.list.slice() : [];
+  if (list.indexOf(INTL_DEFAULT_COUNTRY) === -1) list.unshift(INTL_DEFAULT_COUNTRY);
+  return list;
+}
+function saveIntlCountryList(list) {
+  var doc = { id: "intl_countries", list: list };
+  var idx = state.settings.findIndex(function(x) { return x.id === "intl_countries"; });
+  if (idx === -1) state.settings.push(doc); else state.settings[idx] = doc;
+  save(); saveDoc("settings", doc);
+}
+function intlCurrency(cc) { return currencyForCountry(cc || INTL_DEFAULT_COUNTRY); }
+function intlSym(cc) { return currencySymbol(intlCurrency(cc)); }
+// Pays du panier international en cours (un seul vendeur, donc un seul pays).
+function currentIntlCountry() {
+  if (state._intlCtx) return state._intlCtx;
+  try { var its = checkoutItems(); if (its && its.length && its[0].country && its[0].sellerType === "international") return its[0].country; } catch (e) {}
+  return INTL_DEFAULT_COUNTRY;
+}
+function intlShipId(cc) { cc = cc || currentIntlCountry(); return cc === INTL_DEFAULT_COUNTRY ? "international_shipping" : "international_shipping__" + intlSlug(cc); }
+function getInternationalShippingConfig(cc) {
+  cc = cc || currentIntlCountry();
+  var base = defaultInternationalShippingConfig();
+  if (cc !== INTL_DEFAULT_COUNTRY) { base.gstPct = 0; base.delayText = "7 à 15 jours"; base.seaDelayText = "8 à 12 semaines"; }
+  var id = intlShipId(cc);
   if (state.settings) {
     for (var i = 0; i < state.settings.length; i++) {
-      if (state.settings[i].id === "international_shipping") return { ...defaultInternationalShippingConfig(), ...state.settings[i].config };
+      if (state.settings[i].id === id) return { ...base, ...state.settings[i].config };
     }
   }
-  return defaultInternationalShippingConfig();
+  return base;
 }
 
-function saveInternationalShippingConfig(config) {
-  var doc = { id: "international_shipping", config: config };
+function saveInternationalShippingConfig(config, cc) {
+  var doc = { id: intlShipId(cc), config: config };
   var idx = -1;
   for (var i = 0; i < state.settings.length; i++) {
-    if (state.settings[i].id === "international_shipping") { idx = i; break; }
+    if (state.settings[i].id === doc.id) { idx = i; break; }
   }
   if (idx === -1) state.settings.push(doc); else state.settings[idx] = doc;
   save();
@@ -1280,23 +1310,28 @@ function checkoutAvailableShippingModes() {
 const EXCHANGE_RATE_FALLBACK_INR_TO_XOF = 7.2; // au cas où le tout premier chargement échoue (pas de réseau) — remplacé dès que possible par le vrai taux
 const EXCHANGE_RATE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 1 jour — inutile de re-demander plus souvent, le service ne se met à jour qu'une fois par jour
 
-function getExchangeRateConfig() {
-  var defaults = { mode: "auto", manualRate: EXCHANGE_RATE_FALLBACK_INR_TO_XOF, autoRate: null, autoRateFetchedAt: 0 };
+// Taux de secours (1 unité = x FCFA) si rien n'est encore chargé. L'euro est fixe (655,957).
+var INTL_FALLBACK_RATES = { INR: EXCHANGE_RATE_FALLBACK_INR_TO_XOF, CNY: 84, EUR: 655.957, USD: 600, AED: 163, TRY: 17, GBP: 770, MAD: 60 };
+function intlRateId(cc) { var cur = intlCurrency(cc || currentIntlCountry()); return cur === "INR" ? "exchange_rate_inr_xof" : "exchange_rate_" + cur.toLowerCase() + "_xof"; }
+function getExchangeRateConfig(cc) {
+  var cur = intlCurrency(cc || currentIntlCountry()), id = intlRateId(cc);
+  var fb = INTL_FALLBACK_RATES[cur] || 1;
+  var defaults = { mode: "auto", manualRate: fb, autoRate: cur === "EUR" ? 655.957 : null, autoRateFetchedAt: 0, currency: cur };
   if (state.settings) {
     for (var i = 0; i < state.settings.length; i++) {
-      if (state.settings[i].id === "exchange_rate_inr_xof") {
-        return Object.assign({ id: "exchange_rate_inr_xof" }, defaults, state.settings[i]);
+      if (state.settings[i].id === id) {
+        return Object.assign({ id: id }, defaults, state.settings[i]);
       }
     }
   }
-  return Object.assign({ id: "exchange_rate_inr_xof" }, defaults);
+  return Object.assign({ id: id }, defaults);
 }
 
-function saveExchangeRateConfig(cfg) {
-  cfg.id = "exchange_rate_inr_xof";
+function saveExchangeRateConfig(cfg, cc) {
+  cfg.id = cc ? intlRateId(cc) : (cfg.id || intlRateId());
   var idx = -1;
   for (var i = 0; i < state.settings.length; i++) {
-    if (state.settings[i].id === "exchange_rate_inr_xof") { idx = i; break; }
+    if (state.settings[i].id === cfg.id) { idx = i; break; }
   }
   if (idx === -1) state.settings.push(cfg); else state.settings[idx] = cfg;
   save();
@@ -1306,28 +1341,32 @@ function saveExchangeRateConfig(cfg) {
 // Le taux réellement à utiliser partout dans l'app (panier, fiches
 // produits des vendeurs internationaux...) — jamais un appel réseau ici,
 // juste une lecture immédiate de ce qui est déjà en mémoire.
-function getInrToXofRate() {
-  var cfg = getExchangeRateConfig();
+function getInrToXofRate(cc) {
+  var cfg = getExchangeRateConfig(cc);
   if (cfg.mode === "manual") return cfg.manualRate;
-  return cfg.autoRate || EXCHANGE_RATE_FALLBACK_INR_TO_XOF;
+  return cfg.autoRate || INTL_FALLBACK_RATES[cfg.currency] || EXCHANGE_RATE_FALLBACK_INR_TO_XOF;
 }
 
 // Va chercher le vrai taux du jour si besoin (une fois par jour maximum,
 // et seulement si le mode automatique est actif) — appelée sans risque à
 // chaque démarrage de l'app, elle ne fait rien la plupart du temps.
 function refreshAutoExchangeRateIfNeeded() {
-  var cfg = getExchangeRateConfig();
-  if (cfg.mode !== "auto") return; // le mode manuel ne doit jamais être écrasé
+  intlCountryList().forEach(function(cc) { refreshAutoExchangeRateFor(cc); });
+}
+function refreshAutoExchangeRateFor(cc) {
+  var cfg = getExchangeRateConfig(cc);
+  if (cfg.mode !== "auto" || cfg.currency === "EUR" || cfg.currency === "XOF") return; // le mode manuel ne doit jamais être écrasé ; l'euro est fixe
   var isStale = !cfg.autoRateFetchedAt || (Date.now() - cfg.autoRateFetchedAt) > EXCHANGE_RATE_MAX_AGE_MS;
   if (!isStale) return;
-  fetch("https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/inr.json")
+  var cur = cfg.currency.toLowerCase();
+  fetch("https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/" + cur + ".json")
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      var rate = data && data.inr && data.inr.xof;
+      var rate = data && data[cur] && data[cur].xof;
       if (typeof rate === "number" && rate > 0) {
         cfg.autoRate = rate;
         cfg.autoRateFetchedAt = Date.now();
-        saveExchangeRateConfig(cfg);
+        saveExchangeRateConfig(cfg, cc);
       }
     })
     .catch(function() {
