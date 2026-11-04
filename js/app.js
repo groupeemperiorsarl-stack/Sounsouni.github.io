@@ -8134,6 +8134,10 @@ function transitaireEntryForPhone(phone) {
   if (!n) return null;
   return transitaireList().find(function(t) { return t.active !== false && normalizeWalletPhone(t.phone) === n; }) || null;
 }
+function isCurrentProfileSourcingAgent() {
+  var pr = state.profile;
+  return !!(pr && (pr.isSourcingAgent || (pr.phone && isPhoneOnSourcingAgentWhitelist(pr.phone))));
+}
 function myTransitaireEntry() { return state.profile ? transitaireEntryForPhone(state.profile.phone) : null; }
 function transitaireDeliveryFee(zone, kg) {
   if (!zone) return 0;
@@ -14635,7 +14639,7 @@ function renderRoleMenuModal() {
   // retrouver sur un espace vide, sans commande liée à lui.
   var roles = Object.keys(ROLE_LABELS).filter(function(r) {
     if (r === "admin") return false;
-    if (r === "agent_sourcing" && role !== "agent_sourcing") return false;
+    if (r === "agent_sourcing") return false; // bouton dédié « Espace Agent Sourcing » plus bas
     return true;
   });
   var html = '<div class="modal-overlay" id="role-menu-overlay" data-action="close-role-menu">';
@@ -14668,7 +14672,10 @@ function renderRoleMenuModal() {
     html += '</button>';
   }
   html += '</div>';
-  if (myTransitaireEntry()) html += '<button type="button" class="glass-card" style="display:flex;align-items:center;gap:10px;padding:11px 12px;width:100%;text-align:left;margin-top:12px;color:var(--text-primary);font-weight:700;font-size:13.5px;" data-action="open-transitaire-space"><i class="fa-solid fa-plane-arrival" style="color:var(--accent);"></i> Espace Transitaire</button>';
+  // Espaces professionnels : une même personne peut être agent de sourcing ET transitaire.
+  var spaceBtn = function(action, icon, label, active) { return '<button type="button" class="glass-card" style="display:flex;align-items:center;gap:10px;padding:11px 12px;width:100%;text-align:left;margin-top:10px;color:var(--text-primary);font-weight:700;font-size:13.5px;' + (active ? 'border:1.5px solid var(--accent);' : '') + '" data-action="' + action + '"><i class="fa-solid ' + icon + '" style="color:var(--accent);width:18px;text-align:center;"></i> ' + label + '</button>'; };
+  if (isCurrentProfileSourcingAgent()) html += spaceBtn("open-sourcing-space", "fa-magnifying-glass-dollar", "Espace Agent Sourcing", state.view === "agentsourcing");
+  if (myTransitaireEntry()) html += spaceBtn("open-transitaire-space", "fa-plane-arrival", "Espace Transitaire", state.view === "transitaire");
   html += renderGestionRoleSection();
 
   var linkedAccountsAll = findLinkedAccounts(state.profile);
@@ -31956,6 +31963,7 @@ root.addEventListener("click", function(e) {
       if (retraitInput) confirmRelaisRetrait(value, retraitInput.value);
       break;
     }
+    case "open-sourcing-space": state.showRoleMenu = false; if (isCurrentProfileSourcingAgent()) applyRoleSwitch("agent_sourcing"); render(); window.scrollTo(0, 0); break;
     case "open-transitaire-space": state.showRoleMenu = false; state.view = "transitaire"; render(); window.scrollTo(0, 0); break;
     case "transit-open-form": state.showTransitForm = true; state.transitDraft = emptyTransitDraft(); render(); break;
     case "transit-close-form": state.showTransitForm = false; state.transitDraft = null; render(); break;
