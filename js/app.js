@@ -3278,7 +3278,7 @@ const ADMIN_USERNAME = "Issa Haidara";
 // désormais uniquement par liste blanche de numéros (voir switchRole),
 // plus par mot de passe — ces identifiants n'étaient plus utilisés nulle
 // part et restaient, eux aussi, visibles en clair dans le code source.
-const ROLE_LABELS = { acheteur: "Acheteur", vendeur: "Vendeur", livreur: "Livreur", point_vente: "Point de Retrait", agent_sourcing: "Agent Sourcing", admin: "Admin" };
+const ROLE_LABELS = { acheteur: "Acheteur", vendeur: "Vendeur", livreur: "Livreur", point_vente: "Point de Retrait", agent_sourcing: "Pôle Sounsouni", admin: "Admin" };
 const ROLE_ICONS = { acheteur: "fa-bag-shopping", vendeur: "fa-store", livreur: "fa-truck-fast", point_vente: "fa-shop", agent_sourcing: "fa-magnifying-glass-dollar", admin: "fa-shield-halved" };
 const ROLE_HOME_VIEW = { acheteur: "market", vendeur: "seller", livreur: "livreur", point_vente: "pointvente", agent_sourcing: "agentsourcing", admin: "admin" };
 const RESTRICTED_ROLES = ["admin"];
@@ -7385,7 +7385,7 @@ function finalizeOrder(order, opts) {
   if (order.isDigital) {
     addNotification("sms", "📥 " + t("dig_notif_after_pay"), order.buyerId, "orders");
   } else if (order.isInternational) {
-    addNotification("sms", "🌍 Votre commande groupée internationale est enregistrée — en attente de vérification du paiement par notre agent sourcing.", order.buyerId, "orders");
+    addNotification("sms", "🌍 Votre commande groupée internationale est enregistrée — en attente de vérification du paiement par le Pôle Sounsouni.", order.buyerId, "orders");
   } else if (order.deliveryMode === "relais") {
     addNotification("sms", "📦 Votre commande sera déposée chez " + order.relaisShopName + ".", order.buyerId, "orders");
     addNotification("sms", "🔑 Code de retrait (à donner en boutique quand vous récupérez votre colis) : " + order.codeRetrait + " — Ne le partagez pas avant d'être sur place !", order.buyerId, "orders");
@@ -8134,6 +8134,8 @@ function transitaireEntryForPhone(phone) {
   if (!n) return null;
   return transitaireList().find(function(t) { return t.active !== false && normalizeWalletPhone(t.phone) === n; }) || null;
 }
+// « Pôle Sounsouni Chine », « Pôle Sounsouni Inde »… (nouveau nom des agents de sourcing).
+function poleLabel(cc) { var base = t("role_label_agent_sourcing"); return cc ? base + " " + cc : base; }
 function isCurrentProfileSourcingAgent() {
   var pr = state.profile;
   return !!(pr && (pr.isSourcingAgent || (pr.phone && isPhoneOnSourcingAgentWhitelist(pr.phone))));
@@ -14674,7 +14676,7 @@ function renderRoleMenuModal() {
   html += '</div>';
   // Espaces professionnels : une même personne peut être agent de sourcing ET transitaire.
   var spaceBtn = function(action, icon, label, active) { return '<button type="button" class="glass-card" style="display:flex;align-items:center;gap:10px;padding:11px 12px;width:100%;text-align:left;margin-top:10px;color:var(--text-primary);font-weight:700;font-size:13.5px;' + (active ? 'border:1.5px solid var(--accent);' : '') + '" data-action="' + action + '"><i class="fa-solid ' + icon + '" style="color:var(--accent);width:18px;text-align:center;"></i> ' + label + '</button>'; };
-  if (isCurrentProfileSourcingAgent()) html += spaceBtn("open-sourcing-space", "fa-magnifying-glass-dollar", "Espace Agent Sourcing", state.view === "agentsourcing");
+  if (isCurrentProfileSourcingAgent()) html += spaceBtn("open-sourcing-space", "fa-building-flag", "Espace " + poleLabel(sourcingAgentCountry(state.profile)), state.view === "agentsourcing");
   if (myTransitaireEntry()) html += spaceBtn("open-transitaire-space", "fa-plane-arrival", "Espace Transitaire", state.view === "transitaire");
   html += renderGestionRoleSection();
 
@@ -20495,7 +20497,8 @@ function renderAgentSourcing() {
   // sur cette même page Agent Sourcing juste en dessous, donnant
   // l'impression fausse d'être coincé ici.
   var html = '<button class="link-btn" style="margin-bottom:14px;" data-action="leave-agent-view-to-buyer"><i class="fa-solid fa-bars"></i> ' + t("op_change_role") + '</button>';
-  html += '<div class="section-title">' + t("as_dashboard_title") + '</div>';
+  var poleCc = sourcingAgentCountry(state.profile);
+  html += '<div class="section-title"><i class="fa-solid fa-building-flag"></i> ' + esc(t("as_dashboard_title") + (poleCc ? " " + poleCc : "")) + '</div>';
 
   if (intlOrders.length === 0) {
     return html + '<div class="empty-state"><i class="fa-solid fa-earth-asia"></i><div class="title">' + t("as_no_order") + '</div></div>';
@@ -21173,7 +21176,7 @@ function renderAdminTransitairesSection() {
   if (isOwner) {
     html += '<div style="display:flex;gap:6px;margin-top:6px;min-width:0;"><input class="input" id="new-transitaire-phone" placeholder="Numéro (ex : +86…)" style="flex:1;min-width:0;" /><button class="btn-primary" style="flex:0 0 auto;width:auto;padding:0 14px;" data-action="add-transitaire"><i class="fa-solid fa-plus"></i></button></div>';
     html += '<select class="input" id="new-transitaire-country" style="margin-top:6px;">' + intlCountryList().map(function(cc) { return '<option value="' + esc(cc) + '">' + esc(intlFlagLabel(cc)) + '</option>'; }).join('') + '</select>';
-    html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;">Le transitaire crée son compte Sounsouni avec ce numéro, puis trouve « Espace Transitaire » dans le menu des rôles. Un agent de sourcing peut aussi être transitaire.</div>';
+    html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;">Le transitaire crée son compte Sounsouni avec ce numéro, puis trouve « Espace Transitaire » dans le menu des rôles. Un responsable de Pôle Sounsouni peut aussi être transitaire.</div>';
 
     // 4) Tarifs et règles
     html += '<div style="font-weight:800;font-size:13px;margin:14px 0 6px;"><i class="fa-solid fa-tags"></i> Tarifs de livraison des colis transitaires</div>';
@@ -23796,7 +23799,7 @@ function renderAdminSellers(stats) {
 }
 
 // ---------- ADMIN : COMPTES (liste + détail) ----------
-var ROLE_ACCOUNT_LABELS = { acheteur: "Acheteur", vendeur: "Vendeur", point_vente: "Point de Retrait", livreur: "Livreur", agent_sourcing: "Agent Sourcing", admin: "Admin" };
+var ROLE_ACCOUNT_LABELS = { acheteur: "Acheteur", vendeur: "Vendeur", point_vente: "Point de Retrait", livreur: "Livreur", agent_sourcing: "Pôle Sounsouni", admin: "Admin" };
 
 // ---------- ADMIN : LITIGES ----------
 function renderAdminDisputes() {
@@ -24227,13 +24230,13 @@ function renderAdminAccountDetail(accountId) {
   // et son numéro, comme n'importe quel compte sans mot de passe défini.
   if (state.adminIsOwner) {
     html += '<div class="glass-card" style="padding:14px;margin-top:10px;">';
-    html += '<div style="font-weight:800;font-size:13.5px;margin-bottom:8px;"><i class="fa-solid fa-earth-asia"></i> Agent Sourcing</div>';
+    html += '<div style="font-weight:800;font-size:13.5px;margin-bottom:8px;"><i class="fa-solid fa-building-flag"></i> Pôle Sounsouni</div>';
     if (a.isSourcingAgent) {
-      html += '<div style="font-size:12px;color:var(--success);margin-bottom:10px;"><i class="fa-solid fa-circle-check"></i> Ce compte est Agent Sourcing (statut permanent, indépendant du rôle affiché en ce moment).</div>';
+      html += '<div style="font-size:12px;color:var(--success);margin-bottom:10px;"><i class="fa-solid fa-circle-check"></i> Ce compte est responsable d\'un Pôle Sounsouni (statut permanent, indépendant du rôle affiché en ce moment).</div>';
       html += '<button class="btn-secondary" style="color:var(--danger);border-color:var(--danger);" data-action="admin-remove-agent-role" data-value="' + a.id + '"><i class="fa-solid fa-xmark"></i> Retirer ce rôle</button>';
     } else {
-      html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;">Fait de ce compte un Agent Sourcing — il pourra vérifier les paiements et suivre les commandes des vendeurs internationaux qui le choisissent à leur inscription.</div>';
-      html += '<button class="btn-primary" data-action="admin-make-agent-sourcing" data-value="' + a.id + '"><i class="fa-solid fa-user-check"></i> Nommer Agent Sourcing</button>';
+      html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;">Fait de ce compte le responsable d\'un Pôle Sounsouni — il pourra vérifier les paiements et suivre les commandes des vendeurs internationaux qui le choisissent à leur inscription.</div>';
+      html += '<button class="btn-primary" data-action="admin-make-agent-sourcing" data-value="' + a.id + '"><i class="fa-solid fa-user-check"></i> Nommer responsable Pôle Sounsouni</button>';
     }
     html += '</div>';
   }
@@ -24776,13 +24779,13 @@ function renderAdminSecurity() {
   html += '</div>';
 
   html += '<div class="glass-card" style="padding:14px;margin-top:16px;">';
-  html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-magnifying-glass-dollar"></i> Agent Sourcing — par numéro, sans mot de passe</div>';
-  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:12px;">Section séparée du Groupe 2 : un numéro ajouté ici bascule directement vers l\'espace Agent Sourcing (jamais vers l\'Admin) via le même bouton "Administration".</div>';
+  html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-building-flag"></i> Pôle Sounsouni (Chine, Inde…) — par numéro, sans mot de passe</div>';
+  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:12px;">Section séparée du Groupe 2 : un numéro ajouté ici bascule directement vers l\'espace Pôle Sounsouni (jamais vers l\'Admin) via le même bouton "Administration".</div>';
   html += '<div style="display:flex;gap:8px;margin-bottom:10px;">';
   html += '<input class="input" id="sourcing-agent-phone" placeholder="Numéro (ex : 70 00 00 00)" data-format="phone" style="flex:1;min-width:0;" />';
   html += '<button class="btn-primary" style="flex:0;padding:0 16px;" data-action="add-sourcing-agent-whitelist"><i class="fa-solid fa-plus"></i></button>';
   html += '</div>';
-  html += '<label class="field-label" style="margin-top:0;font-size:10.5px;">Pays de l\'agent (il ne verra que les vendeurs de ce pays)</label>';
+  html += '<label class="field-label" style="margin-top:0;font-size:10.5px;">Pays du Pôle (il ne verra que les vendeurs de ce pays)</label>';
   html += '<select class="input" id="sourcing-agent-country" style="margin-bottom:10px;">' + intlCountryList().map(function(cc) { return '<option value="' + esc(cc) + '">' + esc(intlFlagLabel(cc)) + '</option>'; }).join('') + '</select>';
   var saList = state.sourcingAgentWhitelist || [];
   if (saList.length === 0) {
@@ -27717,7 +27720,7 @@ root.addEventListener("click", function(e) {
         accToPromote.isSourcingAgent = true;
         save();
         saveDoc("accounts", accToPromote);
-        showToast("✅ " + accToPromote.name + " est maintenant Agent Sourcing.");
+        showToast("✅ " + accToPromote.name + " est maintenant responsable d'un Pôle Sounsouni.");
         render();
       }
       break;
@@ -27730,7 +27733,7 @@ root.addEventListener("click", function(e) {
         accToDemote.isSourcingAgent = false;
         save();
         saveDoc("accounts", accToDemote);
-        showToast("✅ Rôle Agent Sourcing retiré.");
+        showToast("✅ Rôle Pôle Sounsouni retiré.");
         render();
       }
       break;
