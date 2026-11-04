@@ -1214,6 +1214,39 @@ function saveIntlCountryList(list) {
 }
 function intlCurrency(cc) { return currencyForCountry(cc || INTL_DEFAULT_COUNTRY); }
 function intlSym(cc) { return currencySymbol(intlCurrency(cc)); }
+// Monnaie d'origine d'une commande internationale (anciennes commandes : roupie).
+function orderIntlSym(o) { return currencySymbol((o && o.intlCurrency) || intlCurrency((o && o.country) || INTL_DEFAULT_COUNTRY)); }
+var INTL_CURRENCY_NAMES = { INR: "Roupie indienne", CNY: "Yuan chinois", EUR: "Euro", USD: "Dollar américain", AED: "Dirham émirati", GBP: "Livre sterling", TRY: "Livre turque", MAD: "Dirham marocain", CAD: "Dollar canadien" };
+function intlCurrencyName(cc) { var c = intlCurrency(cc); return (INTL_CURRENCY_NAMES[c] || c) + " (" + intlSym(cc) + ")"; }
+function intlFlagLabel(cc) { var r = COUNTRY_CODES.find(function(x) { return x.country === cc; }); return r ? r.label.replace(/\s*\/.*$/, "") : cc; }
+// « depuis la Chine », « depuis l'Inde »… (article français)
+function intlFrom(cc) {
+  var m = { "Inde": "l'Inde", "Chine": "la Chine", "France": "la France", "Turquie": "la Turquie", "Belgique": "la Belgique", "Allemagne": "l'Allemagne", "Italie": "l'Italie", "Espagne": "l'Espagne", "Émirats arabes unis": "les Émirats", "États-Unis": "les États-Unis", "Royaume-Uni": "le Royaume-Uni", "Maroc": "le Maroc", "Canada": "le Canada" };
+  return m[cc] || cc;
+}
+// Pays choisi dans l'Admin pour les réglages internationaux.
+function adminIntlCountry() {
+  var list = intlCountryList();
+  return list.indexOf(state.adminIntlCountry) !== -1 ? state.adminIntlCountry : INTL_DEFAULT_COUNTRY;
+}
+// Rangée de pastilles « pays partenaires » + ajout d'un pays (Admin).
+function renderAdminIntlCountryPicker() {
+  var list = intlCountryList(), cur = adminIntlCountry();
+  var html = '<div style="font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">Pays partenaire</div>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">';
+  list.forEach(function(cc) { html += '<button class="chip ' + (cc === cur ? 'active' : '') + '" style="max-width:100%;" data-action="set-admin-intl-country" data-value="' + esc(cc) + '">' + esc(intlFlagLabel(cc)) + '</button>'; });
+  html += '<button class="chip" data-action="toggle-add-intl-country"><i class="fa-solid fa-plus"></i> Pays</button>';
+  html += '</div>';
+  if (state.showAddIntlCountry) {
+    var seen = {};
+    var opts = COUNTRY_CODES.filter(function(c) { if (seen[c.country] || list.indexOf(c.country) !== -1 || c.currency === "XOF" || c.currency === "XAF") return false; seen[c.country] = 1; return true; });
+    html += '<div style="display:flex;gap:6px;margin-bottom:8px;min-width:0;"><select class="input" id="add-intl-country-select" style="flex:1;min-width:0;">';
+    opts.forEach(function(c) { html += '<option value="' + esc(c.country) + '">' + esc(c.label.replace(/\s*\/.*$/, "")) + ' — ' + esc(c.currency) + '</option>'; });
+    html += '</select><button class="btn-primary" style="flex:0 0 auto;padding:0 14px;" data-action="add-intl-country">Ajouter</button></div>';
+  }
+  if (cur !== INTL_DEFAULT_COUNTRY) html += '<button class="link-btn" style="font-size:11px;color:var(--danger);margin-bottom:8px;" data-action="remove-intl-country" data-value="' + esc(cur) + '"><i class="fa-solid fa-trash"></i> Retirer ' + esc(cur) + ' de la liste</button>';
+  return html;
+}
 // Pays du panier international en cours (un seul vendeur, donc un seul pays).
 function currentIntlCountry() {
   if (state._intlCtx) return state._intlCtx;
@@ -1224,7 +1257,13 @@ function intlShipId(cc) { cc = cc || currentIntlCountry(); return cc === INTL_DE
 function getInternationalShippingConfig(cc) {
   cc = cc || currentIntlCountry();
   var base = defaultInternationalShippingConfig();
-  if (cc !== INTL_DEFAULT_COUNTRY) { base.gstPct = 0; base.delayText = "7 à 15 jours"; base.seaDelayText = "8 à 12 semaines"; }
+  if (cc !== INTL_DEFAULT_COUNTRY) {
+    base.gstPct = 0; base.delayText = "7 à 15 jours"; base.seaDelayText = "8 à 12 semaines";
+    // Tableau de départ converti dans la monnaie du pays (à ajuster dans l'Admin).
+    var f = (INTL_FALLBACK_RATES.INR || 7.2) / (INTL_FALLBACK_RATES[intlCurrency(cc)] || 1);
+    base.airTable = base.airTable.map(function(r) { return [r[0], Math.max(1, Math.round(r[1] * f))]; });
+    base.airPerKgAbove20 = Math.max(1, Math.round(base.airPerKgAbove20 * f));
+  }
   var id = intlShipId(cc);
   if (state.settings) {
     for (var i = 0; i < state.settings.length; i++) {
@@ -2258,6 +2297,17 @@ function isPhoneOnGroup2GlobalWhitelist(phone) {
 // séparée du Groupe 2. Un numéro qui y figure bascule directement vers
 // l'espace Agent Sourcing (jamais vers l'Admin), en tapant sur le même
 // bouton "Administration" du menu Changer de rôle.
+// Pays d'un agent de sourcing : celui choisi par l'Admin sur la liste
+// blanche, sinon le pays de son compte.
+function sourcingAgentCountry(a) {
+  var norm = normalizeWalletPhone(a && a.phone);
+  var w = (state.sourcingAgentWhitelist || []).find(function(x) { return normalizeWalletPhone(x.phone) === norm; });
+  return (w && w.country) || (a && a.country) || null;
+}
+// Agents d'un pays donné : un vendeur chinois ne voit que les agents en Chine.
+function sourcingAgentsForCountry(cc) {
+  return state.accounts.filter(function(a) { return a.isSourcingAgent && (!cc || sourcingAgentCountry(a) === cc); });
+}
 function isPhoneOnSourcingAgentWhitelist(phone) {
   var norm = normalizeWalletPhone(phone);
   return (state.sourcingAgentWhitelist || []).some(function(w) { return normalizeWalletPhone(w.phone) === norm; });
@@ -2388,6 +2438,7 @@ var ADMIN_RESTRICTED_ACTIONS = [
   "admin-add-quartier-proche", "admin-remove-quartier-proche", "undo-quartier-proche-change", "toggle-user-test-mode", "moderation-approve", "moderation-reject", "run-full-push-diagnostic", "toggle-diagnostics-visible", "admin-translate-products", "admin-payout-catch-up", "admin-save-payout-fees",
   "send-admin-broadcast", "toggle-employee-permission", "add-boost-tier", "remove-boost-tier", "save-boost-tiers",
   "save-vip-rotation-seconds", "save-delivery-base-config", "admin-add-commune", "admin-remove-commune",
+  "add-intl-country", "remove-intl-country", "add-transitaire", "remove-transitaire", "save-transitaire-settings", "transitaire-mark-settled", "save-transitaire-defaults",
   "save-admin-product-edit", "admin-delete-account", "save-relais-commission", "save-delivery-fees", "save-intercity-delivery-fees", "save-international-shipping-rates",
   "save-affiliate-rate", "submit-vip-ad", "edit-vip-ad", "remove-vipad-image", "set-vip-config", "delete-vip-ad",
   "toggle-bgpattern-enabled", "remove-bgpattern-icon", "regenerate-bg-pattern",
@@ -3288,7 +3339,7 @@ function sellerProfileComplete(profile) {
   // écrite à la main (toujours obligatoire) et le choix de l'agent sourcing
   // (obligatoire seulement si au moins un agent existe déjà dans le système).
   if (profile.sellerType === "international") {
-    var anyAgentExists = state.accounts.some(function(a) { return a.isSourcingAgent; });
+    var anyAgentExists = sourcingAgentsForCountry(profile.country).length > 0;
     var hasAddress = !!(profile.shopAddress && profile.shopAddress.trim());
     var hasAgent = !anyAgentExists || !!profile.sourcingAgentId;
     return hasAddress && hasAgent;
@@ -5393,7 +5444,7 @@ function validateVendorDetailsFields(d) {
       showToast(t("toast_shop_address_required"));
       return false;
     }
-    var agentsAtRegister2 = state.accounts.filter(function(a) { return a.isSourcingAgent; });
+    var agentsAtRegister2 = sourcingAgentsForCountry(countryForCode(d.countryCode || "+223"));
     if (agentsAtRegister2.length > 0 && !d.sourcingAgentId) {
       showToast(t("toast_choose_agent_required"));
       return false;
@@ -6985,6 +7036,8 @@ function placeInternationalOrder() {
     buyerPhone: state.profile.phone,
     contactPhone: (state.checkoutForm.contactPhone || "").trim() || state.profile.phone,
     country: items[0].country || "Inde",
+    intlCountry: items[0].country || INTL_DEFAULT_COUNTRY,
+    intlCurrency: intlCurrency(items[0].country || INTL_DEFAULT_COUNTRY),
     isInternational: true,
     items: [],
     subtotalInr: subtotalInr,
@@ -13748,7 +13801,7 @@ function renderOnboardStepVendorType(d) {
 // volume se règlent article par article, au moment de la publication.
 function renderOnboardStepInternational(d) {
   var detectedCountry = countryForCode(d.countryCode || "+223");
-  var agents = state.accounts.filter(function(a) { return a.isSourcingAgent; });
+  var agents = sourcingAgentsForCountry(detectedCountry);
   // Un compte hors Afrique ne voit QUE cette option à l'étape précédente
   // (voir renderOnboardStepVendorType) — y revenir en arrière n'aurait
   // aucun intérêt (une seule carte à re-choisir) et prêterait à
@@ -19144,7 +19197,7 @@ function renderSellerProfileSetup() {
   // champs (adresse écrite à la main, agent sourcing) sont indépendants —
   // seul celui qui manque vraiment s'affiche, jamais les deux par principe.
   if (p.sellerType === "international") {
-    var agentsForSetup = state.accounts.filter(function(a) { return a.isSourcingAgent; });
+    var agentsForSetup = sourcingAgentsForCountry(p.country);
     var needsAddress = !(p.shopAddress && p.shopAddress.trim());
     var needsAgent = agentsForSetup.length > 0 && !p.sourcingAgentId;
 
@@ -20215,7 +20268,7 @@ function renderAgentOrderDetailModal() {
   if (o.specialInstructions) {
     html += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:4px;"><i class="fa-solid fa-note-sticky"></i> ' + esc(o.specialInstructions) + '</div>';
   }
-  html += '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:13.5px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-color);"><span>₹' + Number(o.totalInr || 0).toLocaleString("en-IN") + '</span><span style="color:var(--accent);">' + money(o.total) + '</span></div>';
+  html += '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:13.5px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-color);"><span>' + Number(o.totalInr || 0).toLocaleString("fr-FR") + ' ' + orderIntlSym(o) + '</span><span style="color:var(--accent);">' + money(o.total) + '</span></div>';
   html += '</div>';
 
   // ---- Historique des statuts ----
@@ -20279,7 +20332,7 @@ function renderAgentSourcing() {
       cardHtml += '<div style="font-size:12px;padding:2px 0;">' + o.items[i].qty + '× ' + esc(o.items[i].name) + '</div>';
     }
     cardHtml += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:6px;">' + t("as_shipping_mode_label") + ' : ' + (o.shippingMode === "aerien" ? t("opt_transport_aerien") : t("opt_transport_maritime")) + '</div>';
-    cardHtml += '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:13px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border-color);"><span>₹' + Number(o.totalInr || 0).toLocaleString("en-IN") + '</span><span style="color:var(--accent);">' + money(o.total) + '</span></div>';
+    cardHtml += '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:13px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border-color);"><span>' + Number(o.totalInr || 0).toLocaleString("fr-FR") + ' ' + orderIntlSym(o) + '</span><span style="color:var(--accent);">' + money(o.total) + '</span></div>';
     cardHtml += renderOrderStatusHistory(o);
     if (o.status === "Paiement reçu") {
       cardHtml += '<label class="field-label">' + t("as_proof_label") + '</label>';
@@ -24213,21 +24266,27 @@ function renderAdminSecurity() {
   }
 
   if (state.adminIsOwner && !state.adminCountryScope) {
-    var xrCfg = getExchangeRateConfig();
+    var xrCc = adminIntlCountry();
+    var xrCfg = getExchangeRateConfig(xrCc), xrSym = intlSym(xrCc);
     html += '<div class="glass-card" style="padding:14px;margin-bottom:16px;">';
-    html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-money-bill-transfer"></i> Taux de change (Roupie indienne → FCFA)</div>';
-    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:12px;">Utilisé pour convertir automatiquement les prix des vendeurs internationaux. En mode automatique, le taux se met à jour tout seul une fois par jour — rien à faire.</div>';
-    html += '<div style="display:flex;gap:8px;margin-bottom:12px;">';
-    html += '<button class="btn-secondary' + (xrCfg.mode === "auto" ? " active" : "") + '" style="flex:1;' + (xrCfg.mode === "auto" ? "border-color:var(--accent);color:var(--accent);" : "") + '" data-action="set-exchange-rate-mode" data-value="auto">Automatique</button>';
-    html += '<button class="btn-secondary' + (xrCfg.mode === "manual" ? " active" : "") + '" style="flex:1;' + (xrCfg.mode === "manual" ? "border-color:var(--accent);color:var(--accent);" : "") + '" data-action="set-exchange-rate-mode" data-value="manual">Manuel</button>';
-    html += '</div>';
-    if (xrCfg.mode === "auto") {
-      html += '<div style="font-size:12px;color:var(--text-secondary);">Taux actuel : <b>1 ₹ = ' + (xrCfg.autoRate || EXCHANGE_RATE_FALLBACK_INR_TO_XOF).toFixed(2) + ' FCFA</b>';
-      html += xrCfg.autoRateFetchedAt ? ' <span style="color:var(--text-dim);">(mis à jour ' + relativeTimeAgo(xrCfg.autoRateFetchedAt) + ')</span>' : ' <span style="color:var(--text-dim);">(pas encore récupéré — valeur de secours utilisée)</span>';
-      html += '</div>';
+    html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-money-bill-transfer"></i> Taux de change → FCFA</div>';
+    html += renderAdminIntlCountryPicker();
+    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:12px;">' + esc(intlCurrencyName(xrCc)) + ' → FCFA. Utilisé pour convertir les prix des vendeurs, agents et transitaires de ce pays. En mode automatique, le taux se met à jour tout seul une fois par jour.</div>';
+    if (xrCfg.currency === "EUR") {
+      html += '<div style="font-size:12px;color:var(--text-secondary);">Taux fixe : <b>1 € = 655,957 FCFA</b> (parité officielle, rien à régler).</div>';
     } else {
-      html += '<label class="field-label" style="margin-top:0;">1 Roupie indienne (₹) = combien de FCFA ?</label>';
-      html += '<input class="input" type="number" step="0.01" id="manual-exchange-rate-input" value="' + xrCfg.manualRate + '" data-action-input="manual-exchange-rate" />';
+      html += '<div style="display:flex;gap:8px;margin-bottom:12px;">';
+      html += '<button class="btn-secondary' + (xrCfg.mode === "auto" ? " active" : "") + '" style="flex:1;' + (xrCfg.mode === "auto" ? "border-color:var(--accent);color:var(--accent);" : "") + '" data-action="set-exchange-rate-mode" data-value="auto">Automatique</button>';
+      html += '<button class="btn-secondary' + (xrCfg.mode === "manual" ? " active" : "") + '" style="flex:1;' + (xrCfg.mode === "manual" ? "border-color:var(--accent);color:var(--accent);" : "") + '" data-action="set-exchange-rate-mode" data-value="manual">Manuel</button>';
+      html += '</div>';
+      if (xrCfg.mode === "auto") {
+        html += '<div style="font-size:12px;color:var(--text-secondary);">Taux actuel : <b>1 ' + xrSym + ' = ' + Number(getInrToXofRate(xrCc)).toFixed(2) + ' FCFA</b>';
+        html += xrCfg.autoRateFetchedAt ? ' <span style="color:var(--text-dim);">(mis à jour ' + relativeTimeAgo(xrCfg.autoRateFetchedAt) + ')</span>' : ' <span style="color:var(--text-dim);">(pas encore récupéré — valeur de secours utilisée)</span>';
+        html += '</div>';
+      } else {
+        html += '<label class="field-label" style="margin-top:0;">1 ' + esc(intlCurrencyName(xrCc)) + ' = combien de FCFA ?</label>';
+        html += '<input class="input" type="number" step="0.01" id="manual-exchange-rate-input" value="' + xrCfg.manualRate + '" data-action-input="manual-exchange-rate" />';
+      }
     }
     html += '</div>';
   }
@@ -24328,9 +24387,11 @@ function renderAdminSecurity() {
   html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-magnifying-glass-dollar"></i> Agent Sourcing — par numéro, sans mot de passe</div>';
   html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:12px;">Section séparée du Groupe 2 : un numéro ajouté ici bascule directement vers l\'espace Agent Sourcing (jamais vers l\'Admin) via le même bouton "Administration".</div>';
   html += '<div style="display:flex;gap:8px;margin-bottom:10px;">';
-  html += '<input class="input" id="sourcing-agent-phone" placeholder="Numéro (ex : 70 00 00 00)" data-format="phone" style="flex:1;" />';
+  html += '<input class="input" id="sourcing-agent-phone" placeholder="Numéro (ex : 70 00 00 00)" data-format="phone" style="flex:1;min-width:0;" />';
   html += '<button class="btn-primary" style="flex:0;padding:0 16px;" data-action="add-sourcing-agent-whitelist"><i class="fa-solid fa-plus"></i></button>';
   html += '</div>';
+  html += '<label class="field-label" style="margin-top:0;font-size:10.5px;">Pays de l\'agent (il ne verra que les vendeurs de ce pays)</label>';
+  html += '<select class="input" id="sourcing-agent-country" style="margin-bottom:10px;">' + intlCountryList().map(function(cc) { return '<option value="' + esc(cc) + '">' + esc(intlFlagLabel(cc)) + '</option>'; }).join('') + '</select>';
   var saList = state.sourcingAgentWhitelist || [];
   if (saList.length === 0) {
     html += '<div style="font-size:11.5px;color:var(--text-dim);">Aucun numéro autorisé pour l\'instant.</div>';
@@ -24339,7 +24400,7 @@ function renderAdminSecurity() {
       var saw = saList[sai];
       var saAcc = findAccountByPhone(saw.phone);
       html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--border-color);">';
-      html += '<div><div style="font-weight:700;font-size:12.5px;">' + esc(saAcc ? saAcc.name : (saw.name || "Compte")) + '</div><div style="font-size:11px;color:var(--text-dim);">' + esc(saw.phone) + '</div></div>';
+      html += '<div style="min-width:0;"><div style="font-weight:700;font-size:12.5px;">' + esc(saAcc ? saAcc.name : (saw.name || "Compte")) + '</div><div style="font-size:11px;color:var(--text-dim);">' + esc(saw.phone) + ' · ' + esc(saw.country || (saAcc && saAcc.country) || INTL_DEFAULT_COUNTRY) + '</div></div>';
       html += '<button class="link-btn" style="color:var(--danger);" data-action="remove-sourcing-agent-whitelist" data-value="' + esc(saw.id) + '"><i class="fa-solid fa-trash"></i></button>';
       html += '</div>';
     }
@@ -24445,18 +24506,21 @@ function renderAdminInternational() {
     // FCFA au paiement avec le taux du jour. Le transport facturé = le plus
     // élevé entre le poids réel et le poids volumétrique (volume × 167),
     // multiplié par le tarif au kilo, avec un minimum par envoi.
-    var isCfg = getInternationalShippingConfig();
+    var isCc = adminIntlCountry(), isSym = intlSym(isCc);
+    state._intlCtx = isCc;
+    var isCfg = getInternationalShippingConfig(isCc);
     var tbl = isCfg.airTable || defaultInternationalShippingConfig().airTable;
     // Exemple chiffré : un colis de 5 kg, pour vérifier les réglages d'un coup d'œil.
-    var ex = (function() { var row = tbl.find(function(r) { return r[0] >= 5; }) || tbl[tbl.length - 1]; var base = row[1]; var gst = Math.round(base * (Number(isCfg.gstPct) || 0) / 100); var mg = Math.round((base + gst) * (Number(isCfg.marginPct) || 0) / 100); var r = getInrToXofRate(); return { base: base, gst: gst, mg: mg, xof: Math.round((base + gst + mg) * r) }; })();
+    var ex = (function() { var row = tbl.find(function(r) { return r[0] >= 5; }) || tbl[tbl.length - 1]; var base = row[1]; var gst = Math.round(base * (Number(isCfg.gstPct) || 0) / 100); var mg = Math.round((base + gst) * (Number(isCfg.marginPct) || 0) / 100); var r = getInrToXofRate(isCc); return { base: base, gst: gst, mg: mg, xof: Math.round((base + gst + mg) * r) }; })();
     var num = function(id, label, val, step) { return '<div style="flex:1 1 120px;min-width:0;"><label class="field-label" style="margin-top:6px;font-size:10.5px;">' + label + '</label><input class="input" type="number" min="0" step="' + (step || 1) + '" id="' + id + '" value="' + esc(String(val)) + '" style="width:100%;min-width:0;" /></div>'; };
     html += '<div class="glass-card" style="padding:14px;margin-top:20px;">';
-    html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-plane"></i> Transport depuis l\'Inde (avion)</div>';
-    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:8px;line-height:1.5;">Calcul colis par colis, livré à l\'aéroport de Bamako. Poids facturé = le plus élevé entre le poids réel et le poids de place (L × l × H ÷ 5 000), minimum 0,5 kg. Tableau du partenaire : 0,5 kg = ' + tbl[0][1].toLocaleString("fr-FR") + ' ₹ … ' + tbl[tbl.length - 1][0] + ' kg = ' + tbl[tbl.length - 1][1].toLocaleString("fr-FR") + ' ₹, puis un prix au kilo jusqu\'au poids maximum d\'un colis. Au-delà, la commande est partagée en plusieurs colis égaux, chacun calculé avec le tableau. Le bateau se fait sur devis.</div>';
+    html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-plane"></i> Transport depuis ' + esc(intlFrom(isCc)) + ' (avion)</div>';
+    html += renderAdminIntlCountryPicker();
+    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:8px;line-height:1.5;">Calcul colis par colis, livré à l\'aéroport de Bamako. Poids facturé = le plus élevé entre le poids réel et le poids de place (L × l × H ÷ 5 000), minimum 0,5 kg. Tableau du partenaire : 0,5 kg = ' + tbl[0][1].toLocaleString("fr-FR") + ' ' + isSym + ' … ' + tbl[tbl.length - 1][0] + ' kg = ' + tbl[tbl.length - 1][1].toLocaleString("fr-FR") + ' ' + isSym + ', puis un prix au kilo jusqu\'au poids maximum d\'un colis. Au-delà, la commande est partagée en plusieurs colis égaux, chacun calculé avec le tableau. Le bateau se fait sur devis.</div>';
     html += '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
-    html += num("intl-air-perkg", "Prix / kg de 21 à 44 kg (₹)", isCfg.airPerKgAbove20);
+    html += num("intl-air-perkg", "Prix / kg au-delà du tableau (" + isSym + ")", isCfg.airPerKgAbove20);
     html += num("intl-air-max", "Poids maximum d'un colis (kg)", isCfg.airMaxKg);
-    html += num("intl-air-gst", "Taxe indienne GST (%)", isCfg.gstPct, 0.5);
+    html += num("intl-air-gst", (isCc === INTL_DEFAULT_COUNTRY ? "Taxe indienne GST (%)" : "Taxe du pays de départ (%)"), isCfg.gstPct, 0.5);
     html += num("intl-air-margin", "Frais Sounsouni (%)", isCfg.marginPct, 0.5);
     var dutyNow = isCfg.customsDutyPct != null ? isCfg.customsDutyPct : (isCfg.customsPct || 0);
     html += num("intl-air-duty", "Droits de douane (%)", dutyNow, 0.5);
@@ -24470,12 +24534,12 @@ function renderAdminInternational() {
       html += '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 10px;margin-top:8px;">';
       tbl.forEach(function(r, i) { html += '<div style="display:flex;align-items:center;gap:6px;min-width:0;"><span style="font-size:11.5px;width:44px;flex-shrink:0;">' + String(r[0]).replace(".", ",") + ' kg</span><input class="input" type="number" min="0" id="air-row-' + i + '" value="' + r[1] + '" style="flex:1;min-width:0;padding:6px 8px;font-size:12.5px;" /></div>'; });
       html += '</div>';
-      html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:6px;">Prix en roupies, sans la taxe indienne. Appuie sur « Enregistrer » en bas pour garder les changements.</div>';
+      html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:6px;">Prix en ' + esc(intlCurrencyName(isCc)) + ', sans la taxe du pays de départ. Appuie sur « Enregistrer » en bas pour garder les changements.</div>';
     }
-    html += '<div style="font-size:11px;background:var(--bg-body);border-radius:10px;padding:8px 10px;margin-top:10px;line-height:1.5;"><strong>Exemple, colis de 5 kg :</strong> ' + ex.base.toLocaleString("fr-FR") + ' ₹ + taxe ' + ex.gst.toLocaleString("fr-FR") + ' ₹ + frais Sounsouni ' + ex.mg.toLocaleString("fr-FR") + ' ₹ = <strong>' + ex.xof.toLocaleString("fr-FR") + ' FCFA</strong> (sans les articles ni la douane)</div>';
+    html += '<div style="font-size:11px;background:var(--bg-body);border-radius:10px;padding:8px 10px;margin-top:10px;line-height:1.5;"><strong>Exemple, colis de 5 kg :</strong> ' + ex.base.toLocaleString("fr-FR") + ' ' + isSym + ' + taxe ' + ex.gst.toLocaleString("fr-FR") + ' ' + isSym + ' + frais Sounsouni ' + ex.mg.toLocaleString("fr-FR") + ' ' + isSym + ' = <strong>' + ex.xof.toLocaleString("fr-FR") + ' FCFA</strong> (sans les articles ni la douane)</div>';
     // Bateau : un seul prix tout compris au m³ (FCFA), modifiable.
     html += '<div style="font-weight:800;font-size:14px;margin:16px 0 6px;"><i class="fa-solid fa-ship"></i> Transport par bateau</div>';
-    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:6px;line-height:1.5;">Prix tout compris par m³ : bateau Inde → Dakar avec taxes indiennes, ports, camion Dakar → Bamako, transit et formalités. Vos frais Sounsouni (' + (isCfg.marginPct || 0) + ' %) et la douane + TVA s\'ajoutent comme pour l\'avion. 1 m³ ≈ 16 cartons moyens (50 × 40 × 30 cm).</div>';
+    html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:6px;line-height:1.5;">Prix tout compris par m³ : bateau ' + esc(isCc) + ' → Dakar avec les taxes du pays de départ, ports, camion Dakar → Bamako, transit et formalités. Vos frais Sounsouni (' + (isCfg.marginPct || 0) + ' %) et la douane + TVA s\'ajoutent comme pour l\'avion. 1 m³ ≈ 16 cartons moyens (50 × 40 × 30 cm).</div>';
     html += '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
     html += num("intl-sea-price", "Prix par m³ (FCFA)", isCfg.seaPricePerM3Xof, 1000);
     html += num("intl-sea-min", "Minimum facturé (m³)", isCfg.seaMinM3, 0.05);
@@ -24489,8 +24553,9 @@ function renderAdminInternational() {
     html += '</div>';
     html += '<label class="field-label" style="font-size:10.5px;">Délai bateau affiché au client</label><input class="input" id="intl-sea-delay" value="' + esc(isCfg.seaDelayText || "6 à 10 semaines") + '" />';
     html += '<div style="font-size:11px;color:var(--text-dim);margin:6px 0 4px;">Exemple, minimum facturé : ' + Number(Math.round((Number(isCfg.seaMinM3) || 0) * (Number(isCfg.seaPricePerM3Xof) || 0) * (1 + (Number(isCfg.marginPct) || 0) / 100))).toLocaleString("fr-FR") + ' FCFA de livraison (frais Sounsouni compris), hors douane.</div>';
-    html += '<button class="btn-primary" style="margin-top:14px;" data-action="save-international-shipping-rates"><i class="fa-solid fa-floppy-disk"></i> Enregistrer les tarifs de transport</button>';
+    html += '<button class="btn-primary" style="margin-top:14px;" data-action="save-international-shipping-rates"><i class="fa-solid fa-floppy-disk"></i> Enregistrer les tarifs — ' + esc(isCc) + '</button>';
     html += '</div>';
+    state._intlCtx = null;
 
     // ---- Service de géocodage (global, pas spécifique à un pays) ----
     var geoCfg = getGeocodingConfig();
@@ -25636,11 +25701,11 @@ function renderAdminOrderModal() {
       html += '<div style="font-size:11px;font-weight:700;color:var(--text-dim);">Détail interne (non montré au client)</div>';
       if (o.billableWeightKg) html += rowO('Poids facturé', String(o.billableWeightKg).replace('.', ',') + ' kg');
       if (pk.length) html += rowO('Colis à préparer', pk.length + ' : ' + pk.map(function(k) { return String(k).replace('.', ',') + ' kg'; }).join(' + '));
-      html += rowO('Transport + taxe indienne', Number(o.airTransportInr).toLocaleString('fr-FR') + ' ₹' + (rateO ? ' (' + money(Math.round(o.airTransportInr * rateO)) + ')' : ''));
-      if (o.sounsouniFeeInr != null) html += rowO('Frais Sounsouni', Number(o.sounsouniFeeInr).toLocaleString('fr-FR') + ' ₹' + (rateO ? ' (' + money(Math.round(o.sounsouniFeeInr * rateO)) + ')' : ''));
+      html += rowO('Transport + taxe du pays de départ', Number(o.airTransportInr).toLocaleString('fr-FR') + ' ' + orderIntlSym(o) + (rateO ? ' (' + money(Math.round(o.airTransportInr * rateO)) + ')' : ''));
+      if (o.sounsouniFeeInr != null) html += rowO('Frais Sounsouni', Number(o.sounsouniFeeInr).toLocaleString('fr-FR') + ' ' + orderIntlSym(o) + (rateO ? ' (' + money(Math.round(o.sounsouniFeeInr * rateO)) + ')' : ''));
       if (o.customsXof != null) html += rowO('Douane + TVA Mali', money(o.customsXof));
       if (o.homeDeliveryXof != null) html += rowO('Livraison à domicile (Bamako)', money(o.homeDeliveryXof));
-      if (rateO) html += rowO('Taux utilisé', '1 ₹ = ' + rateO.toFixed(2) + ' FCFA');
+      if (rateO) html += rowO('Taux utilisé', '1 ' + orderIntlSym(o) + ' = ' + rateO.toFixed(2) + ' FCFA');
       html += '</div>';
     }
   } else if (o.repere) {
@@ -27595,7 +27660,7 @@ root.addEventListener("click", function(e) {
       var sp = state.profile;
       sp.shopPhone = sp.phone; // même numéro que l'inscription — plus besoin de le redemander
       if (sp.sellerType === "international") {
-        var anyAgentExistsNow = state.accounts.some(function(a) { return a.isSourcingAgent; });
+        var anyAgentExistsNow = sourcingAgentsForCountry(sp.country).length > 0;
         if (!sp.shopAddress || !sp.shopAddress.trim()) { showToast(t("toast_shop_address_required")); break; }
         if (anyAgentExistsNow && !sp.sourcingAgentId) { showToast(t("toast_choose_agent_required")); break; }
       } else {
@@ -30866,7 +30931,8 @@ root.addEventListener("click", function(e) {
         showToast(t("toast_number_already_authorized"));
         break;
       }
-      var saEntry = { id: uid(), phone: saResolvedPhone, name: saMatchedAcc ? saMatchedAcc.name : "" };
+      var saCountryEl = document.getElementById('sourcing-agent-country');
+      var saEntry = { id: uid(), phone: saResolvedPhone, name: saMatchedAcc ? saMatchedAcc.name : "", country: (saCountryEl && saCountryEl.value) || INTL_DEFAULT_COUNTRY };
       state.sourcingAgentWhitelist.push(saEntry);
       save();
       saveDoc("sourcingAgentWhitelist", saEntry);
@@ -31201,10 +31267,33 @@ root.addEventListener("click", function(e) {
       break;
     }
     case "set-exchange-rate-mode": {
-      var xrModeCfg = getExchangeRateConfig();
+      var xrModeCc = adminIntlCountry();
+      var xrModeCfg = getExchangeRateConfig(xrModeCc);
       xrModeCfg.mode = value;
-      saveExchangeRateConfig(xrModeCfg);
-      if (value === "auto") refreshAutoExchangeRateIfNeeded();
+      saveExchangeRateConfig(xrModeCfg, xrModeCc);
+      if (value === "auto") refreshAutoExchangeRateFor(xrModeCc);
+      render();
+      break;
+    }
+    case "set-admin-intl-country": state.adminIntlCountry = value; state.showAirTableEditor = false; render(); break;
+    case "toggle-add-intl-country": state.showAddIntlCountry = !state.showAddIntlCountry; render(); break;
+    case "add-intl-country": {
+      var addCcEl = document.getElementById("add-intl-country-select");
+      var addCc = addCcEl ? addCcEl.value : "";
+      if (!addCc) break;
+      var ccList = intlCountryList();
+      if (ccList.indexOf(addCc) === -1) { ccList.push(addCc); saveIntlCountryList(ccList); }
+      state.adminIntlCountry = addCc; state.showAddIntlCountry = false;
+      refreshAutoExchangeRateFor(addCc);
+      showToast("✅ " + addCc + " ajouté aux pays partenaires.");
+      render();
+      break;
+    }
+    case "remove-intl-country": {
+      if (value === INTL_DEFAULT_COUNTRY) break;
+      if (!confirm("Retirer " + value + " des pays partenaires ? Ses réglages restent gardés si vous le rajoutez plus tard.")) break;
+      saveIntlCountryList(intlCountryList().filter(function(c) { return c !== value; }));
+      state.adminIntlCountry = INTL_DEFAULT_COUNTRY;
       render();
       break;
     }
@@ -31333,7 +31422,8 @@ root.addEventListener("click", function(e) {
       if (perKgA == null || maxA == null || gstA == null || mgA == null || dutyA == null || vatA == null || (document.getElementById("intl-sea-price") && (seaP == null || seaMin == null || !(seaKg > 0)))) { showToast("❌ Tous les tarifs doivent être des nombres valides."); break; }
       var seaDelayEl = document.getElementById("intl-sea-delay");
       var delayEl = document.getElementById("intl-air-delay");
-      var curIntl = getInternationalShippingConfig();
+      var saveCc = adminIntlCountry();
+      var curIntl = getInternationalShippingConfig(saveCc);
       var newTable = (curIntl.airTable || defaultInternationalShippingConfig().airTable).map(function(r, i) { var v = readRate("air-row-" + i); return [r[0], v == null ? r[1] : v]; });
       var nextIntl = Object.assign({}, curIntl, { airTable: newTable, airPerKgAbove20: perKgA, airMaxKg: maxA, gstPct: gstA, marginPct: mgA, customsDutyPct: dutyA, vatPct: vatA, delayText: (delayEl && delayEl.value.trim()) || "6 à 12 jours" });
       var hKg = readRate("intl-home-heavykg"), hEx = readRate("intl-home-extra");
@@ -31341,7 +31431,7 @@ root.addEventListener("click", function(e) {
       if (hEx != null) nextIntl.homeHeavyExtraXof = hEx;
       if (seaP != null) { nextIntl.seaPricePerM3Xof = seaP; nextIntl.seaMinM3 = seaMin; nextIntl.seaKgPerM3 = seaKg; nextIntl.seaDelayText = (seaDelayEl && seaDelayEl.value.trim()) || "6 à 10 semaines"; }
       delete nextIntl.customsPct;
-      saveInternationalShippingConfig(nextIntl);
+      saveInternationalShippingConfig(nextIntl, saveCc);
       break;
     }
     case "save-intercity-delivery-fees": {
@@ -32722,11 +32812,12 @@ root.addEventListener("input", function(e) {
     return;
   }
   if (actionInput === "manual-exchange-rate") {
-    var xrManualCfg = getExchangeRateConfig();
+    var xrManualCc = adminIntlCountry();
+    var xrManualCfg = getExchangeRateConfig(xrManualCc);
     var newRate = parseFloat(el.value);
     if (!isNaN(newRate) && newRate > 0) {
       xrManualCfg.manualRate = newRate;
-      saveExchangeRateConfig(xrManualCfg);
+      saveExchangeRateConfig(xrManualCfg, xrManualCc);
     }
     return;
   }
