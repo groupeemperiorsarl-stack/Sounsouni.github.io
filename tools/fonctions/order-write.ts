@@ -1,5 +1,8 @@
 // ============================================================
 // Fonction serveur : order-write (version 2026-11-04 : pays partenaires — taux contrôlé selon la monnaie du vendeur)
+// Version 2026-11-04 b : commandes internationales suivies jusqu'au client. Le Pôle Sounsouni
+// avance jusqu'à « En transit » ; seule l'équipe Sounsouni enregistre « Arrivé » (scan à
+// Bamako) ; un livreur la prend ensuite (« En route ») et la remet avec le code secret du client.
 // Seul chemin pour créer ou modifier une commande.
 // Nouveau (failles CMD-1, CMD-2, CMD-3, CMD-5, ARG-1) :
 // - À la création, le serveur relit le VRAI prix de chaque article (prix
@@ -88,6 +91,7 @@ const VS_RANK: Record<string, number> = { "Nouvelle": 0, "Prête": 1, "Refusée"
 const INTL_CUR: Record<string, string> = { "Inde": "INR", "Chine": "CNY", "France": "EUR", "Belgique": "EUR", "Allemagne": "EUR", "Italie": "EUR", "Espagne": "EUR", "Portugal": "EUR", "Pays-Bas": "EUR", "Émirats arabes unis": "AED", "États-Unis": "USD", "Canada": "CAD", "Royaume-Uni": "GBP", "Turquie": "TRY", "Maroc": "MAD" };
 const RATE_RANGE: Record<string, [number, number]> = { INR: [5, 10], CNY: [50, 150], EUR: [650, 660], USD: [400, 900], CAD: [300, 700], AED: [100, 250], GBP: [500, 1100], TRY: [5, 40], MAD: [35, 100] };
 const rateOk = (cur: string, r: number) => { const g = RATE_RANGE[cur]; return !!g && r >= g[0] && r <= g[1]; };
+const INTL_RANK: Record<string, number> = { "Paiement reçu": 1, "Vérification agent": 2, "Transitaire": 3, "En transit": 4, "Arrivé": 5, "En route": 6, "Livrée": 9, "Annulée": 9 };
 const CODE_WINDOW_MS = 3600 * 1000, CODE_MAX_FAILS = 6;
 
 Deno.serve(async (req) => {
@@ -244,7 +248,7 @@ Deno.serve(async (req) => {
         const rrate = rc && typeof rc.rate === "number" && rc.rate >= 0 && rc.rate <= 1 ? rc.rate : 0.20;
         data.commissionAmount = Math.round(num(data.deliveryFee) * rrate);
         data.commissionSettled = false;
-      } else if (!isIntl && !isDigital) {
+      } else if (!isDigital) {
         data.otp = validCode(data.otp) ? data.otp : newCode();
         delete data.codeDepot; delete data.codeRetrait;
       } else {
@@ -314,7 +318,9 @@ Deno.serve(async (req) => {
     if (!isStaff && !isBuyer && !isSeller && !isAssignedLivreur && !isRelaisShop && !isIntlAgent && isAvailableLivreur) {
       const limited: any = { ...existingOrder };
       for (const f of ["status", "statusHistory", "vendorStatuses", "cancelReason", "cancelledAt", "refusalReason"]) if (f in data) limited[f] = data[f];
-      if (data.livreurId && callerIds.includes(String(data.livreurId))) {
+      const intlNotHere = existingOrder.isInternational === true && existingOrder.status !== "Arrivé";
+      if (intlNotHere) { for (const f of ["status", "statusHistory"]) if (f in existingOrder) limited[f] = existingOrder[f]; }
+      if (!intlNotHere && data.livreurId && callerIds.includes(String(data.livreurId))) {
         limited.livreurId = String(data.livreurId);
         limited.livreurName = String(data.livreurName || "").slice(0, 80);
         limited.livreurPhone = String(data.livreurPhone || "").slice(0, 30);
@@ -378,8 +384,18 @@ Deno.serve(async (req) => {
     if (oldStatus && newStatus && oldStatus !== newStatus) {
       const isFinal = oldStatus === "Livrée" || oldStatus === "Annulée";
       const isStop = newStatus === "Annulée" || newStatus === "Non livrable" || newStatus === "Refusée au retrait";
-      const goesBack = STATUS_RANK[oldStatus] != null && STATUS_RANK[newStatus] != null && STATUS_RANK[newStatus] < STATUS_RANK[oldStatus];
+      const RANK = existingOrder.isInternational === true ? INTL_RANK : STATUS_RANK;
+      const goesBack = RANK[oldStatus] != null && RANK[newStatus] != null && RANK[newStatus] < RANK[oldStatus];
       if (!isStaff && (isFinal || (goesBack && !isStop))) keepOldStatus();
+    }
+    newStatus = out.status;
+    // Commandes internationales : qui peut faire avancer quoi.
+    if (existingOrder.isInternational === true && !isStaff && oldStatus && newStatus && oldStatus !== newStatus) {
+      const ro = INTL_RANK[oldStatus] ?? 0, rn = INTL_RANK[newStatus] ?? 0;
+      const byPole = isIntlAgent && rn > ro && rn <= INTL_RANK["En transit"];
+      const byCourier = (isAssignedLivreur || isAvailableLivreur) && ((oldStatus === "Arrivé" && newStatus === "En route") || (newStatus === "Livrée" && (oldStatus === "Arrivé" || oldStatus === "En route")));
+      const byBuyer = isBuyer && newStatus === "Annulée" && oldStatus === "Paiement reçu";
+      if (!byPole && !byCourier && !byBuyer) keepOldStatus();
     }
     newStatus = out.status;
     const needsProof = oldStatus !== newStatus && (newStatus === "Livrée" || (newStatus === "En boutique" && existingOrder.deliveryMode === "relais"));
@@ -387,9 +403,9 @@ Deno.serve(async (req) => {
       if (newStatus === "Livrée") { out.deliveryVerified = true; out.deliveryVerifiedAt = now; out.deliveryVerifiedBy = "staff:" + callerId; out.deliveredAt = now; }
     } else if (needsProof) {
       let expected: string | null = null, rightPerson = false;
-      if (existingOrder.isDigital || existingOrder.isInternational) {
-        // Numérique : remis par le serveur après paiement. International : par l'agent sourcing ou l'Admin.
-        rightPerson = existingOrder.isInternational === true && isIntlAgent;
+      if (existingOrder.isDigital) {
+        // Numérique : remis par le serveur après paiement.
+        rightPerson = false;
       } else if (newStatus === "En boutique") {
         expected = existingOrder.codeDepot || null; rightPerson = isRelaisShop;
       } else if (existingOrder.deliveryMode === "relais") {
@@ -398,8 +414,7 @@ Deno.serve(async (req) => {
         expected = existingOrder.otp || null; rightPerson = isAssignedLivreur;
       }
       let proofOk = false;
-      if (rightPerson && existingOrder.isInternational === true) proofOk = true;
-      else if (rightPerson && expected && deliveryCode) {
+      if (rightPerson && expected && deliveryCode) {
         const lockId = "code:" + docId;
         const { data: lr } = await db.from("app_data").select("data").eq("collection", "loginHistory").eq("id", lockId).maybeSingle();
         const fails: number[] = (lr && (lr as any).data && Array.isArray((lr as any).data.fails) ? (lr as any).data.fails : []).filter((t: number) => now - t < CODE_WINDOW_MS);

@@ -9,7 +9,7 @@ const handlers: Record<string, (r: Request) => Promise<Response>> = {};
 let current = "";
 // @ts-ignore
 Object.defineProperty(Deno, "serve", { value: (h: any) => { handlers[current] = h; return {} as any; }, configurable: true, writable: true });
-for (const f of ["order-write", "personal-data", "secure-write", "ligdicash-create-payment"]) { current = f; await import("../fonctions/" + f + ".ts"); }
+for (const f of ["order-write", "personal-data", "secure-write", "ligdicash-create-payment", "wallet-write"]) { current = f; await import("../fonctions/" + f + ".ts"); }
 const b64u = (b: Uint8Array) => btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 async function token(accountId: string) {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode("test-secret-xyz"), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
@@ -27,7 +27,9 @@ let pass = 0, failN = 0;
 function check(name: string, cond: boolean, info?: unknown) { if (cond) { pass++; console.log("  ✔", name); } else { failN++; console.log("  ✘", name, JSON.stringify(info)); } }
 
 put("accounts", "B", { name: "Acheteur", phone: "+22370000001", createdAt: Date.now() });
-put("accounts", "SC", { name: "Vendeur Chine", phone: "+8613800000001", country: "Chine", sellerType: "international" });
+put("accounts", "SC", { name: "Vendeur Chine", phone: "+8613800000001", country: "Chine", sellerType: "international", sourcingAgentId: "PO" });
+put("accounts", "PO", { name: "Pôle Chine", phone: "+8613700000001", country: "Chine", isSourcingAgent: true });
+put("sourcingAgentWhitelist", "w1", { phone: "+8613700000001", country: "Chine" });
 put("accounts", "SI", { name: "Vendeur Inde", phone: "+919800000001", country: "Inde", sellerType: "international" });
 put("accounts", "T", { name: "Wang", phone: "+8613900000002", country: "Chine" });
 put("accounts", "X", { name: "Inconnu", phone: "+8613900000009" });
@@ -65,6 +67,38 @@ put("orders", "pay2", { buyerId: "B", isInternational: true, country: "Chine", i
 put("orderDetails", "pay2", { items: [{ productId: "PC", price: 20, qty: 5 }], subtotalInr: 100, exchangeRate: 7, subtotal: 700, total: 5700 });
 r = await call("ligdicash-create-payment", "B", { kind: "order", orderId: "pay2" });
 check("paiement LigdiCash avec un taux trop bas refusé", r.error === "price_changed", r);
+
+
+console.log("== Commande Pôle Sounsouni suivie jusqu'au client");
+const ow = (who: string, id: string, patch: any, extra: any = {}) => { const cur = get("orders", id); const h = patch.status ? [...(cur.statusHistory || []), { status: patch.status, at: Date.now() }] : cur.statusHistory; return call("order-write", who, { docId: id, data: { ...cur, ...patch, statusHistory: h }, ...extra }); };
+const st = (id: string) => get("orders", id).status;
+check("code secret du client créé pour une commande internationale", /^\d{4}$/.test(String(get("orders", "c1").otp || "")), get("orders", "c1"));
+await ow("PO", "c1", { status: "Vérification agent" });
+await ow("PO", "c1", { status: "Transitaire" });
+await ow("PO", "c1", { status: "En transit" });
+check("le Pôle avance jusqu'à « En transit »", st("c1") === "En transit", st("c1"));
+let rr = await ow("PO", "c1", { status: "Arrivé" });
+check("le Pôle ne peut pas marquer « Arrivé » lui-même", st("c1") === "En transit", rr);
+rr = await ow("L", "c1", { livreurId: "L", livreurName: "Livreur", status: "En route" });
+check("un livreur ne peut pas prendre la commande avant l'arrivée", st("c1") === "En transit" && !get("orders", "c1").livreurId, get("orders", "c1"));
+let pd = await call("personal-data", "L2", {});
+check("avant l'arrivée, la commande n'apparaît pas chez les livreurs", !(pd.orders || []).some((o: any) => o.id === "c1"), (pd.orders || []).map((o: any) => o.id));
+rr = await ow("admin_owner", "c1", { status: "Arrivé" });
+check("l'équipe Sounsouni enregistre « Arrivé » (scan à Bamako)", st("c1") === "Arrivé", rr);
+pd = await call("personal-data", "L2", {});
+check("après l'arrivée, les livreurs la voient (sans le code secret)", (pd.orders || []).some((o: any) => o.id === "c1" && o.otp !== get("orders", "c1").otp), (pd.orders || []).filter((o: any) => o.id === "c1"));
+rr = await ow("L", "c1", { livreurId: "L", livreurName: "Livreur", status: "En route" });
+check("un livreur prend la commande arrivée (« En route »)", st("c1") === "En route" && get("orders", "c1").livreurId === "L", rr);
+rr = await ow("PO", "c1", { status: "Livrée" });
+check("le Pôle ne peut pas marquer « Livrée »", st("c1") === "En route", rr);
+rr = await ow("L", "c1", { status: "Livrée" }, { deliveryCode: "0000" });
+check("mauvais code du client : refusé", st("c1") === "En route", rr);
+rr = await ow("L", "c1", { status: "Livrée" }, { deliveryCode: get("orders", "c1").otp });
+check("bon code du client : livrée", st("c1") === "Livrée" && get("orders", "c1").deliveryVerified === true, rr);
+rr = await call("wallet-write", "admin_owner", { operation: "settle_order_payouts", orderId: "c1" });
+check("aucun versement automatique au vendeur étranger (payé par le Pôle)", rr.success === true && Object.keys(rr.settled || {}).length === 0, rr);
+const hist = (get("orders", "c1").statusHistory || []).map((h: any) => h.status);
+check("historique complet visible : En transit → Arrivé → En route → Livrée", ["En transit", "Arrivé", "En route", "Livrée"].every((x) => hist.includes(x)), hist);
 
 console.log("== Transitaire : annonce d'un colis");
 const parcel = (o: any = {}) => ({ id: "tp1", transitaireId: "T", trackingNumber: "CN001", recipientName: "Awa", recipientPhone: "70112233", weight: 7, zoneId: "pdr_bko", relaisShopId: "R", deliveryPaidBy: "destinataire", freightAmount: 100, freightRate: 84, deliveryFeeXof: 1, customsXof: 0, status: "Retiré", codeRetrait: "1111", ...o });

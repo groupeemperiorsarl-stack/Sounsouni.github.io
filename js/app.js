@@ -3119,6 +3119,14 @@ const STATUS_FLOW = ["Nouvelle", "Prête", "Récupérée", "En route", "Livrée"
 // "international") — totalement séparée du parcours local ci-dessus, géré
 // par l'Agent Sourcing plutôt que par un livreur classique.
 const INTERNATIONAL_STATUS_FLOW = ["Paiement reçu", "Vérification agent", "Transitaire", "En transit", "Arrivé"];
+// Parcours complet d'une commande internationale, jusqu'au client (affichage) :
+// le Pôle Sounsouni fait avancer jusqu'à « En transit » ; l'équipe Sounsouni
+// enregistre « Arrivé » en scannant le colis à Bamako ; puis un livreur
+// l'apporte (« En route ») et le remet contre le code secret du client (« Livrée »).
+const INTL_FULL_FLOW = ["Paiement reçu", "Vérification agent", "Transitaire", "En transit", "Arrivé", "En route", "Livrée"];
+function intlStatusIndex(st) { return INTL_FULL_FLOW.indexOf(st); }
+// Code à écrire sur le colis par le Pôle, scanné à l'arrivée à Bamako.
+function intlParcelCode(o) { return "SNS-" + String(o.id || "").slice(-5).toUpperCase(); }
 // Liste complète et centralisée de tous les statuts de commande possibles
 // (y compris les chemins d'exception, hors du parcours linéaire ci-dessus)
 // — pour qu'on ait toujours, en un seul endroit, la référence exacte de
@@ -7852,7 +7860,10 @@ function verifyDeliveryOTP(orderId, inputOTP) {
   if (!order) return false;
   submitOrderCode(order, "Livrée", inputOTP).then(function(r) {
     if (r !== "ok") { codeErrorToast(r, "toast_incorrect_otp"); return; }
-    settleOrderPayouts(order);
+    if (order.isInternational) {
+      var pole = poleAccountForOrder(order);
+      if (pole) addNotification("whatsapp", "✅ Commande #" + order.id.slice(-5).toUpperCase() + " remise au client (code vérifié).", pole, "agentsourcing");
+    } else settleOrderPayouts(order);
     showToast(t("toast_delivery_confirmed"));
   });
   return true;
@@ -8243,6 +8254,48 @@ function announceTransitaireParcel(d) {
   save();
   saveDoc("externalParcels", parcel);
   return parcel;
+}
+// Arrivée à Bamako d'une commande du Pôle Sounsouni : enregistrée par l'équipe
+// Sounsouni (scan du code SNS-XXXXX écrit sur le colis, ou saisie à la main).
+// Le client, le Pôle et le vendeur voient aussitôt « Arrivé ».
+function poleAccountForOrder(o) {
+  var sid = o && o.items && o.items[0] ? o.items[0].sellerId : null;
+  var seller = sid ? state.accounts.find(function(a) { return a.id === sid; }) : null;
+  return seller && seller.sourcingAgentId ? seller.sourcingAgentId : null;
+}
+function markIntlOrderArrived(o) {
+  if (!o || !o.isInternational || ["Vérification agent", "Transitaire", "En transit"].indexOf(o.status) === -1) return false;
+  o.status = "Arrivé";
+  o.statusHistory = (o.statusHistory || []).concat([{ status: "Arrivé", at: Date.now(), note: "Colis scanné à Bamako par l'équipe Sounsouni" }]);
+  o.arrivedBamakoAt = Date.now();
+  save();
+  secureOrderSaveDoc(o, true);
+  var ref = "#" + o.id.slice(-5).toUpperCase();
+  addNotification("whatsapp", "🛬 Votre commande " + ref + " est arrivée à Bamako ! L'équipe Sounsouni l'a prise en main ; un livreur va vous l'apporter. Gardez votre code secret pour la remise.", o.buyerId, "orders");
+  var poleId = poleAccountForOrder(o);
+  if (poleId) addNotification("whatsapp", "🛬 Commande " + ref + " (" + (o.buyerName || "client") + ") arrivée à Bamako et prise en main par l'équipe Sounsouni.", poleId, "agentsourcing");
+  return true;
+}
+function normReceptionCode(v) { return String(v || "").trim().toUpperCase().replace(/^SNS-?/, "").replace(/^#/, ""); }
+function receptionAtBamako(raw) {
+  var code = normReceptionCode(raw), rawUp = String(raw || "").trim().toUpperCase();
+  if (!code) { showToast("❌ Scannez ou écrivez le code du colis."); return; }
+  var order = (state.orders || []).find(function(o) { return o.isInternational && o.id.slice(-5).toUpperCase() === code; });
+  if (order) {
+    if (order.status === "Arrivé" || intlStatusIndex(order.status) > intlStatusIndex("Arrivé")) { showToast("ℹ️ Commande #" + code + " déjà arrivée (" + translateStatus(order.status) + ")."); return; }
+    if (markIntlOrderArrived(order)) { showToast("✅ Commande #" + code + " arrivée — client et Pôle Sounsouni prévenus."); state.receptionLastCode = ""; render(); }
+    else showToast("❌ Commande #" + code + " pas encore envoyée par le Pôle (état : " + translateStatus(order.status) + ").");
+    return;
+  }
+  var parcel = (state.externalParcels || []).find(function(p) { return p.transitaireId && (String(p.trackingNumber || "").toUpperCase() === rawUp || String(p.trackingNumber || "").toUpperCase() === code); });
+  if (parcel) {
+    if (parcel.status !== "Annoncé") { showToast("ℹ️ Colis " + parcel.trackingNumber + " déjà arrivé (" + transitStatusLabel(parcel) + ")."); return; }
+    markTransitParcelArrived(parcel);
+    showToast("✅ Colis " + parcel.trackingNumber + " arrivé — transitaire et destinataire prévenus.");
+    state.receptionLastCode = ""; render();
+    return;
+  }
+  showToast("❌ Aucun colis ni commande avec ce code.");
 }
 function findExternalParcel(id) { return (state.externalParcels || []).find(function(p) { return p.id === id; }) || null; }
 function saveExternalParcel(p) { save(); saveDoc("externalParcels", p); }
@@ -20505,8 +20558,10 @@ function renderAgentSourcing() {
   }
 
   var pending = intlOrders.filter(function(o) { return o.status === "Paiement reçu"; });
-  var inProgress = intlOrders.filter(function(o) { return o.status !== "Paiement reçu" && o.status !== "Arrivé"; });
-  var arrived = intlOrders.filter(function(o) { return o.status === "Arrivé"; });
+  var inProgress = intlOrders.filter(function(o) { return ["Vérification agent", "Transitaire", "En transit"].indexOf(o.status) !== -1; });
+  var arrived = intlOrders.filter(function(o) { return o.status === "Arrivé" || o.status === "En route"; });
+  var deliveredIntl = intlOrders.filter(function(o) { return o.status === "Livrée"; });
+  var otherIntl = intlOrders.filter(function(o) { return INTL_FULL_FLOW.indexOf(o.status) === -1; });
 
   function renderOrderCard(o) {
     var currentIdx = INTERNATIONAL_STATUS_FLOW.indexOf(o.status);
@@ -20522,15 +20577,35 @@ function renderAgentSourcing() {
     }
     cardHtml += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:6px;">' + t("as_shipping_mode_label") + ' : ' + (o.shippingMode === "aerien" ? t("opt_transport_aerien") : t("opt_transport_maritime")) + '</div>';
     cardHtml += '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:13px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border-color);"><span>' + Number(o.totalInr || 0).toLocaleString("fr-FR") + ' ' + orderIntlSym(o) + '</span><span style="color:var(--accent);">' + money(o.total) + '</span></div>';
+    // Frise complète : de la vérification jusqu'à la remise au client.
+    var poleIdx = intlStatusIndex(o.status);
+    cardHtml += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin:8px 0;">';
+    INTL_FULL_FLOW.forEach(function(st, si) {
+      var done = poleIdx >= si;
+      cardHtml += '<span style="font-size:10px;font-weight:700;padding:3px 7px;border-radius:999px;' + (done ? 'background:rgba(46,204,113,0.15);color:var(--success);' : 'background:var(--bg-body);color:var(--text-dim);') + '">' + (done ? '✓ ' : '') + esc(translateStatus(st)) + '</span>';
+    });
+    cardHtml += '</div>';
+    if (o.status === "Transitaire" || o.status === "En transit") {
+      cardHtml += '<div style="background:var(--bg-body);border-radius:10px;padding:8px 10px;margin:6px 0;text-align:center;">';
+      cardHtml += '<div style="font-size:11px;color:var(--text-dim);">Écrivez ce code sur le colis : l\'équipe Sounsouni le scanne à l\'arrivée à Bamako.</div>';
+      cardHtml += '<div style="font-size:20px;font-weight:900;letter-spacing:2px;color:var(--accent);">' + esc(intlParcelCode(o)) + '</div>';
+      cardHtml += '<div class="qr-code-slot" data-qr-value="' + esc(intlParcelCode(o)) + '" style="width:120px;height:120px;margin:6px auto 0;background:#fff;padding:6px;border-radius:10px;box-sizing:border-box;"></div>';
+      cardHtml += '</div>';
+    }
+    if (o.status === "Arrivé") cardHtml += '<div style="font-size:12px;color:var(--success);font-weight:700;margin:6px 0;"><i class="fa-solid fa-warehouse"></i> Arrivé à Bamako : colis scanné et pris en main par l\'équipe Sounsouni. Un livreur va l\'apporter au client.</div>';
+    if (o.status === "En route") cardHtml += '<div style="font-size:12px;color:var(--success);font-weight:700;margin:6px 0;"><i class="fa-solid fa-truck-fast"></i> En route chez le client avec le livreur' + (o.livreurName ? ' ' + esc(o.livreurName) : '') + '.</div>';
+    if (o.status === "Livrée") cardHtml += '<div style="font-size:12px;color:var(--success);font-weight:700;margin:6px 0;"><i class="fa-solid fa-circle-check"></i> Livrée : le client a donné son code secret au livreur.</div>';
     cardHtml += renderOrderStatusHistory(o);
     if (o.status === "Paiement reçu") {
       cardHtml += '<label class="field-label">' + t("as_proof_label") + '</label>';
       cardHtml += '<textarea class="input" rows="2" id="agent-proof-' + o.id + '" placeholder="' + t("as_proof_placeholder") + '">' + esc(o.agentProofNote || '') + '</textarea>';
       cardHtml += '<button class="btn-primary" style="margin-top:8px;width:100%;" data-action="agent-advance-status" data-value="' + o.id + '"><i class="fa-solid fa-check-double"></i> ' + t("as_verified_send_money") + '</button>';
-    } else if (nextStatus) {
+    } else if (nextStatus && nextStatus !== "Arrivé") {
       cardHtml += '<button class="btn-secondary" style="margin-top:10px;width:100%;" data-action="agent-advance-status" data-value="' + o.id + '"><i class="fa-solid fa-arrow-right"></i> ' + t("as_advance_to") + translateStatus(nextStatus) + '</button>';
-    } else {
-      cardHtml += '<div style="font-size:11px;color:var(--success);margin-top:8px;"><i class="fa-solid fa-circle-check"></i> ' + t("as_no_more_action") + '</div>';
+    } else if (o.status === "En transit") {
+      cardHtml += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:8px;"><i class="fa-solid fa-hourglass-half"></i> En route vers Bamako. Rien à faire : vous verrez « Arrivé » dès que l\'équipe Sounsouni aura scanné le colis.</div>';
+    } else if (o.status !== "Livrée") {
+      cardHtml += '<div style="font-size:11px;color:var(--text-dim);margin-top:8px;"><i class="fa-solid fa-eye"></i> Suivi en direct jusqu\'à la remise au client.</div>';
     }
     cardHtml += '</div>';
     return cardHtml;
@@ -20545,9 +20620,14 @@ function renderAgentSourcing() {
     for (var ip = 0; ip < inProgress.length; ip++) html += renderOrderCard(inProgress[ip]);
   }
   if (arrived.length > 0) {
-    html += '<div style="font-weight:800;font-size:14px;margin:18px 0 10px;color:var(--text-dim);"><i class="fa-solid fa-circle-check"></i> ' + t("status_Arrivé") + ' (' + arrived.length + ')</div>';
+    html += '<div style="font-weight:800;font-size:14px;margin:18px 0 10px;"><i class="fa-solid fa-warehouse"></i> À Bamako — livraison au client (' + arrived.length + ')</div>';
     for (var ar = 0; ar < arrived.length; ar++) html += renderOrderCard(arrived[ar]);
   }
+  if (deliveredIntl.length > 0) {
+    html += '<button class="link-btn" style="font-size:12.5px;margin:14px 0 8px;" data-action="toggle-pole-delivered"><i class="fa-solid ' + (state.showPoleDelivered ? 'fa-chevron-up' : 'fa-chevron-down') + '"></i> Livrées au client (' + deliveredIntl.length + ')</button>';
+    if (state.showPoleDelivered) for (var dl = 0; dl < deliveredIntl.length && dl < 40; dl++) html += renderOrderCard(deliveredIntl[dl]);
+  }
+  for (var ot = 0; ot < otherIntl.length; ot++) html += renderOrderCard(otherIntl[ot]);
 
   return html;
 }
@@ -20581,6 +20661,12 @@ function renderLivreur() {
   for (var i = 0; i < state.orders.length; i++) {
     var o = state.orders[i];
     if (terminalNonActive.indexOf(o.status) !== -1) continue;
+    // International : visible par les livreurs seulement après l'arrivée à Bamako.
+    if (o.isInternational) {
+      if (o.status === "Arrivé" || o.status === "En route") toDeliver.push(o);
+      else if (o.status === "Livrée" && o.livreurId === state.profile.id) delivered.push(o);
+      continue;
+    }
     var idx = statusProgressIndex(o.status);
     if (idx < statusProgressIndex("Prête")) {
       // Une commande jamais validée par son vendeur, qui traîne depuis
@@ -20716,10 +20802,10 @@ function renderLivreur() {
       
       // Stepper
       html += '<div class="status-stepper" style="display:flex;align-items:flex-start;">';
-      var buyerFlowForOrder = o2.isInternational ? INTERNATIONAL_STATUS_FLOW : STATUS_FLOW;
+      var buyerFlowForOrder = o2.isInternational ? ["Arrivé", "En route", "Livrée"] : STATUS_FLOW;
       for (var idx2 = 0; idx2 < buyerFlowForOrder.length; idx2++) {
         var sname = buyerFlowForOrder[idx2];
-        var isDone = idx2 <= statusProgressIndex(o2.status);
+        var isDone = o2.isInternational ? idx2 <= buyerFlowForOrder.indexOf(o2.status) : idx2 <= statusProgressIndex(o2.status);
         html += '<div class="stepper-step" style="display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;width:44px;">';
         html += '<div class="stepper-dot" style="width:24px;height:24px;border-radius:50%;background:' + (isDone ? 'rgba(46,204,113,0.15)' : 'var(--bg-body)') + ';border:1.5px solid ' + (isDone ? 'var(--success)' : 'var(--border-color)') + ';color:' + (isDone ? 'var(--success)' : 'var(--text-dim)') + ';display:flex;align-items:center;justify-content:center;font-size:10px;"><i class="fa-solid ' + STATUS_ICONS[sname] + '"></i></div>';
         html += '<div class="stepper-label" style="font-size:8.5px;font-weight:700;color:' + (isDone ? 'var(--text-primary)' : 'var(--text-dim)') + ';text-align:center;line-height:1.2;">' + translateStatus(sname) + '</div>';
@@ -20802,7 +20888,9 @@ function renderLivreur() {
       }
       html += '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:13px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border-color)"><span>' + t("livreur_delivery_earning") + '</span><span style="color:var(--accent)">' + money(o2.deliveryFee) + '</span></div>';
       // Paiement à la livraison : le livreur doit savoir combien demander au client.
-      if (o2.deliveryMode !== "relais" && typeof o2.total === "number" && o2.payment !== "ligdicash" && o2.payment !== "portefeuille") {
+      if (o2.isInternational) {
+        html += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:4px;"><i class="fa-solid fa-plane-arrival"></i> Colis venu de l\'étranger, déjà payé — à récupérer à l\'entrepôt Sounsouni (' + esc(intlParcelCode(o2)) + '). Rien à encaisser.</div>';
+      } else if (o2.deliveryMode !== "relais" && typeof o2.total === "number" && o2.payment !== "ligdicash" && o2.payment !== "portefeuille") {
         html += '<div style="display:flex;justify-content:space-between;font-weight:800;font-size:13px;margin-top:4px;"><span><i class="fa-solid fa-money-bill-wave"></i> ' + t("livreur_to_collect") + '</span><span>' + orderMoney(o2.total, o2) + '</span></div>';
       }
       if (o2.deliveryMode === "relais") {
@@ -20836,6 +20924,7 @@ function renderLivreur() {
         var st = LIVREUR_STATUS_FLOW[n];
         if (o2.deliveryMode === "relais" && st === "Livrée") continue; // cette étape appartient à la boutique
         if (st === "Prête") continue; // c'est le vendeur qui valide, pas le livreur
+        if (o2.isInternational && st !== "En route") continue; // international : prendre la course, puis code du client
         if (st === "Livrée" && o2.otp) continue; // uniquement via la saisie du code OTP, plus haut sur la carte
         html += '<button class="' + (o2.status === st ? 'active' : '') + '" data-action="set-order-status" data-order="' + o2.id + '" data-value="' + st + '"><i class="fa-solid ' + STATUS_ICONS[st] + '"></i> ' + st + '</button>';
       }
@@ -21023,6 +21112,12 @@ function renderTransitaireParcelCard(p, forAdmin) {
   html += trRow('Le destinataire paie', money(due), true);
   if (forAdmin) html += trRow('Transitaire', esc(p.transitaireName || '') + ' (' + esc(p.transitaireCountry || '') + ')');
   if (!forAdmin && p.status !== "Retiré" && p.status !== "Annulé") html += '<div style="font-size:11px;background:var(--bg-body);border-radius:8px;padding:6px 8px;margin-top:6px;">Code de retrait à donner au destinataire : <strong style="letter-spacing:2px;">' + esc(p.codeRetrait || '—') + '</strong></div>';
+  if (!forAdmin && Array.isArray(p.statusHistory) && p.statusHistory.length) {
+    var trLabels = { "Annoncé": "Annoncé à Sounsouni", "Créé": "Arrivé à Bamako — scanné par l'équipe Sounsouni", "Pris en charge par le livreur": "Pris en charge par un livreur", "Reçu au point de retrait": "Déposé au Point de Retrait", "Disponible pour retrait": "Disponible : destinataire prévenu", "Retiré": "Remis au destinataire (code vérifié)", "Retour à l'expéditeur": "Retour à l'expéditeur", "Annulé": "Annulé" };
+    html += '<div style="margin-top:8px;border-left:2px solid var(--success);padding-left:8px;">';
+    p.statusHistory.forEach(function(h) { html += '<div style="font-size:10.5px;margin-bottom:3px;"><strong>' + esc(trLabels[h.status] || h.status) + '</strong> <span style="color:var(--text-dim);">· ' + fmtDateTime(h.at) + '</span></div>'; });
+    html += '</div>';
+  }
   if (p.transitaireAlerted && p.status !== "Retiré") html += '<div style="font-size:11px;color:var(--danger);margin-top:6px;"><i class="fa-solid fa-phone-slash"></i> Destinataire injoignable après ' + (p.callAttempts || 0) + ' appels — merci de le contacter.</div>';
   if (!forAdmin && p.status === "Annoncé") html += '<button class="link-btn" style="font-size:11.5px;color:var(--danger);margin-top:6px;" data-action="transit-cancel-parcel" data-value="' + p.id + '"><i class="fa-solid fa-ban"></i> Annuler ce colis</button>';
   html += '</div>';
@@ -21105,7 +21200,22 @@ function renderAdminTransitairesSection() {
   var isOwner = state.adminIsOwner, cfg = getTransitaireConfig();
   var announced = (state.externalParcels || []).filter(function(p) { return p.transitaireId && p.status === "Annoncé"; });
   var toCall = parcelsToCall(), alerted = parcelsTransitaireAlerted();
-  var html = '<div class="glass-card" style="padding:14px;margin-bottom:16px;min-width:0;">';
+  var intlOnTheWay = (state.orders || []).filter(function(o) { return o.isInternational && (o.status === "Transitaire" || o.status === "En transit"); });
+  var html = '<div class="glass-card" style="padding:14px;margin-bottom:16px;min-width:0;border:1.5px solid var(--accent);">';
+  html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-barcode"></i> Réception à Bamako</div>';
+  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:8px;">Scannez le code écrit sur le colis (commande Pôle Sounsouni « SNS-… » ou numéro de suivi d\'un transitaire), ou tapez-le. Le client, le Pôle ou le transitaire voient aussitôt « Arrivé ».</div>';
+  html += '<div style="display:flex;gap:6px;min-width:0;"><input class="input" id="reception-code-input" placeholder="SNS-AB12C ou n° de suivi" value="' + esc(state.receptionLastCode || "") + '" data-bind="receptionLastCode" style="flex:1;min-width:0;text-transform:uppercase;" />';
+  html += '<button class="btn-secondary" style="flex:0 0 auto;width:auto;padding:8px 12px;" data-action="open-scanner" data-target="reception-code-input" data-confirm-action="reception-validate" data-confirm-value=""><i class="fa-solid fa-qrcode"></i></button>';
+  html += '<button class="btn-primary" style="flex:0 0 auto;width:auto;padding:8px 14px;" data-action="reception-validate">Valider</button></div>';
+  if (intlOnTheWay.length) {
+    html += '<div style="font-weight:700;font-size:12.5px;margin:12px 0 6px;">Commandes Pôle Sounsouni en route vers Bamako (' + intlOnTheWay.length + ')</div>';
+    intlOnTheWay.forEach(function(o) {
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--bg-body);border-radius:10px;padding:8px 10px;margin-bottom:6px;min-width:0;"><div style="min-width:0;"><div style="font-weight:700;font-size:12px;">' + esc(intlParcelCode(o)) + ' — ' + esc(o.buyerName || '') + '</div><div style="font-size:10.5px;color:var(--text-dim);">' + esc(o.intlCountry || o.country || '') + ' · ' + esc(translateStatus(o.status)) + '</div></div>';
+      html += '<button class="btn-secondary" style="flex:0 0 auto;width:auto;padding:6px 10px;font-size:11.5px;" data-action="intl-order-arrived" data-value="' + esc(o.id) + '">Arrivé</button></div>';
+    });
+  }
+  html += '</div>';
+  html += '<div class="glass-card" style="padding:14px;margin-bottom:16px;min-width:0;">';
   html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-plane-arrival"></i> Transitaires</div>';
   html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;">Colis annoncés depuis l\'étranger, à récupérer à l\'aéroport ou au port, puis livrés par le réseau Sounsouni.</div>';
 
@@ -26011,11 +26121,11 @@ function renderAdminOrderModal() {
   html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:16px;">' + new Date(o.createdAt).toLocaleString("fr-FR") + '</div>';
   
   // Stepper
-  var flowForOrder = o.isInternational ? INTERNATIONAL_STATUS_FLOW : (o.deliveryMode === "relais" ? RELAIS_STATUS_FLOW : STATUS_FLOW);
-  html += '<div class="status-stepper" style="display:flex;align-items:flex-start;">';
+  var flowForOrder = o.isInternational ? INTL_FULL_FLOW : (o.deliveryMode === "relais" ? RELAIS_STATUS_FLOW : STATUS_FLOW);
+  html += '<div class="status-stepper" style="display:flex;align-items:flex-start;overflow-x:auto;">';
   for (var s = 0; s < flowForOrder.length; s++) {
     var sname = flowForOrder[s];
-    var isDone = s <= statusProgressIndex(o.status);
+    var isDone = o.isInternational ? s <= intlStatusIndex(o.status) : s <= statusProgressIndex(o.status);
     html += '<div class="stepper-step" style="display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;width:44px;">';
     html += '<div class="stepper-dot" style="width:24px;height:24px;border-radius:50%;background:' + (isDone ? 'rgba(46,204,113,0.15)' : 'var(--bg-body)') + ';border:1.5px solid ' + (isDone ? 'var(--success)' : 'var(--border-color)') + ';color:' + (isDone ? 'var(--success)' : 'var(--text-dim)') + ';display:flex;align-items:center;justify-content:center;font-size:10px;"><i class="fa-solid ' + STATUS_ICONS[sname] + '"></i></div>';
     html += '<div class="stepper-label" style="font-size:8.5px;font-weight:700;color:' + (isDone ? 'var(--text-primary)' : 'var(--text-dim)') + ';text-align:center;line-height:1.2;">' + translateStatus(sname) + '</div>';
@@ -26258,6 +26368,12 @@ function onScanDetected(value) {
   if (state.scannerAutoConfirmAction === "confirm-external-parcel-retrieval") {
     state.showScannerModal = false;
     confirmExternalParcelRetrieval(state.scannerAutoConfirmValue, value);
+    return;
+  }
+  if (state.scannerAutoConfirmAction === "reception-validate") {
+    state.showScannerModal = false;
+    state.receptionLastCode = value;
+    receptionAtBamako(value);
     return;
   }
   if (state.scannerAutoConfirmAction === "verify-otp") {
@@ -27769,6 +27885,7 @@ root.addEventListener("click", function(e) {
       var curIdx = INTERNATIONAL_STATUS_FLOW.indexOf(intlOrder.status);
       if (curIdx === -1 || curIdx >= INTERNATIONAL_STATUS_FLOW.length - 1) break;
       var newStatus = INTERNATIONAL_STATUS_FLOW[curIdx + 1];
+      if (newStatus === "Arrivé" && !state.adminUnlocked) { showToast("ℹ️ L'arrivée est enregistrée par l'équipe Sounsouni quand elle scanne le colis à Bamako."); break; }
       intlOrder.status = newStatus;
       intlOrder.statusHistory = intlOrder.statusHistory || [];
       intlOrder.statusHistory.push({ status: newStatus, at: Date.now(), note: null });
@@ -31966,6 +32083,17 @@ root.addEventListener("click", function(e) {
       if (retraitInput) confirmRelaisRetrait(value, retraitInput.value);
       break;
     }
+    case "reception-validate": {
+      var rcEl = document.getElementById("reception-code-input");
+      receptionAtBamako(rcEl ? rcEl.value : state.receptionLastCode);
+      break;
+    }
+    case "intl-order-arrived": {
+      var iaO = (state.orders || []).find(function(o) { return o.id === value; });
+      if (iaO && confirm("Commande " + intlParcelCode(iaO) + " arrivée à Bamako ?") && markIntlOrderArrived(iaO)) { showToast("✅ Arrivée enregistrée — client et Pôle Sounsouni prévenus."); render(); }
+      break;
+    }
+    case "toggle-pole-delivered": state.showPoleDelivered = !state.showPoleDelivered; render(); break;
     case "open-sourcing-space": state.showRoleMenu = false; if (isCurrentProfileSourcingAgent()) applyRoleSwitch("agent_sourcing"); render(); window.scrollTo(0, 0); break;
     case "open-transitaire-space": state.showRoleMenu = false; state.view = "transitaire"; render(); window.scrollTo(0, 0); break;
     case "transit-open-form": state.showTransitForm = true; state.transitDraft = emptyTransitDraft(); render(); break;

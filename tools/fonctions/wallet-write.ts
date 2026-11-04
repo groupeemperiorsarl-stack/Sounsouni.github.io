@@ -1,5 +1,5 @@
 // ============================================================
-// Fonction serveur : wallet-write (version 2026-10-29, audit sécurité)
+// Fonction serveur : wallet-write (version 2026-11-04 : rien versé ici pour une commande internationale)
 // Toutes les opérations d'argent du portefeuille et des gains.
 // Nouveau (failles ARG-1, ARG-2, ARG-3, ARG-5) :
 // - Chaque mouvement d'argent passe par la fonction SQL sns_wallet_batch :
@@ -257,6 +257,8 @@ Deno.serve(async (req) => {
       const order: any = orderId ? await getDoc("orders", orderId) : null;
       if (!order) return badRequest("order_not_found");
       if (order.status !== "Livrée") return badRequest("order_not_delivered");
+      // International : le vendeur étranger est payé sur place par le Pôle Sounsouni, jamais ici.
+      if (order.isInternational === true) return ok({ settled: {}, skipped: { tous: "international : vendeur payé sur place par le Pôle Sounsouni" } });
       const staffCaller = await canManagePayouts(callerId, db);
       // Livraison prouvée par le serveur (code saisi) — ou produit numérique remis après paiement — ou Admin.
       if (!(order.deliveryVerified === true || order.isDigital === true || staffCaller)) return badRequest("delivery_not_verified");

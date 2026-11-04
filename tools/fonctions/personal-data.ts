@@ -216,6 +216,10 @@ if (r) o.relaisShopInfo = { name: r.shopName || r.name || "", phone: r.shopPhone
 }
 });
 }
+// Commande internationale : les livreurs ne la voient qu'une fois arrivée à Bamako.
+const INTL_COURIER_OK = ["Arrivé", "En route", "Livrée"];
+const visibleOrders = orders.filter((o: any) => !(o && o.isInternational && isCourier && !INTL_COURIER_OK.includes(o.status) && !idList.includes(o.buyerId) && !idList.includes(o.livreurId) && !(Array.isArray(o.sellerIds) && o.sellerIds.some((id: string) => idList.includes(id)))));
+orders.length = 0; visibleOrders.forEach((o: any) => orders.push(o));
 orders.forEach((o: any) => maskCodes(o, idList, me.role === "livreur"));
 // Fiches privées : seulement les siennes.
 const privates: Record<string, any[]> = {};
