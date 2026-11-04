@@ -1,0 +1,5 @@
+Fabrication des vidéos « Espace Transitaire » et « Pôle Sounsouni » (guides/transitaire, guides/pole).
+Chaîne : voix Gemini (WAV) -> mots.py (Whisper, mots horodatés) -> cut.py (retire les balises lues à voix haute, cuts.json)
+-> align.py (texte écrit = étapes, calé sur la voix) -> capture.py (écrans réels de l'app, données de démo harness_seed.js, shots.py)
+-> layers.py (fond, sous-titres karaoké, illustrations ; stage.html + story.py) -> compose.py (montage 720x1280, 30 i/s) -> split.py (etape-NN.mp4 + complet.mp4).
+Les chemins de travail pointent vers un dossier temporaire : à adapter avant de relancer.
