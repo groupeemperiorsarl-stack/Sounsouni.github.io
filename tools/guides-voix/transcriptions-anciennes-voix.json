@@ -1,0 +1,1577 @@
+{
+ "acheter/etape-01": {
+  "duree": 9.1,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.14,
+    "text": "Dans le marché, faites défiler l'écran pour voir tous les articles."
+   },
+   {
+    "start": 5.14,
+    "end": 7.84,
+    "text": "Touchez l'article qui vous plaît."
+   }
+  ]
+ },
+ "acheter/etape-02": {
+  "duree": 16.11,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.0,
+    "text": "Vous voyez ces photos, touchez une photo pour l'agrandir."
+   },
+   {
+    "start": 5.0,
+    "end": 9.0,
+    "text": "Voici le prix de l'article en France SOFA."
+   },
+   {
+    "start": 9.0,
+    "end": 15.0,
+    "text": "Ici le délai de livraison à Bamako sous 24 heures dans les régions en un à trois jours."
+   }
+  ]
+ },
+ "acheter/etape-03": {
+  "duree": 10.98,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 4.0,
+    "text": "Pour en prendre plus, touchez le bouton Plus."
+   },
+   {
+    "start": 4.0,
+    "end": 7.0,
+    "text": "La quantité passe à deux."
+   },
+   {
+    "start": 7.0,
+    "end": 10.0,
+    "text": "Pour en enlever, touchez le bouton Moins."
+   }
+  ]
+ },
+ "acheter/etape-04": {
+  "duree": 10.15,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.0,
+    "text": "Toucher ajouter, l'article va dans votre panier."
+   },
+   {
+    "start": 5.0,
+    "end": 9.0,
+    "text": "Un message confirme l'ajout, et le chiffre sur le panier augmente."
+   }
+  ]
+ },
+ "acheter/etape-05": {
+  "duree": 7.64,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 7.0,
+    "text": "Si vous voulez seulement cet article, touchez acheter maintenant. Vous passez directement à la livraison."
+   }
+  ]
+ },
+ "acheter/etape-06": {
+  "duree": 20.13,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 4.0,
+    "text": "Pour continuer, touchez le panier."
+   },
+   {
+    "start": 4.0,
+    "end": 9.0,
+    "text": "Votre panier montre chaque article, avec sa boutique et son prix."
+   },
+   {
+    "start": 9.0,
+    "end": 13.0,
+    "text": "Vous pouvez encore changer la quantité avec moins et plus."
+   },
+   {
+    "start": 13.0,
+    "end": 16.0,
+    "text": "La croix rouge retire l'article du panier."
+   },
+   {
+    "start": 16.0,
+    "end": 20.0,
+    "text": "Quand tout est bon, touchez passer à la livraison."
+   }
+  ]
+ },
+ "acheter/etape-07": {
+  "duree": 12.03,
+  "segments": [
+   {
+    "start": 1.0,
+    "end": 6.0,
+    "text": "Cette page se remplit dans l'ordre, votre adresse, le mode de livraison puis le paiement."
+   },
+   {
+    "start": 6.0,
+    "end": 8.0,
+    "text": "Commencez par votre adresse."
+   },
+   {
+    "start": 8.0,
+    "end": 11.0,
+    "text": "À côté des adresses, touchez ajouter."
+   }
+  ]
+ },
+ "acheter/etape-08": {
+  "duree": 14.54,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 8.66,
+    "text": "Choisissez votre ville, ici Bamako, si vous habitez dans une région comme Segou, choisissez"
+   },
+   {
+    "start": 8.66,
+    "end": 13.24,
+    "text": "votre ville, le colis voyage en car, et vous le récupérez à la gare routière."
+   }
+  ]
+ },
+ "acheter/etape-09": {
+  "duree": 11.91,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 6.68,
+    "text": "A Bamako, choisissez d'abord votre commune, puis choisissez votre quartier."
+   },
+   {
+    "start": 6.68,
+    "end": 10.68,
+    "text": "Le prix de la livraison jusqu'à chez vous s'affiche aussitôt."
+   }
+  ]
+ },
+ "acheter/etape-10": {
+  "duree": 11.54,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.36,
+    "text": "Écrivez un endroit que tout le monde connaît près de chez vous, par exemple, face à la"
+   },
+   {
+    "start": 5.36,
+    "end": 6.36,
+    "text": "grande mosquée."
+   },
+   {
+    "start": 6.36,
+    "end": 10.28,
+    "text": "Vérifiez le numéro ou le livreur peut vous appeler."
+   }
+  ]
+ },
+ "acheter/etape-11": {
+  "duree": 20.48,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 6.0,
+    "text": "Touchez localiser ma position, le livreur vous trouvera plus vite."
+   },
+   {
+    "start": 6.0,
+    "end": 12.0,
+    "text": "La carte montre où vous êtes, si besoin, déplacez le repère avec le doigt."
+   },
+   {
+    "start": 12.0,
+    "end": 15.0,
+    "text": "Puis, touchez confirmer ces positions."
+   },
+   {
+    "start": 15.0,
+    "end": 20.0,
+    "text": "Pour garder cette adresse pour vos prochaines commandes, touchez oui."
+   }
+  ]
+ },
+ "acheter/etape-12": {
+  "duree": 24.89,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 3.0,
+    "text": "Votre adresse est complète."
+   },
+   {
+    "start": 3.0,
+    "end": 7.0,
+    "text": "Maintenant, le prix de chaque mode de livraison s'affiche."
+   },
+   {
+    "start": 7.0,
+    "end": 11.0,
+    "text": "Express, le livreur vous apporte le colis chez vous."
+   },
+   {
+    "start": 11.0,
+    "end": 13.0,
+    "text": "Voici son prix."
+   },
+   {
+    "start": 13.0,
+    "end": 18.0,
+    "text": "Point de retrait, vous récupérez le colis dans une boutique de votre quartier."
+   },
+   {
+    "start": 18.0,
+    "end": 21.0,
+    "text": "C'est souvent beaucoup moins cher."
+   },
+   {
+    "start": 21.0,
+    "end": 24.0,
+    "text": "Pour être livré chez vous, gardez Express."
+   }
+  ]
+ },
+ "acheter/etape-13": {
+  "duree": 17.09,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.0,
+    "text": "Paiement à la livraison. Vous payez en espèces quand vous recevez le colis."
+   },
+   {
+    "start": 5.0,
+    "end": 11.0,
+    "text": "Orange monnaie ou Mouve monnaie. Vous payez tout de suite, depuis votre téléphone."
+   },
+   {
+    "start": 11.0,
+    "end": 16.0,
+    "text": "Touchez le mode que vous préférez. Aucun mot de passe n'est demandé pour acheter."
+   }
+  ]
+ },
+ "acheter/etape-14": {
+  "duree": 10.45,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 6.0,
+    "text": "En bas, vérifier le total. Le prix des articles plus la livraison."
+   },
+   {
+    "start": 6.0,
+    "end": 10.0,
+    "text": "Toucher Confirmer pour passer la commande."
+   }
+  ]
+ },
+ "acheter/etape-15": {
+  "duree": 11.19,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.0,
+    "text": "Votre commande apparaît dans achats, ongles et en cours."
+   },
+   {
+    "start": 5.0,
+    "end": 7.0,
+    "text": "Voici votre code secret."
+   },
+   {
+    "start": 7.0,
+    "end": 11.0,
+    "text": "Donnez-le au livreur seulement quand vous avez le colis en main."
+   }
+  ]
+ },
+ "acheter/etape-16": {
+  "duree": 33.69,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 3.68,
+    "text": "Sur la page de livraison, touchez point de retrait."
+   },
+   {
+    "start": 3.68,
+    "end": 8.76,
+    "text": "Choisissez votre commune, puis votre quartier."
+   },
+   {
+    "start": 8.76,
+    "end": 13.72,
+    "text": "Ou touchez ce bouton pour trouver les boutiques les plus proches de vous."
+   },
+   {
+    "start": 13.72,
+    "end": 18.64,
+    "text": "La liste montre nos boutiques point de retrait avec leurs distances et leurs numéros."
+   },
+   {
+    "start": 18.64,
+    "end": 20.68,
+    "text": "Pouchez celles qui vous arrangent."
+   },
+   {
+    "start": 20.68,
+    "end": 24.48,
+    "text": "Le prix plus bas s'affiche sur le bouton point de retrait."
+   },
+   {
+    "start": 24.48,
+    "end": 26.6,
+    "text": "Touchez confirmer."
+   },
+   {
+    "start": 26.6,
+    "end": 32.4,
+    "text": "Vous irez chercher le colis dans cette boutique seulement après avoir reçu la notification qu'il est arrivé."
+   }
+  ]
+ },
+ "decouvrir/etape-01": {
+  "duree": 9.01,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.0,
+    "text": "Bienvenue sur SonSony, le marché ouest-africain né au Mali."
+   },
+   {
+    "start": 5.0,
+    "end": 8.0,
+    "text": "Voici la page d'accueil, le marché."
+   }
+  ]
+ },
+ "decouvrir/etape-02": {
+  "duree": 15.81,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.0,
+    "text": "Pour trouver un article, écrivez son nom dans la barre de recherche."
+   },
+   {
+    "start": 5.0,
+    "end": 10.0,
+    "text": "Ce bouton scanne le code barre d'un produit avec l'appareil photo."
+   },
+   {
+    "start": 10.0,
+    "end": 15.0,
+    "text": "Et celui-ci ouvre les filtres prix, ville, vendeur."
+   }
+  ]
+ },
+ "decouvrir/etape-03": {
+  "duree": 10.63,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.76,
+    "text": "Plus bas, touchez une catégorie, par exemple mode femme, pour ne voir que ces articles."
+   },
+   {
+    "start": 5.76,
+    "end": 9.36,
+    "text": "Seuls les articles de ces catégories s'affichent."
+   }
+  ]
+ },
+ "decouvrir/etape-04": {
+  "duree": 15.44,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 4.44,
+    "text": "Chaque carte montre la photo, le nom et le prix."
+   },
+   {
+    "start": 4.44,
+    "end": 7.2,
+    "text": "Touchez-la pour voir l'article et l'acheter."
+   },
+   {
+    "start": 7.2,
+    "end": 9.44,
+    "text": "Le guide Acheter un article vous montre tout."
+   },
+   {
+    "start": 9.44,
+    "end": 14.2,
+    "text": "Le cœur garde l'article dans vos favoris, pour le retrouver plus tard."
+   }
+  ]
+ },
+ "decouvrir/etape-05": {
+  "duree": 15.98,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 8.16,
+    "text": "En bas de l'écran, marchés vous ramènent ici, favoris, les articles que vous aimez,"
+   },
+   {
+    "start": 8.16,
+    "end": 14.76,
+    "text": "paniers, les articles prêts à être commandés, achats, vos commands et leur suivi."
+   }
+  ]
+ },
+ "decouvrir/etape-06": {
+  "duree": 13.19,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 6.64,
+    "text": "La cloche affiche vos notifications, commande confirmée, livreur en route, paiement reçu."
+   },
+   {
+    "start": 6.64,
+    "end": 11.92,
+    "text": "La bulle ouvre vos messages avec les vendeurs et le service client."
+   }
+  ]
+ },
+ "decouvrir/etape-07": {
+  "duree": 17.39,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.0,
+    "text": "Touchez l'icône en haut à droite pour ouvrir votre profil."
+   },
+   {
+    "start": 5.0,
+    "end": 8.0,
+    "text": "Mes informations et adresses."
+   },
+   {
+    "start": 8.0,
+    "end": 12.0,
+    "text": "Votre nom, votre téléphone et vos adresses de livraison."
+   },
+   {
+    "start": 12.0,
+    "end": 14.0,
+    "text": "Historique."
+   },
+   {
+    "start": 14.0,
+    "end": 17.0,
+    "text": "Tous vos achats et toutes vos ventes."
+   }
+  ]
+ },
+ "decouvrir/etape-08": {
+  "duree": 13.37,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 7.0,
+    "text": "Le SonSony Portefeuille garde votre argent, vente, remboursement, recharge."
+   },
+   {
+    "start": 7.0,
+    "end": 12.0,
+    "text": "La SonSony carte sert à payer directement chez un commerçant sans espèce."
+   }
+  ]
+ },
+ "decouvrir/etape-09": {
+  "duree": 11.7,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.0,
+    "text": "Guide d'utilisation, tous ces guides en vidéo à tout moment."
+   },
+   {
+    "start": 5.0,
+    "end": 11.0,
+    "text": "Ici, choisissez la langue de l'application, français, anglais ou indi."
+   }
+  ]
+ },
+ "decouvrir/etape-10": {
+  "duree": 29.88,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 4.4,
+    "text": "De retour au marché, touchez le menu en haut à gauche."
+   },
+   {
+    "start": 4.4,
+    "end": 8.64,
+    "text": "Acheteurs, pour acheter, c'est le mode normal."
+   },
+   {
+    "start": 8.64,
+    "end": 13.8,
+    "text": "Vendeurs, ouvrez votre boutique et publiez vos articles."
+   },
+   {
+    "start": 13.8,
+    "end": 18.48,
+    "text": "Livreurs et points de retrait souffrent après une inscription."
+   },
+   {
+    "start": 18.48,
+    "end": 23.12,
+    "text": "Touchez devenir livreur pour livrer les commandes et gagner de l'argent."
+   },
+   {
+    "start": 23.12,
+    "end": 28.6,
+    "text": "Ou devenir point de retrait, votre boutique reçoit les colis des clients du quartier."
+   },
+   {
+    "start": 28.6,
+    "end": 33.6,
+    "text": "Sous-titrage ST'501"
+   }
+  ]
+ },
+ "decouvrir/etape-11": {
+  "duree": 5.76,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 4.0,
+    "text": "Vous connaissez maintenant son toni. Bonnes affaires !"
+   }
+  ]
+ },
+ "gestion/etape-01": {
+  "duree": 21.39,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 9.0,
+    "text": "Samsung e-Gestion tient les comptes de votre boutique. Vente, stock, dépenses, dettes et comptabilité. C'est gratuit."
+   },
+   {
+    "start": 9.0,
+    "end": 12.0,
+    "text": "Touchez le menu en haut à gauche."
+   },
+   {
+    "start": 12.0,
+    "end": 14.0,
+    "text": "Touchez créer ma gestion."
+   },
+   {
+    "start": 14.0,
+    "end": 20.0,
+    "text": "Écrivez le nom de votre boutique puis validez. Votre gestion est prête."
+   }
+  ]
+ },
+ "gestion/etape-02": {
+  "duree": 22.71,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 4.0,
+    "text": "L'accueil vous demande simplement, que voulez-vous noter ?"
+   },
+   {
+    "start": 4.0,
+    "end": 7.0,
+    "text": "Une vente, le stock baisse tout seul."
+   },
+   {
+    "start": 7.0,
+    "end": 13.0,
+    "text": "Une dépense, loyer, transport, électricité, salaire."
+   },
+   {
+    "start": 13.0,
+    "end": 17.0,
+    "text": "Un achat de marchandises à revendre, le stock monte."
+   },
+   {
+    "start": 17.0,
+    "end": 22.0,
+    "text": "Et les dettes, un client vous doit, ou vous devez à un fournisseur."
+   }
+  ]
+ },
+ "gestion/etape-03": {
+  "duree": 21.32,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 8.64,
+    "text": "Commencez par vos articles, touchez un nouvel article, écrivez le nom de l'article, son"
+   },
+   {
+    "start": 8.64,
+    "end": 16.56,
+    "text": "prix de vente et son prix d'achat, la gestion calcule votre bénéfice, puis la quantité"
+   },
+   {
+    "start": 16.56,
+    "end": 20.0,
+    "text": "que vous avez déjà en stock, touchez enregistrer."
+   }
+  ]
+ },
+ "gestion/etape-04": {
+  "duree": 21.9,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 6.4,
+    "text": "• Un client achète, touchez une vente • Touchez l'article vendu"
+   },
+   {
+    "start": 6.4,
+    "end": 12.4,
+    "text": "• Il en prend deux, touchez plus • Écrivez le nom du client"
+   },
+   {
+    "start": 12.4,
+    "end": 18.24,
+    "text": "• Choisissez comment il paie, espèce, orange monnaie, mouv' monnaie ou à crédit"
+   },
+   {
+    "start": 18.24,
+    "end": 20.36,
+    "text": "• Touchez enregistrer"
+   }
+  ]
+ },
+ "gestion/etape-05": {
+  "duree": 23.57,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 8.76,
+    "text": "Le reçu se crée tout seul avec son numéro qui se suit, le nom du client, le total et"
+   },
+   {
+    "start": 8.76,
+    "end": 14.92,
+    "text": "la somme écrite en lettres, et le cachet de votre boutique, vous pouvez l'activer"
+   },
+   {
+    "start": 14.92,
+    "end": 15.92,
+    "text": "ou non."
+   },
+   {
+    "start": 15.92,
+    "end": 22.28,
+    "text": "Envoyez le reçu en image au client, ou imprimez-le ou téléchargez-le en Word."
+   }
+  ]
+ },
+ "gestion/etape-06": {
+  "duree": 11.77,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 11.0,
+    "text": "Sur l'accueil, vos chiffres se mettent à jour, le chiffre d'affaires du jour, le bénéfice du mois et l'argent en caisse."
+   }
+  ]
+ },
+ "gestion/etape-07": {
+  "duree": 20.62,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 8.0,
+    "text": "Le compte de résultat montre ce que vous avez gagné ou perdu sur la période."
+   },
+   {
+    "start": 8.0,
+    "end": 14.0,
+    "text": "Le bilan, le journal et le grand livre se remplissent tout seul selon les règles OADA."
+   },
+   {
+    "start": 14.0,
+    "end": 19.0,
+    "text": "Exportez les entableurs pour votre comptable ou imprimez-les."
+   }
+  ]
+ },
+ "gestion/etape-08": {
+  "duree": 21.64,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 7.8,
+    "text": "Touchez plus. Vous y trouvez vos clients, vos fournisseurs et vos employés."
+   },
+   {
+    "start": 7.8,
+    "end": 14.28,
+    "text": "Touchez membre pour inviter quelqu'un. Écrivez son numéro, choisissez son rôle,"
+   },
+   {
+    "start": 14.28,
+    "end": 18.0,
+    "text": "comptable, caissier ou partenaire, puis touchez invité."
+   },
+   {
+    "start": 18.0,
+    "end": 20.4,
+    "text": "Chacun voit seulement ce que son rôle permet."
+   }
+  ]
+ },
+ "gestion/etape-09": {
+  "duree": 13.44,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 3.4,
+    "text": "D'en plus, touchez Réglages."
+   },
+   {
+    "start": 3.4,
+    "end": 10.2,
+    "text": "Ajoutez votre logo, l'adresse, le téléphone, le zrc-sum, le nief ou le compte bancaire."
+   },
+   {
+    "start": 10.2,
+    "end": 12.2,
+    "text": "Il s'affiche sur vos reçus et vos factures."
+   }
+  ]
+ },
+ "gestion/etape-10": {
+  "duree": 6.83,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.56,
+    "text": "Votre gestion marche même sans Internet, tout s'envoi dès que la connexion revient."
+   }
+  ]
+ },
+ "ouvrirpdr/etape-01": {
+  "duree": 10.03,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 6.04,
+    "text": "Un point de retraite est une boutique du quartier qui garde les colis des clients SonSony jusqu'à"
+   },
+   {
+    "start": 6.04,
+    "end": 8.64,
+    "text": "ce qu'ils viennent les chercher. Vous pouvez en devenir un."
+   }
+  ]
+ },
+ "ouvrirpdr/etape-02": {
+  "duree": 7.11,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 3.0,
+    "text": "Touchez le menu en haut à gauche."
+   },
+   {
+    "start": 4.0,
+    "end": 6.0,
+    "text": "Touchez devenir point de retrait."
+   }
+  ]
+ },
+ "ouvrirpdr/etape-03": {
+  "duree": 31.23,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 6.48,
+    "text": "Lisez bien le contrat. Vous gagnez 20% du prix de la livraison de chaque colis remis"
+   },
+   {
+    "start": 6.48,
+    "end": 12.7,
+    "text": "au client. Vous êtes payé une fois par semaine, le mardi. Les frais de transfert sont payés"
+   },
+   {
+    "start": 12.7,
+    "end": 19.32,
+    "text": "par Sanctoni. Vous gardez un colis sain de jour au maximum. Et vous ne remettez jamais"
+   },
+   {
+    "start": 19.32,
+    "end": 24.4,
+    "text": "un colis sans le bon code, le code de retrait pour le client, le code de reprise pour"
+   },
+   {
+    "start": 24.4,
+    "end": 29.6,
+    "text": "le livreur. Si vous êtes d'accord, lisez jusqu'en bas puis touchez j'accepte."
+   }
+  ]
+ },
+ "ouvrirpdr/etape-04": {
+  "duree": 9.91,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 9.0,
+    "text": "Écrivez votre adresse mail, si vous en avez une, puis le nom de votre boutique, celui que les clients connaissent."
+   }
+  ]
+ },
+ "ouvrirpdr/etape-05": {
+  "duree": 10.1,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.0,
+    "text": "Choisissez la commune, puis le quartier."
+   },
+   {
+    "start": 5.0,
+    "end": 9.0,
+    "text": "Ajoutez un repère pour trouver la boutique facilement."
+   }
+  ]
+ },
+ "ouvrirpdr/etape-06": {
+  "duree": 14.93,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 7.64,
+    "text": "Dans votre boutique, touchez Localiser ma boutique, vérifiez le point sur la carte,"
+   },
+   {
+    "start": 7.64,
+    "end": 10.16,
+    "text": "puis touchez Confirmer cette position."
+   },
+   {
+    "start": 10.16,
+    "end": 13.68,
+    "text": "Les clients et les livreurs vous trouveront grâce à elle."
+   }
+  ]
+ },
+ "ouvrirpdr/etape-07": {
+  "duree": 15.49,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.0,
+    "text": "Touchez photo de vous et prenez une photo claire de votre visage."
+   },
+   {
+    "start": 5.0,
+    "end": 11.0,
+    "text": "Puis ajoutez une photo de votre pièce d'identité, carte d'identité, carte biométrique ou passeport."
+   },
+   {
+    "start": 11.0,
+    "end": 15.0,
+    "text": "Elle sert seulement à vérifier qui vous êtes."
+   }
+  ]
+ },
+ "ouvrirpdr/etape-08": {
+  "duree": 13.12,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 6.36,
+    "text": "Touchez « Envoyer ma demande ». Votre demande part à l'administration de Sontoni."
+   },
+   {
+    "start": 6.36,
+    "end": 10.88,
+    "text": "Dès qu'elle est validée, vous recevez une notification et le rôle point de retrait"
+   },
+   {
+    "start": 10.88,
+    "end": 11.88,
+    "text": "s'ouvre dans le menu."
+   }
+  ]
+ },
+ "ouvrirpdr/etape-09": {
+  "duree": 10.89,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 6.04,
+    "text": "Ensuite, recevez les colis, gardez-les en sécurité et remettez-les seulement avec le"
+   },
+   {
+    "start": 6.04,
+    "end": 9.6,
+    "text": "bon code. Chaque colis remis vous rapporte de l'argent."
+   }
+  ]
+ },
+ "pointderetrait/etape-01": {
+  "duree": 13.75,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.6,
+    "text": "Un point de retraite est une boutique partenaire de SomSony dans votre quartier."
+   },
+   {
+    "start": 5.6,
+    "end": 9.8,
+    "text": "Votre colis est déposé et vous allez le chercher quand vous voulez."
+   },
+   {
+    "start": 9.8,
+    "end": 12.4,
+    "text": "C'est souvent beaucoup moins cher qu'AlexPace."
+   }
+  ]
+ },
+ "pointderetrait/etape-02": {
+  "duree": 6.97,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.72,
+    "text": "Sur la page livraison et paiement dans mode de livraison, touchez point de retrait."
+   }
+  ]
+ },
+ "pointderetrait/etape-03": {
+  "duree": 11.61,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 3.0,
+    "text": "Choisissez votre commune."
+   },
+   {
+    "start": 3.0,
+    "end": 6.0,
+    "text": "Puis votre quartier."
+   },
+   {
+    "start": 6.0,
+    "end": 8.0,
+    "text": "Ou touchez ce bouton."
+   },
+   {
+    "start": 8.0,
+    "end": 11.0,
+    "text": "L'application trouve les boutiques les plus proches de vous."
+   }
+  ]
+ },
+ "pointderetrait/etape-04": {
+  "duree": 15.09,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 6.08,
+    "text": "La liste montre les boutiques point de retrait avec leur adresse, leur distance et leur numéro"
+   },
+   {
+    "start": 6.08,
+    "end": 7.08,
+    "text": "de téléphone."
+   },
+   {
+    "start": 7.08,
+    "end": 9.68,
+    "text": "Touchez celles qui vous arrangent."
+   },
+   {
+    "start": 9.68,
+    "end": 13.84,
+    "text": "Le prix de la livraison jusqu'à cette boutique s'affiche sur le bouton."
+   }
+  ]
+ },
+ "pointderetrait/etape-05": {
+  "duree": 21.8,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 8.0,
+    "text": "Choisissez le paiement à la récupération, en espèces, ou tout de suite par Orange Money ou Move Money."
+   },
+   {
+    "start": 8.0,
+    "end": 11.0,
+    "text": "Touchez Confirmer pour passer la commande."
+   },
+   {
+    "start": 11.0,
+    "end": 18.0,
+    "text": "La première fois, écrivez un endroit connu près de chez vous, par exemple, face à la Grande Mosquée."
+   },
+   {
+    "start": 18.0,
+    "end": 21.0,
+    "text": "Touchez Enregistrer et continuez."
+   }
+  ]
+ },
+ "pointderetrait/etape-06": {
+  "duree": 17.35,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 8.0,
+    "text": "Votre commande est dans achat. N'allez pas tout de suite à la boutique. Attendez la notification qui dit que le colis est arrivé."
+   },
+   {
+    "start": 9.0,
+    "end": 12.0,
+    "text": "Voici votre code de retrait. Gardez-le pour vous."
+   },
+   {
+    "start": 13.0,
+    "end": 16.0,
+    "text": "Touchez voir la boutique sur la carte pour trouver le chemin."
+   }
+  ]
+ },
+ "pointderetrait/etape-07": {
+  "duree": 14.44,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 4.6,
+    "text": "A la boutique, donnez votre code ou montrez le code QR."
+   },
+   {
+    "start": 4.6,
+    "end": 7.8,
+    "text": "La boutique vérifie le code, puis vous remet le colis."
+   },
+   {
+    "start": 7.8,
+    "end": 11.2,
+    "text": "Sans le bon code, personne ne peut prendre votre colis."
+   },
+   {
+    "start": 11.2,
+    "end": 13.2,
+    "text": "Il vous attend 5 jours."
+   }
+  ]
+ },
+ "portefeuille/etape-01": {
+  "duree": 10.66,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.0,
+    "text": "Touchez l'icône en haut à droite pour ouvrir votre profil."
+   },
+   {
+    "start": 5.0,
+    "end": 10.0,
+    "text": "Dans Services Financiers, touchez son Sony portefeuille."
+   }
+  ]
+ },
+ "portefeuille/etape-02": {
+  "duree": 23.68,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 4.0,
+    "text": "La première fois, créez un mot de passe."
+   },
+   {
+    "start": 4.0,
+    "end": 6.0,
+    "text": "Il protège votre argent."
+   },
+   {
+    "start": 6.0,
+    "end": 8.0,
+    "text": "Il est demandé seulement pour le portefeuille."
+   },
+   {
+    "start": 8.0,
+    "end": 10.0,
+    "text": "Jamais pour un achat payé par Orange Monet."
+   },
+   {
+    "start": 10.0,
+    "end": 12.0,
+    "text": "Move ou à la livraison."
+   },
+   {
+    "start": 12.0,
+    "end": 14.0,
+    "text": "Écrivez votre mot de passe."
+   },
+   {
+    "start": 14.0,
+    "end": 16.0,
+    "text": "Au moins quatre caractères."
+   },
+   {
+    "start": 16.0,
+    "end": 20.0,
+    "text": "Écrivez-le une deuxième fois pour confirmer."
+   },
+   {
+    "start": 20.0,
+    "end": 22.0,
+    "text": "Touchez Valider et continuez."
+   }
+  ]
+ },
+ "portefeuille/etape-03": {
+  "duree": 13.96,
+  "segments": [
+   {
+    "start": 1.0,
+    "end": 4.0,
+    "text": "L'application vous donne un code secret de récupération."
+   },
+   {
+    "start": 4.0,
+    "end": 9.0,
+    "text": "Notez-le sur un papier, il sert à retrouver votre compte si vous oubliez le mot de passe."
+   },
+   {
+    "start": 10.0,
+    "end": 13.0,
+    "text": "Quand c'est noté, touchez J'ai bien noté mon code."
+   }
+  ]
+ },
+ "portefeuille/etape-04": {
+  "duree": 13.31,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 6.0,
+    "text": "Voici votre solde, l'argent réellement disponible dans votre portefeuille."
+   },
+   {
+    "start": 6.0,
+    "end": 9.0,
+    "text": "En bas, l'historique montre chaque mouvement."
+   },
+   {
+    "start": 9.0,
+    "end": 12.0,
+    "text": "Recharge, argent reçu, argent envoyé."
+   }
+  ]
+ },
+ "portefeuille/etape-05": {
+  "duree": 24.36,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.14,
+    "text": "Pour ajouter de l'argent, touchez Rechargé par Orange Mouve-Monnaie."
+   },
+   {
+    "start": 5.14,
+    "end": 9.94,
+    "text": "Touchez un montant, par exemple 5000 francs, ou écrivez le vôtre."
+   },
+   {
+    "start": 9.94,
+    "end": 15.82,
+    "text": "Touchez Continuer, vous validez le paiement sur votre téléphone, avec Orange Monnaie"
+   },
+   {
+    "start": 15.82,
+    "end": 16.82,
+    "text": "ou Mouve-Monnaie."
+   },
+   {
+    "start": 16.82,
+    "end": 19.66,
+    "text": "L'argent arrive aussitôt dans votre portefeuille."
+   },
+   {
+    "start": 19.66,
+    "end": 23.14,
+    "text": "Touchez Retour pour revenir au portefeuille."
+   }
+  ]
+ },
+ "portefeuille/etape-06": {
+  "duree": 20.76,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 6.2,
+    "text": "Toucher Envoyer de l'argent Écrivez le numéro de la personne, elle doit"
+   },
+   {
+    "start": 6.2,
+    "end": 10.0,
+    "text": "avoir un compte SonSony, puis le montant envoyer."
+   },
+   {
+    "start": 10.0,
+    "end": 13.08,
+    "text": "Vous pouvez ajouter un petit message."
+   },
+   {
+    "start": 13.08,
+    "end": 18.88,
+    "text": "Toucher Envoyer, votre mot de passe est demandé pour confirmer, et l'argent arrive tout"
+   },
+   {
+    "start": 18.88,
+    "end": 19.88,
+    "text": "de suite."
+   },
+   {
+    "start": 19.88,
+    "end": 23.88,
+    "text": "Toucher Envoyer, votre mot de passe est demandé pour confirmer, et l'argent arrive tout de suite."
+   }
+  ]
+ },
+ "portefeuille/etape-07": {
+  "duree": 17.58,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 4.0,
+    "text": "Chez un commerçant, touchez PAYER EN BOUTIQUE."
+   },
+   {
+    "start": 4.0,
+    "end": 7.0,
+    "text": "Touchez GENERER MON CODE."
+   },
+   {
+    "start": 7.0,
+    "end": 9.0,
+    "text": "Montrez ce code au commerçant."
+   },
+   {
+    "start": 9.0,
+    "end": 13.0,
+    "text": "Il l'écrit sur son téléphone et le montant est payé depuis votre portefeuille."
+   },
+   {
+    "start": 13.0,
+    "end": 17.0,
+    "text": "Le code ne sert qu'une fois et pour peu de temps."
+   }
+  ]
+ },
+ "portefeuille/etape-08": {
+  "duree": 24.45,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 7.82,
+    "text": "Toucher cagnotte pour économiser à plusieurs, toucher créer une cagnotte, donner lui un"
+   },
+   {
+    "start": 7.82,
+    "end": 15.74,
+    "text": "titre par exemple, mariage de ma sœur, expliquer à quoi elle servira, écrivez le montant"
+   },
+   {
+    "start": 15.74,
+    "end": 21.78,
+    "text": "à atteindre, toucher créer puis partager le lien, chacun cotier à son rythme et"
+   },
+   {
+    "start": 21.78,
+    "end": 23.18,
+    "text": "vous voyez le total monter."
+   }
+  ]
+ },
+ "portefeuille/etape-09": {
+  "duree": 15.14,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 6.0,
+    "text": "Offrir un bon cadeau. Offrer un montant approche à dépenser sur SomSomi."
+   },
+   {
+    "start": 6.0,
+    "end": 14.0,
+    "text": "Envoyer, depuis, l'étranger. Votre famille à l'étranger peut vous envoyer de l'argent directement dans votre portefeuille."
+   }
+  ]
+ },
+ "portefeuille/etape-10": {
+  "duree": 7.8,
+  "segments": [
+   {
+    "start": 1.0,
+    "end": 3.0,
+    "text": "Votre portefeuille est prêt."
+   },
+   {
+    "start": 3.0,
+    "end": 7.0,
+    "text": "Gardez votre mot de passe et votre code secret pour vous seul."
+   }
+  ]
+ },
+ "publier/etape-01": {
+  "duree": 5.6,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.0,
+    "text": "Depuis le marché, touchez le menu en haut à gauche."
+   }
+  ]
+ },
+ "publier/etape-02": {
+  "duree": 6.59,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 3.0,
+    "text": "La fenêtre changée de rôle s'ouvre."
+   },
+   {
+    "start": 3.0,
+    "end": 5.0,
+    "text": "Touchez Vendeur."
+   }
+  ]
+ },
+ "publier/etape-03": {
+  "duree": 8.54,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 4.68,
+    "text": "Voici votre espace vendeur avec le nom de votre boutique."
+   },
+   {
+    "start": 4.68,
+    "end": 7.36,
+    "text": "Touchez mes commandes et produits."
+   }
+  ]
+ },
+ "publier/etape-04": {
+  "duree": 8.01,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 3.72,
+    "text": "Ici, vous voyez vos ventes et vos commandes."
+   },
+   {
+    "start": 3.72,
+    "end": 6.76,
+    "text": "Touchez l'onglet Publie un article."
+   }
+  ]
+ },
+ "publier/etape-05": {
+  "duree": 7.52,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 7.0,
+    "text": "Toucher la catégorie de votre article, par exemple mode femme. Les bons chants s'affichent ensuite."
+   }
+  ]
+ },
+ "publier/etape-06": {
+  "duree": 18.46,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 6.0,
+    "text": "Touchez « Choisir des photos » et choisissez des photos nettes de votre article, jusqu'à 8."
+   },
+   {
+    "start": 6.0,
+    "end": 13.0,
+    "text": "La photo apparaît ici. La première est la photo principale, celle que les acheteurs voient en premier."
+   },
+   {
+    "start": 13.0,
+    "end": 17.0,
+    "text": "Vous pouvez aussi ajouter une courte vidéo de l'article."
+   }
+  ]
+ },
+ "publier/etape-07": {
+  "duree": 8.36,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 7.2,
+    "text": "Écrivez le nom de l'article, clair et simple, par exemple, robe ou wax élégante."
+   }
+  ]
+ },
+ "publier/etape-08": {
+  "duree": 18.34,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 3.0,
+    "text": "Avez-vous un nombre de pièces précis ?"
+   },
+   {
+    "start": 3.0,
+    "end": 5.0,
+    "text": "Touchez oui."
+   },
+   {
+    "start": 5.0,
+    "end": 8.0,
+    "text": "Écrivez votre prix de vente en France CEFA,"
+   },
+   {
+    "start": 8.0,
+    "end": 12.0,
+    "text": "puis le nombre de pièces que vous avez."
+   },
+   {
+    "start": 12.0,
+    "end": 16.0,
+    "text": "Si vous faites une promotion, écrivez ici l'ancien prix."
+   },
+   {
+    "start": 16.0,
+    "end": 18.0,
+    "text": "Il sera barré."
+   }
+  ]
+ },
+ "publier/etape-09": {
+  "duree": 15.46,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 6.0,
+    "text": "Décrivez l'article, la matière, la coupe, pour quelle occasion."
+   },
+   {
+    "start": 6.0,
+    "end": 10.0,
+    "text": "Touchez les couleurs disponibles, par exemple vert."
+   },
+   {
+    "start": 10.0,
+    "end": 15.0,
+    "text": "Puis, les tailles disponibles, par exemple M."
+   }
+  ]
+ },
+ "publier/etape-10": {
+  "duree": 6.13,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.0,
+    "text": "Quand tout est rempli, touche et publiez en bas du formulaire."
+   }
+  ]
+ },
+ "publier/etape-11": {
+  "duree": 31.25,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 7.0,
+    "text": "La première fois, l'application demande ou le livreur peut venir chercher vos articles."
+   },
+   {
+    "start": 7.0,
+    "end": 12.0,
+    "text": "Choisissez votre commune, puis votre quartier."
+   },
+   {
+    "start": 12.0,
+    "end": 17.0,
+    "text": "Écrivez un repère connu, par exemple, près du Grand Marché."
+   },
+   {
+    "start": 17.0,
+    "end": 20.0,
+    "text": "Touchez Localiser mon activité."
+   },
+   {
+    "start": 20.0,
+    "end": 25.0,
+    "text": "Vérifiez la position sur la carte, puis touchez Confirmer cette position."
+   },
+   {
+    "start": 25.0,
+    "end": 28.0,
+    "text": "Touchez Enregistrer et Continuer."
+   },
+   {
+    "start": 28.0,
+    "end": 31.0,
+    "text": "Ce n'est demandé qu'une seule fois."
+   }
+  ]
+ },
+ "publier/etape-12": {
+  "duree": 14.63,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 5.0,
+    "text": "Avant de publier, l'application vous montre votre prix de vente"
+   },
+   {
+    "start": 5.0,
+    "end": 10.0,
+    "text": "et ce que vous recevrez pour chaque vente après la commission de SomSony."
+   },
+   {
+    "start": 10.0,
+    "end": 14.0,
+    "text": "Si tout est bon, touchez oui. Publiez."
+   }
+  ]
+ },
+ "publier/etape-13": {
+  "duree": 7.89,
+  "segments": [
+   {
+    "start": 0.0,
+    "end": 3.0,
+    "text": "Votre article est en ligne."
+   },
+   {
+    "start": 3.0,
+    "end": 7.0,
+    "text": "Tous les acheteurs peuvent le voir dans le marché et dans votre boutique."
+   }
+  ]
+ }
+}

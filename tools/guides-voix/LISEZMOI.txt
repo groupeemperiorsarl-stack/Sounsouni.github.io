@@ -1,0 +1,5 @@
+Nouvelles voix des guides vidéo (04/11/2026)
+- Textes (ancienne voix, ton, nouveau texte) : document « Textes voix off — Guides Sounsouni » (Claude Docs).
+- transcriptions-anciennes-voix.json : ce que disait l'ancienne voix, étape par étape, avec les minutages (Whisper medium).
+- Issa génère une voix par étape avec Gemini (fichiers nommés <guide>-etape-NN), puis on remplace l'audio de guides/<guide>/etape-NN.mp4 et on refait complet.mp4.
+- Nouvelles vidéos à fabriquer sur ses audios : transitaire (16 étapes) et pole (13 étapes), même style que les guides.
