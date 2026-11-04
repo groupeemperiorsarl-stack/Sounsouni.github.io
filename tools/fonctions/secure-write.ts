@@ -1,5 +1,6 @@
 // ============================================================
-// Fonction serveur : secure-write (version 2026-10-29)
+// Fonction serveur : secure-write (version 2026-11-04 : colis des transitaires,
+// retrait d'un colis externe vérifié par le serveur avec le code de retrait)
 // Écritures protégées (comptes, articles, boosts, réglages…).
 // Nouveau (audit) : cagnottes et réservations passent ici ; le stock d'un
 // article ne peut plus être changé par un autre que son vendeur.
@@ -205,19 +206,84 @@ const out: any = { ...current, ...incoming, id: current.id, ...locked };
 for (const f of ["status", "resolvedAt", "createdAt"]) { if (f in current) out[f] = current[f]; else delete out[f]; }
 return out;
 }
-function ruleParcel(current: any, incoming: any, ctx: Ctx): any {
-if (isStaffCtx(ctx)) return { ...(current || {}), ...incoming };
-if (!current) {
-if (!ctx.callerIds.includes(String(incoming.relaisShopId || ""))) return null;
-return { ...incoming, livreurId: null, livreurName: null };
+// ---- Transitaires (colis annoncés depuis l'étranger) ----
+const INTL_CUR: Record<string, string> = { "Inde": "INR", "Chine": "CNY", "France": "EUR", "Belgique": "EUR", "Allemagne": "EUR", "Italie": "EUR", "Espagne": "EUR", "Portugal": "EUR", "Pays-Bas": "EUR", "Émirats arabes unis": "AED", "États-Unis": "USD", "Canada": "CAD", "Royaume-Uni": "GBP", "Turquie": "TRY", "Maroc": "MAD" };
+const RATE_RANGE: Record<string, [number, number]> = { INR: [5, 10], CNY: [50, 150], EUR: [650, 660], USD: [400, 900], CAD: [300, 700], AED: [100, 250], GBP: [500, 1100], TRY: [5, 40], MAD: [35, 100] };
+const TR_ZONES = [{ id: "pdr_bko", name: "Bamako — Point de Retrait", kind: "relais", price: 1000, kgIncluded: 5, perKg: 200 }, { id: "dom_bko", name: "Bamako — à domicile", kind: "domicile", price: 2000, kgIncluded: 5, perKg: 300 }, { id: "pdr_reg", name: "Régions — Point de Retrait", kind: "relais", price: 3500, kgIncluded: 5, perKg: 400 }];
+const PARCEL_LOCKED = ["relaisShopId", "relaisShopName", "codeDepot", "codeRetrait", "createdAt", "createdByAccountId", "platform", "trackingNumber", "transitaireId", "transitaireName", "transitairePhone", "transitaireCountry", "deliveryType", "zoneId", "deliveryFeeXof", "deliveryPaidBy", "freightMode", "freightAmount", "freightCurrency", "freightRate", "freightXof", "customsBy", "customsXof", "settled", "settledAt", "callAttempts", "callLog", "nextCallAt", "transitaireAlerted", "transitaireAlertedAt", "weight", "address", "recipientPhone"];
+function newCode(): string { const r = new Uint32Array(1); crypto.getRandomValues(r); return String(1000 + (r[0] % 9000)); }
+async function newTransitParcel(incoming: any, ctx: Ctx, getDoc: (c: string, id: string) => Promise<any>): Promise<any> {
+if (!ctx.me || !ctx.callerIds.includes(String(incoming.transitaireId || ""))) return null;
+const trDoc: any = await getDoc("settings", "transitaires");
+const e = (trDoc && Array.isArray(trDoc.list) ? trDoc.list : []).find((t: any) => t && t.active !== false && norm(t.phone) === norm(ctx.me.phone));
+if (!e) return null;
+const cfg: any = await getDoc("settings", "transitaire_config");
+const zones: any[] = cfg && Array.isArray(cfg.zones) && cfg.zones.length ? cfg.zones : TR_ZONES;
+const zone = zones.find((z) => z && z.id === incoming.zoneId);
+const kg = Number(incoming.weight);
+if (!zone || !(kg > 0) || kg > 1000) return null;
+const fee = Math.round((Number(zone.price) || 0) + Math.max(0, Math.ceil(kg - (Number(zone.kgIncluded) || 0) - 1e-9)) * (Number(zone.perKg) || 0));
+const s = (v: unknown, n: number) => String(v ?? "").trim().slice(0, n);
+let relaisShopId: string | null = null, relaisShopName: string | null = null;
+if (zone.kind !== "domicile") {
+const r: any = await getDoc("accounts", String(incoming.relaisShopId || ""));
+if (!r || r.relaisApplicationStatus !== "approved") return null;
+relaisShopId = r.id; relaisShopName = String(r.shopName || r.name || "");
 }
-const isShop = ctx.callerIds.includes(current.relaisShopId);
+const payer = e.deliveryPayer === "transitaire" || e.deliveryPayer === "destinataire" ? e.deliveryPayer : (incoming.deliveryPaidBy === "transitaire" ? "transitaire" : "destinataire");
+const freightMode = e.freightMode === "app" ? "app" : "transitaire";
+const cur = INTL_CUR[String(e.country || "")] || null;
+let freightAmount = 0, freightRate: number | null = null;
+if (freightMode === "app") {
+freightAmount = Math.max(0, Number(incoming.freightAmount) || 0);
+freightRate = Number(incoming.freightRate) || 0;
+const g = cur ? RATE_RANGE[cur] : null;
+if (freightAmount > 0 && (!g || freightRate < g[0] || freightRate > g[1])) return null;
+}
+const recipientPhone = s(incoming.recipientPhone, 30).replace(/[^\d+]/g, "");
+if (!s(incoming.recipientName, 80) || recipientPhone.replace(/\D/g, "").length < 8) return null;
+const now = Date.now(), id = String(incoming.id);
+const codeDepot = newCode(); let codeRetrait = newCode(); while (codeRetrait === codeDepot) codeRetrait = newCode();
+return { id, trackingNumber: s(incoming.trackingNumber, 60) || ("TR-" + id.slice(-6).toUpperCase()), platform: "Transitaire",
+transitaireId: String(incoming.transitaireId), transitaireName: s(e.name || ctx.me.name, 80), transitairePhone: s(e.phone, 30), transitaireCountry: s(e.country, 40),
+lotNumber: s(incoming.lotNumber, 60), recipientName: s(incoming.recipientName, 80), recipientPhone, weight: kg, description: s(incoming.description, 300),
+zoneId: String(zone.id), zoneName: s(zone.name, 80), deliveryType: zone.kind === "domicile" ? "domicile" : "relais", relaisShopId, relaisShopName,
+address: zone.kind === "domicile" ? { commune: s(incoming.address && incoming.address.commune, 60), quartier: s(incoming.address && incoming.address.quartier, 60), repere: s(incoming.address && incoming.address.repere, 200) } : null,
+deliveryFeeXof: fee, deliveryPaidBy: payer, freightMode, freightAmount, freightCurrency: cur, freightRate, freightXof: Math.round(freightAmount * (freightRate || 0)),
+customsBy: e.customsBy === "destinataire" ? "destinataire" : "transitaire", customsXof: null, livreurId: null, livreurName: null,
+status: "Annoncé", statusHistory: [{ status: "Annoncé", at: now, note: null }], codeDepot, codeRetrait, createdAt: now, createdByAccountId: String(incoming.transitaireId),
+callAttempts: 0, callLog: [], settled: false, lastRecipientMessage: null };
+}
+async function ruleParcel(current: any, incoming: any, ctx: Ctx, getDoc: (c: string, id: string) => Promise<any>): Promise<any> {
+if (isStaffCtx(ctx)) { const o: any = { ...(current || {}), ...incoming }; delete o.retrievalCode; return o; }
+if (!current) {
+if (incoming.transitaireId) return await newTransitParcel(incoming, ctx, getDoc);
+if (!ctx.callerIds.includes(String(incoming.relaisShopId || ""))) return null;
+const o: any = { ...incoming, livreurId: null, livreurName: null };
+delete o.transitaireId; delete o.retrievalCode;
+return o;
+}
+const isShop = !!current.relaisShopId && ctx.callerIds.includes(current.relaisShopId);
 const isLiv = !!current.livreurId && ctx.callerIds.includes(current.livreurId);
-const canTake = !current.livreurId && ctx.me && ctx.me.livreurApplicationStatus === "approved" && ctx.callerIds.includes(String(incoming.livreurId || ""));
+const isTr = !!current.transitaireId && ctx.callerIds.includes(current.transitaireId);
+// Transitaire : il peut corriger ou annuler son colis tant qu'il n'est pas arrivé.
+if (isTr && !isShop && !isLiv) {
+if (current.status !== "Annoncé") return null;
+const o: any = { ...current };
+for (const f of ["recipientName", "description", "lotNumber"]) if (typeof incoming[f] === "string") o[f] = incoming[f].slice(0, 200);
+if (incoming.status === "Annulé") { o.status = "Annulé"; o.statusHistory = [...(Array.isArray(current.statusHistory) ? current.statusHistory : []), { status: "Annulé", at: Date.now(), note: null }]; }
+return o;
+}
+if (current.status === "Annoncé" || current.status === "Annulé") return null; // pas encore à Bamako : seule l'équipe Sounsouni le fait avancer
+const canTake = !current.livreurId && current.status === "Créé" && ctx.me && ctx.me.livreurApplicationStatus === "approved" && ctx.callerIds.includes(String(incoming.livreurId || ""));
 if (!isShop && !isLiv && !canTake) return null;
+// Remise au destinataire : le serveur vérifie lui-même le code de retrait.
+// (colis transitaires toujours ; autres colis dès que l'app envoie le code — les anciennes versions de l'app ne l'envoient pas)
+if (incoming.status === "Retiré" && current.status !== "Retiré" && (current.transitaireId || "retrievalCode" in incoming) && String(incoming.retrievalCode || "") !== String(current.codeRetrait || "")) return null;
 const out: any = { ...current, ...incoming, id: current.id };
-for (const f of ["relaisShopId", "relaisShopName", "codeDepot", "codeRetrait", "createdAt", "createdByAccountId", "platform", "trackingNumber"]) { if (f in current) out[f] = current[f]; }
+for (const f of PARCEL_LOCKED) { if (f in current) out[f] = current[f]; else delete out[f]; }
 if (!canTake && !isShop) { out.livreurId = current.livreurId; out.livreurName = current.livreurName; }
+delete out.retrievalCode;
 return out;
 }
 // ---- Avis (audit CMD-4) : seulement l'acheteur d'une commande livrée, un avis par article ----
@@ -517,7 +583,7 @@ else if (collection === "cagnottes") toSave = ruleCagnotte(current, incoming, ct
 else if (collection === "bookings") toSave = await ruleBooking(current, incoming, ctx, getDoc);
 else if (PRIVATE[collection]) toSave = rulePrivate(collection, current, incoming, ctx);
 else if (collection === "disputes") toSave = await ruleDispute(current, incoming, ctx, getDoc);
-else if (collection === "externalParcels") toSave = ruleParcel(current, incoming, ctx);
+else if (collection === "externalParcels") toSave = await ruleParcel(current, incoming, ctx, getDoc);
 else if (collection === "reviews") toSave = await ruleReview(current, incoming, ctx, db, getDoc);
 else if (collection === "boosts") {
 if (ctx.isAdmin || ctx.isEmployee) toSave = { ...(current || {}), ...incoming };

@@ -1199,6 +1199,8 @@ function computeAirShippingBreakdown() {
 // L'Inde garde ses réglages d'origine (mêmes identifiants qu'avant) ; chaque
 // autre pays (Chine, France…) a les siens : monnaie, taux, tarifs, taxes, délais.
 var INTL_DEFAULT_COUNTRY = "Inde";
+// Pays que le serveur sait gérer (même liste dans order-write et ligdicash-create-payment).
+var INTL_SUPPORTED_COUNTRIES = ["Inde", "Chine", "France", "Belgique", "Allemagne", "Italie", "Espagne", "Portugal", "Pays-Bas", "Émirats arabes unis", "États-Unis", "Canada", "Royaume-Uni", "Turquie", "Maroc"];
 function intlSlug(cc) { return String(cc || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_"); }
 function intlCountryList() {
   var doc = (state.settings || []).find(function(x) { return x.id === "intl_countries"; });
@@ -1239,10 +1241,11 @@ function renderAdminIntlCountryPicker() {
   html += '</div>';
   if (state.showAddIntlCountry) {
     var seen = {};
-    var opts = COUNTRY_CODES.filter(function(c) { if (seen[c.country] || list.indexOf(c.country) !== -1 || c.currency === "XOF" || c.currency === "XAF") return false; seen[c.country] = 1; return true; });
+    var opts = COUNTRY_CODES.filter(function(c) { if (seen[c.country] || list.indexOf(c.country) !== -1 || INTL_SUPPORTED_COUNTRIES.indexOf(c.country) === -1) return false; seen[c.country] = 1; return true; });
+    if (!opts.length) return html + '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">Tous les pays gérés sont déjà ajoutés.</div>';
     html += '<div style="display:flex;gap:6px;margin-bottom:8px;min-width:0;"><select class="input" id="add-intl-country-select" style="flex:1;min-width:0;">';
     opts.forEach(function(c) { html += '<option value="' + esc(c.country) + '">' + esc(c.label.replace(/\s*\/.*$/, "")) + ' — ' + esc(c.currency) + '</option>'; });
-    html += '</select><button class="btn-primary" style="flex:0 0 auto;padding:0 14px;" data-action="add-intl-country">Ajouter</button></div>';
+    html += '</select><button class="btn-primary" style="flex:0 0 auto;width:auto;padding:0 14px;" data-action="add-intl-country">Ajouter</button></div>';
   }
   if (cur !== INTL_DEFAULT_COUNTRY) html += '<button class="link-btn" style="font-size:11px;color:var(--danger);margin-bottom:8px;" data-action="remove-intl-country" data-value="' + esc(cur) + '"><i class="fa-solid fa-trash"></i> Retirer ' + esc(cur) + ' de la liste</button>';
   return html;
@@ -1350,7 +1353,7 @@ const EXCHANGE_RATE_FALLBACK_INR_TO_XOF = 7.2; // au cas où le tout premier cha
 const EXCHANGE_RATE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 1 jour — inutile de re-demander plus souvent, le service ne se met à jour qu'une fois par jour
 
 // Taux de secours (1 unité = x FCFA) si rien n'est encore chargé. L'euro est fixe (655,957).
-var INTL_FALLBACK_RATES = { INR: EXCHANGE_RATE_FALLBACK_INR_TO_XOF, CNY: 84, EUR: 655.957, USD: 600, AED: 163, TRY: 17, GBP: 770, MAD: 60 };
+var INTL_FALLBACK_RATES = { INR: EXCHANGE_RATE_FALLBACK_INR_TO_XOF, CNY: 84, EUR: 655.957, USD: 600, CAD: 440, AED: 163, TRY: 17, GBP: 770, MAD: 60 };
 function intlRateId(cc) { var cur = intlCurrency(cc || currentIntlCountry()); return cur === "INR" ? "exchange_rate_inr_xof" : "exchange_rate_" + cur.toLowerCase() + "_xof"; }
 function getExchangeRateConfig(cc) {
   var cur = intlCurrency(cc || currentIntlCountry()), id = intlRateId(cc);
@@ -8002,19 +8005,31 @@ function confirmExternalParcelDepot(parcelId, inputCode) {
 }
 
 function confirmExternalParcelRetrieval(parcelId, inputCode) {
-  var parcel = null;
-  for (var i = 0; i < state.externalParcels.length; i++) {
-    if (state.externalParcels[i].id === parcelId) { parcel = state.externalParcels[i]; break; }
-  }
+  var parcel = findExternalParcel(parcelId);
   if (!parcel) return false;
-  if (parcel.codeRetrait === inputCode) {
-    setExternalParcelStatus(parcelId, "Retiré");
+  inputCode = String(inputCode || "").trim();
+  if (!inputCode) { showToast(t("toast_incorrect_pickup_code")); return false; }
+  // Code connu ici (Point de Retrait) : vérification immédiate.
+  if (parcel.codeRetrait && parcel.codeRetrait !== inputCode) { showToast(t("toast_incorrect_pickup_code")); return false; }
+  var now = Date.now();
+  var doc = Object.assign({}, parcel, { status: "Retiré", retrievedAt: now, retrievalCode: inputCode, statusHistory: (parcel.statusHistory || []).concat([{ status: "Retiré", at: now, note: null }]) });
+  var done = function(serverDoc) {
+    var d = serverDoc || doc; delete d.retrievalCode;
+    Object.assign(parcel, d);
+    save();
+    notifyExternalWebhook(parcel, "status_changed");
+    if (parcel.transitaireId) addNotification("whatsapp", "✅ Colis " + parcel.trackingNumber + " remis à " + parcel.recipientName + ".", parcel.transitaireId, "transitaire");
     showToast(t("toast_parcel_delivered"));
     render();
-    return true;
-  }
-  showToast(t("toast_incorrect_pickup_code"));
-  return false;
+  };
+  if (!FIREBASE_ENABLED) { done(null); return true; }
+  // Le serveur vérifie lui-même le code (le livreur ne le connaît pas).
+  secureWrite("externalParcels", { operation: "save", doc: doc }).then(function(res) {
+    if (res && res.success) done(res.doc);
+    else if (res && res.notDeployed) { setExternalParcelStatus(parcelId, "Retiré"); showToast(t("toast_parcel_delivered")); render(); }
+    else showToast(res && (res.httpStatus === 403 || res.error === "forbidden") ? t("toast_incorrect_pickup_code") : "❌ Pas de connexion — réessayez.");
+  }).catch(function() { showToast("❌ Pas de connexion — réessayez."); });
+  return true;
 }
 
 // ---------- DEMANDES DE MODIFICATION/SUPPRESSION (Groupe 2) ----------
@@ -8077,6 +8092,168 @@ function rejectExternalParcelChangeRequest(reqId) {
   saveDoc("externalParcelChangeRequests", req);
   showToast(t("toast_request_rejected"));
   render();
+}
+
+// ---------- TRANSITAIRES (colis venant de l'étranger : Chine, France…) ----------
+// Un transitaire (compte ajouté par l'Admin) annonce ses colis depuis son
+// pays. Sounsouni les récupère à l'aéroport/au port, puis le réseau habituel
+// prend le relais : livreur → Point de Retrait (ou domicile) → destinataire.
+// Les réglages (qui paie la livraison, fret encaissé par l'app ou non, douane,
+// commission) sont choisis par l'Admin pour chaque transitaire.
+function defaultTransitaireConfig() {
+  return {
+    id: "transitaire_config",
+    zones: [
+      { id: "pdr_bko", name: "Bamako — Point de Retrait", kind: "relais", price: 1000, kgIncluded: 5, perKg: 200 },
+      { id: "dom_bko", name: "Bamako — à domicile", kind: "domicile", price: 2000, kgIncluded: 5, perKg: 300 },
+      { id: "pdr_reg", name: "Régions — Point de Retrait", kind: "relais", price: 3500, kgIncluded: 5, perKg: 400 }
+    ],
+    unclaimedCallDays: 3,   // appeler le destinataire après X jours au Point de Retrait
+    maxCallAttempts: 3,     // après X appels sans réponse : prévenir le transitaire
+    callRetryHours: 24      // délai avant de rappeler
+  };
+}
+function getTransitaireConfig() {
+  var d = (state.settings || []).find(function(x) { return x.id === "transitaire_config"; });
+  var cfg = Object.assign(defaultTransitaireConfig(), d || {});
+  if (!Array.isArray(cfg.zones) || !cfg.zones.length) cfg.zones = defaultTransitaireConfig().zones;
+  return cfg;
+}
+function saveSettingsDoc(doc) {
+  var idx = state.settings.findIndex(function(x) { return x.id === doc.id; });
+  if (idx === -1) state.settings.push(doc); else state.settings[idx] = doc;
+  save(); saveDoc("settings", doc);
+}
+function transitaireList() {
+  var d = (state.settings || []).find(function(x) { return x.id === "transitaires"; });
+  return d && Array.isArray(d.list) ? d.list : [];
+}
+function saveTransitaireList(list) { saveSettingsDoc({ id: "transitaires", list: list }); }
+function transitaireEntryForPhone(phone) {
+  var n = normalizeWalletPhone(phone);
+  if (!n) return null;
+  return transitaireList().find(function(t) { return t.active !== false && normalizeWalletPhone(t.phone) === n; }) || null;
+}
+function myTransitaireEntry() { return state.profile ? transitaireEntryForPhone(state.profile.phone) : null; }
+function transitaireDeliveryFee(zone, kg) {
+  if (!zone) return 0;
+  var extra = Math.max(0, Math.ceil((Number(kg) || 0) - (Number(zone.kgIncluded) || 0) - 1e-9));
+  return Math.round((Number(zone.price) || 0) + extra * (Number(zone.perKg) || 0));
+}
+// Montant que le destinataire paie en récupérant son colis (FCFA).
+function parcelToCollectXof(p) {
+  var t = 0;
+  if (p.deliveryPaidBy === "destinataire") t += Number(p.deliveryFeeXof) || 0;
+  if (p.freightMode === "app") t += Number(p.freightXof) || 0;
+  if (p.customsBy === "destinataire") t += Number(p.customsXof) || 0;
+  return Math.round(t);
+}
+function transitParcelPlace(p) {
+  if (p.deliveryType === "domicile") { var a = p.address || {}; return "À domicile : " + [a.quartier, a.commune].filter(Boolean).join(", ") + (a.repere ? " — " + a.repere : ""); }
+  return p.relaisShopName || "Point de Retrait";
+}
+// Libellés lisibles des statuts propres aux transitaires.
+function transitStatusLabel(p) {
+  if (p.status === "Annoncé") return "Annoncé (pas encore à Bamako)";
+  if (p.status === "Créé" && p.transitaireId) return "Arrivé à Bamako";
+  if (p.status === "Annulé") return "Annulé";
+  return translateStatus(p.status);
+}
+// Arrivée au Point de Retrait (pour le suivi des colis non retirés).
+function parcelArrivedAtRelaisAt(p) {
+  var h = Array.isArray(p.statusHistory) ? p.statusHistory : [];
+  for (var i = 0; i < h.length; i++) if (h[i].status === "Reçu au point de retrait" || h[i].status === "Disponible pour retrait") return h[i].at;
+  return null;
+}
+// Colis au Point de Retrait depuis trop longtemps : l'équipe doit appeler.
+function parcelsToCall() {
+  var cfg = getTransitaireConfig(), now = Date.now();
+  return (state.externalParcels || []).filter(function(p) {
+    if (p.status !== "Reçu au point de retrait" && p.status !== "Disponible pour retrait") return false;
+    if (p.transitaireAlerted) return false;
+    var at = parcelArrivedAtRelaisAt(p);
+    return at && now - at >= (Number(cfg.unclaimedCallDays) || 3) * 86400000 && (Number(p.nextCallAt) || 0) <= now;
+  });
+}
+function parcelsTransitaireAlerted() {
+  return (state.externalParcels || []).filter(function(p) { return p.transitaireAlerted && (p.status === "Reçu au point de retrait" || p.status === "Disponible pour retrait"); });
+}
+// Compte d'un transitaire : ce que Sounsouni lui doit (fret encaissé par
+// l'app, moins la commission) et ce qu'il doit (livraisons à sa charge).
+// Seuls les colis terminés et pas encore réglés comptent.
+function transitaireBalance(e) {
+  var n = normalizeWalletPhone(e.phone), pct = Number(e.commissionPct) || 0;
+  var ps = (state.externalParcels || []).filter(function(p) {
+    return p.transitaireId && normalizeWalletPhone(p.transitairePhone) === n && !p.settled && (p.status === "Retiré" || p.status === "Retour à l'expéditeur");
+  });
+  var toT = 0, byT = 0;
+  ps.forEach(function(p) {
+    if (p.freightMode === "app" && p.status === "Retiré") toT += Math.round((Number(p.freightXof) || 0) * (1 - pct / 100));
+    if (p.deliveryPaidBy === "transitaire") byT += Number(p.deliveryFeeXof) || 0;
+    if (p.customsBy === "transitaire") byT += Number(p.customsXof) || 0;
+    if (p.status === "Retour à l'expéditeur" && p.deliveryPaidBy === "destinataire") byT += Number(p.deliveryFeeXof) || 0;
+  });
+  return { toT: toT, byT: byT, net: toT - byT, parcels: ps };
+}
+function emptyTransitDraft() {
+  var cfg = getTransitaireConfig();
+  return { trackingNumber: "", lotNumber: "", recipientName: "", recipientPhone: "", weight: "", description: "", zoneId: cfg.zones[0].id, relaisShopId: "", commune: "", quartier: "", repere: "", deliveryPaidBy: "destinataire", freightAmount: "" };
+}
+function announceTransitaireParcel(d) {
+  var e = myTransitaireEntry();
+  if (!e) { showToast("❌ Ce compte n'est pas (ou plus) transitaire."); return null; }
+  var cfg = getTransitaireConfig();
+  var zone = cfg.zones.find(function(z) { return z.id === d.zoneId; });
+  var kg = parseFloat(String(d.weight || "").replace(",", "."));
+  var phone = String(d.recipientPhone || "").replace(/[^\d+]/g, "");
+  if (!(d.recipientName || "").trim()) { showToast("❌ Nom du destinataire obligatoire."); return null; }
+  if (phone.replace(/\D/g, "").length < 8) { showToast("❌ Numéro du destinataire invalide."); return null; }
+  if (!(kg > 0)) { showToast("❌ Indiquez le poids du colis (kg)."); return null; }
+  if (!zone) { showToast("❌ Choisissez la zone de livraison."); return null; }
+  var relais = null;
+  if (zone.kind === "relais") {
+    relais = state.accounts.find(function(a) { return a.id === d.relaisShopId && a.relaisApplicationStatus === "approved"; });
+    if (!relais) { showToast("❌ Choisissez le Point de Retrait."); return null; }
+  } else if (!(d.quartier || "").trim() || !(d.repere || "").trim()) { showToast("❌ Quartier et repère du domicile obligatoires."); return null; }
+  var payer = e.deliveryPayer === "transitaire" || e.deliveryPayer === "destinataire" ? e.deliveryPayer : (d.deliveryPaidBy === "transitaire" ? "transitaire" : "destinataire");
+  var freightMode = e.freightMode === "app" ? "app" : "transitaire";
+  var fAmt = freightMode === "app" ? Math.max(0, parseFloat(String(d.freightAmount || "0").replace(",", ".")) || 0) : 0;
+  var fRate = freightMode === "app" ? getInrToXofRate(e.country) : null;
+  var now = Date.now(), id = uid();
+  var parcel = {
+    id: id, trackingNumber: (d.trackingNumber || "").trim() || ("TR-" + id.slice(-6).toUpperCase()), platform: "Transitaire",
+    transitaireId: state.profile.id, transitaireName: e.name || state.profile.name, transitairePhone: e.phone, transitaireCountry: e.country,
+    lotNumber: (d.lotNumber || "").trim(), recipientName: d.recipientName.trim(), recipientPhone: phone, weight: kg, description: (d.description || "").trim(),
+    zoneId: zone.id, zoneName: zone.name, deliveryType: zone.kind === "domicile" ? "domicile" : "relais",
+    relaisShopId: relais ? relais.id : null, relaisShopName: relais ? (relais.shopName || relais.name) : null,
+    address: zone.kind === "domicile" ? { commune: (d.commune || "").trim(), quartier: d.quartier.trim(), repere: d.repere.trim() } : null,
+    deliveryFeeXof: transitaireDeliveryFee(zone, kg), deliveryPaidBy: payer,
+    freightMode: freightMode, freightAmount: fAmt, freightCurrency: intlCurrency(e.country), freightRate: fRate, freightXof: Math.round(fAmt * (fRate || 0)),
+    customsBy: e.customsBy === "destinataire" ? "destinataire" : "transitaire", customsXof: null,
+    livreurId: null, livreurName: null, status: "Annoncé", statusHistory: [{ status: "Annoncé", at: now, note: null }],
+    codeDepot: generateOTP(), codeRetrait: generateOTP(), createdAt: now, createdByAccountId: state.profile.id, callAttempts: 0, callLog: [], settled: false
+  };
+  state.externalParcels.push(parcel);
+  save();
+  saveDoc("externalParcels", parcel);
+  return parcel;
+}
+function findExternalParcel(id) { return (state.externalParcels || []).find(function(p) { return p.id === id; }) || null; }
+function saveExternalParcel(p) { save(); saveDoc("externalParcels", p); }
+// Arrivée à Bamako (aéroport/port récupéré par Sounsouni) : le colis passe
+// dans la liste des livreurs ; le destinataire est prévenu.
+function markTransitParcelArrived(p) {
+  if (!p || p.status !== "Annoncé") return;
+  p.status = "Créé";
+  p.arrivedBamakoAt = Date.now();
+  if (!Array.isArray(p.statusHistory)) p.statusHistory = [];
+  p.statusHistory.push({ status: "Créé", at: Date.now(), note: "Arrivé à Bamako" });
+  var due = parcelToCollectXof(p);
+  p.lastRecipientMessage = "Bonjour " + p.recipientName + ", votre colis " + p.trackingNumber + " envoyé par " + (p.transitaireName || "votre transitaire") + " est arrivé à Bamako. " + (p.deliveryType === "domicile" ? "Il vous sera livré à domicile." : "Il sera bientôt disponible chez " + p.relaisShopName + ".") + (due ? " Montant à payer à la réception : " + money(due) + "." : "") + " Code de retrait : " + p.codeRetrait;
+  saveExternalParcel(p);
+  var acc = findAccountByPhone(p.recipientPhone);
+  if (acc) addNotification("whatsapp", "📦 Votre colis " + p.trackingNumber + " est arrivé à Bamako." + (due ? " À payer à la réception : " + money(due) + "." : ""), acc.id, null);
+  if (p.transitaireId) addNotification("whatsapp", "✈️ Colis " + p.trackingNumber + " (" + p.recipientName + ") arrivé à Bamako.", p.transitaireId, "transitaire");
 }
 
 // Le client, sur place, refuse le produit après vérification : il repart
@@ -13169,6 +13346,7 @@ function buildHTML() {
     else if (state.view === "agentsourcing") mainHtml += renderAgentSourcing();
     else if (state.view === "pointvente") mainHtml += renderPointVente();
     else if (state.view === "externalParcels") mainHtml += renderExternalParcelsScreen();
+    else if (state.view === "transitaire") mainHtml += renderTransitaireSpace();
     else if (state.view === "relaisEditInfo") mainHtml += renderRelaisEditInfo();
     else if (state.view === "shopCustomize") mainHtml += renderShopCustomize();
     else if (state.view === "relaisPolicy") mainHtml += renderRelaisPolicy();
@@ -14490,6 +14668,7 @@ function renderRoleMenuModal() {
     html += '</button>';
   }
   html += '</div>';
+  if (myTransitaireEntry()) html += '<button type="button" class="glass-card" style="display:flex;align-items:center;gap:10px;padding:11px 12px;width:100%;text-align:left;margin-top:12px;color:var(--text-primary);font-weight:700;font-size:13.5px;" data-action="open-transitaire-space"><i class="fa-solid fa-plane-arrival" style="color:var(--accent);"></i> Espace Transitaire</button>';
   html += renderGestionRoleSection();
 
   var linkedAccountsAll = findLinkedAccounts(state.profile);
@@ -20441,15 +20620,23 @@ function renderLivreur() {
     for (var mp = 0; mp < myParcelDeliveries.length; mp++) {
       var mParcel = myParcelDeliveries[mp];
       html += '<div class="glass-card" style="padding:10px;margin-bottom:8px;">';
-      html += '<div style="font-weight:700;font-size:12.5px;">' + esc(mParcel.trackingNumber) + ' — vers ' + esc(mParcel.relaisShopName) + '</div>';
-      html += '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">' + t("livreur_deposit_code") + ' : <strong>' + mParcel.codeDepot + '</strong></div>';
+      if (mParcel.deliveryType === "domicile") {
+        html += '<div style="font-weight:700;font-size:12.5px;word-break:break-word;">' + esc(mParcel.trackingNumber) + ' — ' + esc(transitParcelPlace(mParcel)) + '</div>';
+        html += '<div style="font-size:11.5px;margin-top:2px;">' + esc(mParcel.recipientName) + ' · <a href="tel:' + esc(mParcel.recipientPhone) + '">' + esc(mParcel.recipientPhone) + '</a></div>';
+        if (parcelToCollectXof(mParcel)) html += '<div style="font-size:12px;font-weight:800;color:var(--accent);margin-top:4px;"><i class="fa-solid fa-money-bill"></i> À encaisser : ' + money(parcelToCollectXof(mParcel)) + '</div>';
+        html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;">Demandez le code de retrait au destinataire pour terminer.</div>';
+        html += '<div style="display:flex;gap:8px;margin-top:6px;"><input class="input" id="parcel-retrait-input-' + mParcel.id + '" placeholder="0000" maxlength="6" inputmode="numeric" style="flex:1;min-width:0;text-align:center;letter-spacing:4px;" /><button class="btn-primary" style="flex:0 0 auto;width:auto;padding:8px 14px;font-size:12px;" data-action="confirm-transit-home-delivery" data-value="' + mParcel.id + '">' + t("livreur_validate") + '</button></div>';
+      } else {
+        html += '<div style="font-weight:700;font-size:12.5px;">' + esc(mParcel.trackingNumber) + ' — vers ' + esc(mParcel.relaisShopName) + '</div>';
+        html += '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">' + t("livreur_deposit_code") + ' : <strong>' + mParcel.codeDepot + '</strong></div>';
+      }
       html += '</div>';
     }
     for (var ap = 0; ap < availableParcels.length; ap++) {
       var aParcel = availableParcels[ap];
       html += '<div class="card-row" style="cursor:pointer;" data-action="accept-external-parcel-delivery" data-value="' + aParcel.id + '">';
       html += '<div class="emoji-thumb"><i class="fa-solid fa-box"></i></div>';
-      html += '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:12.5px;">' + esc(aParcel.trackingNumber) + ' — ' + esc(aParcel.platform) + '</div><div style="font-size:10.5px;color:var(--text-dim);">' + t("livreur_towards") + ' ' + esc(aParcel.relaisShopName) + '</div></div>';
+      html += '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:12.5px;">' + esc(aParcel.trackingNumber) + ' — ' + esc(aParcel.platform) + '</div><div style="font-size:10.5px;color:var(--text-dim);">' + (aParcel.deliveryType === "domicile" ? esc(transitParcelPlace(aParcel)) : t("livreur_towards") + ' ' + esc(aParcel.relaisShopName)) + (aParcel.weight ? ' · ' + String(aParcel.weight).replace('.', ',') + ' kg' : '') + '</div></div>';
       html += '<button class="btn-secondary" style="flex:0;padding:6px 10px;font-size:11px;">' + t("livreur_take_charge") + '</button>';
       html += '</div>';
     }
@@ -20752,7 +20939,7 @@ function renderRelaisEarningsSection(allRelaisOrders) {
 function renderExternalParcelsScreen() {
   var shopId = state.profile.id;
   var myParcels = state.externalParcels.filter(function(p) { return p.relaisShopId === shopId; });
-  var pending = myParcels.filter(function(p) { return p.status !== "Retiré" && p.status !== "Retour à l'expéditeur"; });
+  var pending = myParcels.filter(function(p) { return p.status !== "Retiré" && p.status !== "Retour à l'expéditeur" && p.status !== "Annulé"; });
   var done = myParcels.filter(function(p) { return p.status === "Retiré" || p.status === "Retour à l'expéditeur"; });
 
   var html = '<button class="link-btn" style="margin-bottom:14px;" data-action="close-external-parcels"><i class="fa-solid fa-arrow-left"></i> ' + t("ext_back") + '</button>';
@@ -20781,12 +20968,13 @@ function renderExternalParcelsScreen() {
 
 function renderExternalParcelCard(p) {
   var html = '<div class="glass-card" style="padding:12px;margin-bottom:10px;">';
-  html += '<div style="display:flex;justify-content:space-between;font-weight:800;font-size:12.5px;"><span>' + esc(p.trackingNumber) + '</span><span class="status-pill">' + translateStatus(p.status) + '</span></div>';
-  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;">' + esc(p.platform) + ' · ' + esc(p.recipientName) + ' · ' + esc(p.recipientPhone) + '</div>';
+  html += '<div style="display:flex;justify-content:space-between;font-weight:800;font-size:12.5px;"><span>' + esc(p.trackingNumber) + '</span><span class="status-pill">' + esc(transitStatusLabel(p)) + '</span></div>';
+  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;">' + esc(p.transitaireId ? 'Transitaire ' + (p.transitaireName || '') : p.platform) + ' · ' + esc(p.recipientName) + ' · ' + esc(p.recipientPhone) + '</div>';
   var commissionAmt = getParcelCommissionAmount(p.platform);
   if (commissionAmt) {
     html += '<div style="font-size:11.5px;font-weight:700;color:#2e9e4f;margin-top:4px;"><i class="fa-solid fa-sack-dollar"></i> ' + esc(p.platform) + ' — ' + t("ext_you_earn") + ' ' + money(commissionAmt) + ' ' + t("ext_on_parcel") + '</div>';
   }
+  if (p.transitaireId && parcelToCollectXof(p) && p.status !== "Retiré") html += '<div style="font-size:12px;font-weight:800;color:var(--accent);margin-top:4px;"><i class="fa-solid fa-money-bill"></i> À encaisser au retrait : ' + money(parcelToCollectXof(p)) + '</div>';
   if (p.status === "Pris en charge par le livreur") {
     html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;">' + t("ext_delivery_person") + ' : ' + esc(p.livreurName || '') + '</div>';
     html += '<div style="display:flex;gap:8px;margin-top:8px;">';
@@ -20805,6 +20993,203 @@ function renderExternalParcelCard(p) {
   }
   if (p.lastRecipientMessage) {
     html += '<div style="font-size:10.5px;color:var(--text-dim);background:var(--bg-body);border-radius:8px;padding:8px;margin-top:8px;"><i class="fa-solid fa-message"></i> ' + t("ext_message_to_recipient") + ' : « ' + esc(p.lastRecipientMessage) + ' »</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+// ---------- ÉCRAN : ESPACE TRANSITAIRE ----------
+function trRow(l, v, strong) { return '<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-top:3px;"><span style="color:var(--text-dim);min-width:0;">' + l + '</span><span style="flex-shrink:0;text-align:right;' + (strong ? 'font-weight:800;' : '') + '">' + v + '</span></div>'; }
+function renderTransitaireParcelCard(p, forAdmin) {
+  var due = parcelToCollectXof(p);
+  var html = '<div class="glass-card" style="padding:12px;margin-bottom:10px;min-width:0;">';
+  html += '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;"><span style="font-weight:800;font-size:12.5px;min-width:0;word-break:break-word;">' + esc(p.trackingNumber) + '</span><span class="status-pill" style="flex-shrink:0;max-width:55%;white-space:normal;text-align:right;">' + esc(transitStatusLabel(p)) + '</span></div>';
+  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;word-break:break-word;">' + esc(p.recipientName) + ' · ' + esc(p.recipientPhone) + (p.lotNumber ? ' · Lot ' + esc(p.lotNumber) : '') + '</div>';
+  html += '<div style="font-size:11.5px;margin-top:2px;word-break:break-word;"><i class="fa-solid fa-location-dot"></i> ' + esc(transitParcelPlace(p)) + '</div>';
+  html += trRow('Poids', String(p.weight || 0).replace('.', ',') + ' kg');
+  html += trRow('Livraison Sounsouni', money(p.deliveryFeeXof || 0) + ' (' + (p.deliveryPaidBy === "transitaire" ? "à votre charge" : "payée par le destinataire") + ')');
+  if (p.freightMode === "app" && p.freightAmount) html += trRow('Fret encaissé par Sounsouni', Number(p.freightAmount).toLocaleString("fr-FR") + ' ' + currencySymbol(p.freightCurrency) + ' = ' + money(p.freightXof || 0));
+  if (p.customsBy === "destinataire") html += trRow('Douane (destinataire)', p.customsXof != null ? money(p.customsXof) : 'fixée à l\'arrivée');
+  html += trRow('Le destinataire paie', money(due), true);
+  if (forAdmin) html += trRow('Transitaire', esc(p.transitaireName || '') + ' (' + esc(p.transitaireCountry || '') + ')');
+  if (!forAdmin && p.status !== "Retiré" && p.status !== "Annulé") html += '<div style="font-size:11px;background:var(--bg-body);border-radius:8px;padding:6px 8px;margin-top:6px;">Code de retrait à donner au destinataire : <strong style="letter-spacing:2px;">' + esc(p.codeRetrait || '—') + '</strong></div>';
+  if (p.transitaireAlerted && p.status !== "Retiré") html += '<div style="font-size:11px;color:var(--danger);margin-top:6px;"><i class="fa-solid fa-phone-slash"></i> Destinataire injoignable après ' + (p.callAttempts || 0) + ' appels — merci de le contacter.</div>';
+  if (!forAdmin && p.status === "Annoncé") html += '<button class="link-btn" style="font-size:11.5px;color:var(--danger);margin-top:6px;" data-action="transit-cancel-parcel" data-value="' + p.id + '"><i class="fa-solid fa-ban"></i> Annuler ce colis</button>';
+  html += '</div>';
+  return html;
+}
+function renderTransitaireForm(e) {
+  var cfg = getTransitaireConfig();
+  var d = state.transitDraft || (state.transitDraft = emptyTransitDraft());
+  var zone = cfg.zones.find(function(z) { return z.id === d.zoneId; }) || cfg.zones[0];
+  var kg = parseFloat(String(d.weight || "").replace(",", ".")) || 0;
+  var html = '<div class="glass-card" style="padding:14px;margin-bottom:14px;min-width:0;">';
+  html += '<div style="font-weight:800;font-size:14px;margin-bottom:8px;"><i class="fa-solid fa-box"></i> Annoncer un colis</div>';
+  html += '<label class="field-label" style="margin-top:0;">Numéro de suivi (facultatif)</label><input class="input" value="' + esc(d.trackingNumber) + '" placeholder="Créé automatiquement si vide" data-bind="transitDraft.trackingNumber" />';
+  html += '<label class="field-label">Numéro de lot (LTA, conteneur…) — facultatif</label><input class="input" value="' + esc(d.lotNumber) + '" placeholder="Ex : LTA 235-12345678" data-bind="transitDraft.lotNumber" />';
+  html += '<label class="field-label">Nom du destinataire à Bamako</label><input class="input" value="' + esc(d.recipientName) + '" data-bind="transitDraft.recipientName" />';
+  html += '<label class="field-label">Téléphone du destinataire</label><input class="input" inputmode="tel" value="' + esc(d.recipientPhone) + '" placeholder="Ex : 70 00 00 00" data-bind="transitDraft.recipientPhone" />';
+  html += '<label class="field-label">Poids (kg)</label><input class="input" inputmode="decimal" id="transit-weight" value="' + esc(d.weight) + '" placeholder="Ex : 3,5" data-bind="transitDraft.weight" data-live="debounce-filter" />';
+  html += '<label class="field-label">Contenu (facultatif)</label><input class="input" value="' + esc(d.description) + '" placeholder="Ex : vêtements, téléphones" data-bind="transitDraft.description" />';
+  html += '<label class="field-label">Livraison</label><div style="display:flex;flex-direction:column;gap:6px;">';
+  cfg.zones.forEach(function(z) { html += '<button class="chip ' + (z.id === zone.id ? 'active' : '') + '" style="text-align:left;white-space:normal;" data-action="transit-set-zone" data-value="' + esc(z.id) + '">' + esc(z.name) + ' — ' + money(z.price) + (Number(z.perKg) ? ' (+' + money(z.perKg) + '/kg au-delà de ' + z.kgIncluded + ' kg)' : '') + '</button>'; });
+  html += '</div>';
+  if (zone.kind === "relais") {
+    html += '<label class="field-label">Point de Retrait</label><select class="input" data-bind="transitDraft.relaisShopId"><option value="">Choisir…</option>';
+    relaisShopsList().forEach(function(r) { html += '<option value="' + esc(r.id) + '"' + (d.relaisShopId === r.id ? ' selected' : '') + '>' + esc((r.shopName || r.name) + (r.quartier ? ' — ' + r.quartier : '') + (r.commune ? ', ' + r.commune : '')) + '</option>'; });
+    html += '</select>';
+  } else {
+    html += '<label class="field-label">Commune</label><input class="input" value="' + esc(d.commune) + '" placeholder="Ex : Commune VI" data-bind="transitDraft.commune" />';
+    html += '<label class="field-label">Quartier</label><input class="input" value="' + esc(d.quartier) + '" placeholder="Ex : Sotuba" data-bind="transitDraft.quartier" />';
+    html += '<label class="field-label">Repère</label><input class="input" value="' + esc(d.repere) + '" placeholder="Ex : face à la pharmacie" data-bind="transitDraft.repere" />';
+  }
+  if (e.deliveryPayer !== "transitaire" && e.deliveryPayer !== "destinataire") {
+    html += '<label class="field-label">Qui paie la livraison à Bamako ?</label><div style="display:flex;gap:6px;flex-wrap:wrap;">';
+    [["destinataire", "Le destinataire"], ["transitaire", "Moi (transitaire)"]].forEach(function(o) { html += '<button class="chip ' + (d.deliveryPaidBy === o[0] ? 'active' : '') + '" data-action="transit-set-payer" data-value="' + o[0] + '">' + o[1] + '</button>'; });
+    html += '</div>';
+  }
+  if (e.freightMode === "app") {
+    html += '<label class="field-label">Fret à encaisser auprès du destinataire (' + esc(intlSym(e.country)) + ')</label><input class="input" inputmode="decimal" value="' + esc(d.freightAmount) + '" placeholder="0" data-bind="transitDraft.freightAmount" />';
+    html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;">Converti en FCFA au taux du jour (1 ' + esc(intlSym(e.country)) + ' = ' + Number(getInrToXofRate(e.country)).toFixed(2) + ' FCFA). Sounsouni vous le reverse, moins ' + (Number(e.commissionPct) || 0) + ' % de commission.</div>';
+  }
+  html += '<div style="font-size:12px;background:var(--bg-body);border-radius:10px;padding:8px 10px;margin-top:10px;">Livraison Sounsouni : <strong>' + money(transitaireDeliveryFee(zone, kg)) + '</strong>' + (kg ? ' pour ' + String(kg).replace('.', ',') + ' kg' : '') + '</div>';
+  html += '<button class="btn-primary" style="margin-top:12px;" data-action="transit-submit-parcel"><i class="fa-solid fa-paper-plane"></i> Annoncer le colis</button>';
+  html += '<button class="link-btn" style="margin-top:8px;width:100%;text-align:center;" data-action="transit-close-form">' + t("cancel_generic") + '</button>';
+  html += '</div>';
+  return html;
+}
+function renderTransitaireSpace() {
+  var e = myTransitaireEntry();
+  var html = '<button class="link-btn" style="margin-bottom:14px;" data-action="leave-agent-view-to-buyer"><i class="fa-solid fa-bars"></i> ' + t("op_change_role") + '</button>';
+  if (!e) return html + '<div class="empty-state"><i class="fa-solid fa-plane-slash"></i><div class="title">Ce compte n\'est pas transitaire.</div><div style="font-size:12px;color:var(--text-dim);">Demandez à Sounsouni de vous ajouter.</div></div>';
+  var mine = (state.externalParcels || []).filter(function(p) { return p.transitaireId && normalizeWalletPhone(p.transitairePhone) === normalizeWalletPhone(e.phone); }).sort(function(a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+  var done = function(p) { return p.status === "Retiré" || p.status === "Annulé" || p.status === "Retour à l'expéditeur"; };
+  var ongoing = mine.filter(function(p) { return !done(p); }), finished = mine.filter(done);
+  var bal = transitaireBalance(e);
+  html += '<div class="section-title" style="margin-bottom:4px;"><i class="fa-solid fa-plane-arrival"></i> Espace Transitaire</div>';
+  html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">' + esc(e.name || state.profile.name) + ' · ' + esc(intlFlagLabel(e.country)) + ' → Bamako</div>';
+  html += '<div class="stats-row"><div class="stat-card"><div class="stat-value">' + ongoing.length + '</div><div class="stat-label">Colis en cours</div></div>';
+  html += '<div class="stat-card"><div class="stat-value" style="color:' + (bal.net >= 0 ? '#2e9e4f' : 'var(--danger)') + ';">' + money(Math.abs(bal.net)) + '</div><div class="stat-label">' + (bal.net >= 0 ? 'Sounsouni vous doit' : 'Vous devez à Sounsouni') + '</div></div></div>';
+  html += '<div class="glass-card" style="padding:12px;margin-bottom:14px;font-size:12px;line-height:1.6;">';
+  html += '<div style="font-weight:800;margin-bottom:4px;">Vos conditions</div>';
+  html += '<div>• Livraison à Bamako : ' + (e.deliveryPayer === "transitaire" ? "à votre charge" : e.deliveryPayer === "destinataire" ? "payée par le destinataire" : "vous choisissez pour chaque colis") + '</div>';
+  html += '<div>• Fret international : ' + (e.freightMode === "app" ? "encaissé par Sounsouni, reversé moins " + (Number(e.commissionPct) || 0) + " %" : "réglé directement entre vous et vos clients") + '</div>';
+  html += '<div>• Douane au Mali : ' + (e.customsBy === "destinataire" ? "payée par le destinataire" : "à votre charge") + '</div>';
+  html += '<div>• Sounsouni récupère vos colis à l\'aéroport / au port de Bamako.</div>';
+  if (bal.byT || bal.toT) html += '<div style="margin-top:6px;color:var(--text-dim);">Fret à vous reverser : ' + money(bal.toT) + ' · Livraisons et frais à votre charge : ' + money(bal.byT) + '</div>';
+  html += '</div>';
+  if (state.showTransitForm) html += renderTransitaireForm(e);
+  else html += '<button class="btn-primary" style="margin-bottom:14px;" data-action="transit-open-form"><i class="fa-solid fa-plus"></i> Annoncer un colis</button>';
+  html += '<div style="font-weight:800;font-size:13px;margin-bottom:8px;">En cours (' + ongoing.length + ')</div>';
+  if (!ongoing.length) html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">Aucun colis en cours.</div>';
+  ongoing.forEach(function(p) { html += renderTransitaireParcelCard(p, false); });
+  if (finished.length) {
+    html += '<button class="link-btn" style="font-size:12.5px;margin:6px 0 8px;" data-action="transit-toggle-finished"><i class="fa-solid ' + (state.showTransitFinished ? 'fa-chevron-up' : 'fa-chevron-down') + '"></i> Terminés (' + finished.length + ')</button>';
+    if (state.showTransitFinished) finished.slice(0, 60).forEach(function(p) { html += renderTransitaireParcelCard(p, false); });
+  }
+  return html;
+}
+
+// ---------- ADMIN : TRANSITAIRES ----------
+function renderAdminTransitairesSection() {
+  var isOwner = state.adminIsOwner, cfg = getTransitaireConfig();
+  var announced = (state.externalParcels || []).filter(function(p) { return p.transitaireId && p.status === "Annoncé"; });
+  var toCall = parcelsToCall(), alerted = parcelsTransitaireAlerted();
+  var html = '<div class="glass-card" style="padding:14px;margin-bottom:16px;min-width:0;">';
+  html += '<div style="font-weight:800;font-size:14px;margin-bottom:6px;"><i class="fa-solid fa-plane-arrival"></i> Transitaires</div>';
+  html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;">Colis annoncés depuis l\'étranger, à récupérer à l\'aéroport ou au port, puis livrés par le réseau Sounsouni.</div>';
+
+  // 1) Colis à appeler (non retirés au Point de Retrait)
+  html += '<div style="font-weight:800;font-size:13px;margin:6px 0;"><i class="fa-solid fa-phone"></i> Colis à appeler (' + toCall.length + ')</div>';
+  if (!toCall.length) html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:8px;">Aucun appel à faire.</div>';
+  toCall.forEach(function(p) {
+    var days = Math.floor((Date.now() - parcelArrivedAtRelaisAt(p)) / 86400000);
+    html += '<div style="background:var(--bg-body);border-radius:10px;padding:10px;margin-bottom:8px;min-width:0;">';
+    html += '<div style="font-weight:700;font-size:12.5px;word-break:break-word;">' + esc(p.recipientName) + ' — <a href="tel:' + esc(p.recipientPhone) + '">' + esc(p.recipientPhone) + '</a></div>';
+    html += '<div style="font-size:11px;color:var(--text-dim);word-break:break-word;">' + esc(p.trackingNumber) + ' · ' + esc(p.relaisShopName || '') + ' · depuis ' + days + ' jour(s) · ' + (p.callAttempts || 0) + ' appel(s) sans réponse' + (parcelToCollectXof(p) ? ' · à payer ' + money(parcelToCollectXof(p)) : '') + '</div>';
+    html += '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;"><button class="btn-primary" style="flex:1 1 120px;width:auto;min-width:0;padding:6px;font-size:12px;" data-action="parcel-call-reached" data-value="' + p.id + '">Joint — il vient</button><button class="btn-secondary" style="flex:1 1 120px;width:auto;min-width:0;padding:6px;font-size:12px;" data-action="parcel-call-unreachable" data-value="' + p.id + '">Injoignable</button></div>';
+    html += '</div>';
+  });
+  if (alerted.length) {
+    html += '<div style="font-weight:800;font-size:13px;margin:10px 0 6px;color:var(--danger);"><i class="fa-solid fa-phone-slash"></i> Injoignables — transitaire prévenu (' + alerted.length + ')</div>';
+    alerted.forEach(function(p) {
+      html += '<div style="background:var(--bg-body);border-radius:10px;padding:10px;margin-bottom:8px;min-width:0;"><div style="font-size:12px;font-weight:700;word-break:break-word;">' + esc(p.trackingNumber) + ' — ' + esc(p.recipientName) + ' (' + esc(p.recipientPhone) + ')</div><div style="font-size:11px;color:var(--text-dim);">' + (p.transitaireName ? 'Transitaire : ' + esc(p.transitaireName) + ' · ' : '') + esc(p.relaisShopName || '') + '</div>';
+      html += '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;"><button class="btn-secondary" style="flex:1 1 120px;width:auto;min-width:0;padding:6px;font-size:12px;" data-action="parcel-call-reached" data-value="' + p.id + '">Finalement joint</button><button class="btn-secondary" style="flex:1 1 120px;width:auto;min-width:0;padding:6px;font-size:12px;color:var(--danger);" data-action="parcel-return-sender" data-value="' + p.id + '">Retour à l\'expéditeur</button></div></div>';
+    });
+  }
+
+  // 2) Colis annoncés, regroupés par lot
+  html += '<div style="font-weight:800;font-size:13px;margin:12px 0 6px;"><i class="fa-solid fa-plane"></i> Colis annoncés, pas encore récupérés (' + announced.length + ')</div>';
+  if (!announced.length) html += '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:8px;">Aucun colis en attente.</div>';
+  var lots = {};
+  announced.forEach(function(p) { var k = (p.transitairePhone || '') + '|' + (p.lotNumber || ''); (lots[k] = lots[k] || []).push(p); });
+  Object.keys(lots).forEach(function(k) {
+    var ps = lots[k], f = ps[0];
+    html += '<div style="background:var(--bg-body);border-radius:10px;padding:10px;margin-bottom:8px;min-width:0;">';
+    html += '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;"><div style="min-width:0;"><div style="font-weight:800;font-size:12.5px;word-break:break-word;">' + esc(f.transitaireName || '') + (f.lotNumber ? ' — Lot ' + esc(f.lotNumber) : ' — sans numéro de lot') + '</div><div style="font-size:11px;color:var(--text-dim);">' + ps.length + ' colis · ' + String(Math.round(ps.reduce(function(s, x) { return s + (Number(x.weight) || 0); }, 0) * 10) / 10).replace('.', ',') + ' kg</div></div>';
+    html += '<button class="btn-primary" style="flex:0 0 auto;width:auto;padding:6px 10px;font-size:11.5px;" data-action="transit-lot-arrived" data-value="' + esc(k) + '"><i class="fa-solid fa-check"></i> Lot arrivé</button></div>';
+    ps.forEach(function(p) {
+      html += '<div style="border-top:1px solid var(--border-color);margin-top:8px;padding-top:8px;min-width:0;">';
+      html += '<div style="font-size:12px;font-weight:700;word-break:break-word;">' + esc(p.trackingNumber) + ' — ' + esc(p.recipientName) + '</div><div style="font-size:11px;color:var(--text-dim);word-break:break-word;">' + String(p.weight).replace('.', ',') + ' kg · ' + esc(transitParcelPlace(p)) + '</div>';
+      html += '<div style="display:flex;gap:6px;margin-top:6px;align-items:center;flex-wrap:wrap;">';
+      if (p.customsBy === "destinataire") html += '<input class="input" type="number" min="0" step="500" style="flex:1 1 120px;min-width:0;padding:6px 8px;font-size:12px;" placeholder="Douane (FCFA)" value="' + (p.customsXof != null ? p.customsXof : '') + '" data-action-input="transit-customs" data-config="' + p.id + '" />';
+      html += '<button class="btn-secondary" style="flex:0 0 auto;width:auto;padding:6px 10px;font-size:11.5px;" data-action="transit-parcel-arrived" data-value="' + p.id + '">Arrivé</button></div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+
+  // 3) Les transitaires et leurs comptes
+  var list = transitaireList();
+  html += '<div style="font-weight:800;font-size:13px;margin:12px 0 6px;"><i class="fa-solid fa-users"></i> Comptes transitaires (' + list.length + ')</div>';
+  list.forEach(function(e) {
+    var acc = findAccountByPhone(e.phone), bal = transitaireBalance(e);
+    var open = state.openTransitaireId === e.id;
+    html += '<div style="background:var(--bg-body);border-radius:10px;padding:10px;margin-bottom:8px;min-width:0;">';
+    html += '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><div style="min-width:0;"><div style="font-weight:800;font-size:12.5px;word-break:break-word;">' + esc(e.name || (acc && acc.name) || 'Transitaire') + (e.active === false ? ' <span style="color:var(--danger);font-size:10.5px;">(désactivé)</span>' : '') + '</div><div style="font-size:11px;color:var(--text-dim);">' + esc(e.phone) + ' · ' + esc(intlFlagLabel(e.country)) + (acc ? '' : ' · pas encore de compte Sounsouni') + '</div></div>';
+    html += '<button class="link-btn" style="flex-shrink:0;padding:6px;" data-action="toggle-transitaire-open" data-value="' + esc(e.id) + '"><i class="fa-solid ' + (open ? 'fa-chevron-up' : 'fa-chevron-down') + '"></i></button></div>';
+    html += trRow('Fret à lui reverser', money(bal.toT)) + trRow('Livraisons / frais à sa charge', money(bal.byT)) + trRow(bal.net >= 0 ? 'Solde : Sounsouni lui doit' : 'Solde : il doit à Sounsouni', money(Math.abs(bal.net)), true);
+    if (isOwner && bal.parcels.length) html += '<button class="btn-secondary" style="width:100%;margin-top:8px;padding:6px;font-size:12px;" data-action="transitaire-mark-settled" data-value="' + esc(e.id) + '"><i class="fa-solid fa-handshake"></i> Marquer réglé (' + bal.parcels.length + ' colis)</button>';
+    if (open && isOwner) {
+      var sel = function(id, cur, opts) { return '<select class="input" id="' + id + '" style="width:100%;min-width:0;">' + opts.map(function(o) { return '<option value="' + o[0] + '"' + (cur === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>'; };
+      html += '<label class="field-label" style="font-size:10.5px;">Nom affiché</label><input class="input" id="tr-name-' + e.id + '" value="' + esc(e.name || '') + '" />';
+      html += '<label class="field-label" style="font-size:10.5px;">Livraison à Bamako payée par</label>' + sel('tr-payer-' + e.id, e.deliveryPayer || "choix", [["choix", "Au choix, colis par colis"], ["destinataire", "Toujours le destinataire"], ["transitaire", "Toujours le transitaire"]]);
+      html += '<label class="field-label" style="font-size:10.5px;">Fret international</label>' + sel('tr-freight-' + e.id, e.freightMode || "transitaire", [["transitaire", "Géré par le transitaire"], ["app", "Encaissé par l'app"]]);
+      html += '<label class="field-label" style="font-size:10.5px;">Commission Sounsouni sur le fret (%)</label><input class="input" type="number" min="0" max="100" step="0.5" id="tr-comm-' + e.id + '" value="' + (Number(e.commissionPct) || 0) + '" />';
+      html += '<label class="field-label" style="font-size:10.5px;">Douane au Mali payée par</label>' + sel('tr-customs-' + e.id, e.customsBy || "transitaire", [["transitaire", "Le transitaire"], ["destinataire", "Le destinataire"]]);
+      html += '<label class="field-label" style="font-size:10.5px;">Pays</label><select class="input" id="tr-country-' + e.id + '">' + intlCountryList().map(function(cc) { return '<option value="' + esc(cc) + '"' + (cc === e.country ? ' selected' : '') + '>' + esc(intlFlagLabel(cc)) + '</option>'; }).join('') + '</select>';
+      html += '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;"><button class="btn-primary" style="flex:1 1 140px;width:auto;min-width:0;padding:8px;font-size:12px;" data-action="save-transitaire-settings" data-value="' + esc(e.id) + '"><i class="fa-solid fa-floppy-disk"></i> Enregistrer</button>';
+      html += '<button class="btn-secondary" style="flex:1 1 140px;width:auto;min-width:0;padding:8px;font-size:12px;" data-action="remove-transitaire" data-value="' + esc(e.id) + '">' + (e.active === false ? 'Réactiver' : 'Désactiver') + '</button></div>';
+    }
+    html += '</div>';
+  });
+  if (isOwner) {
+    html += '<div style="display:flex;gap:6px;margin-top:6px;min-width:0;"><input class="input" id="new-transitaire-phone" placeholder="Numéro (ex : +86…)" style="flex:1;min-width:0;" /><button class="btn-primary" style="flex:0 0 auto;width:auto;padding:0 14px;" data-action="add-transitaire"><i class="fa-solid fa-plus"></i></button></div>';
+    html += '<select class="input" id="new-transitaire-country" style="margin-top:6px;">' + intlCountryList().map(function(cc) { return '<option value="' + esc(cc) + '">' + esc(intlFlagLabel(cc)) + '</option>'; }).join('') + '</select>';
+    html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;">Le transitaire crée son compte Sounsouni avec ce numéro, puis trouve « Espace Transitaire » dans le menu des rôles. Un agent de sourcing peut aussi être transitaire.</div>';
+
+    // 4) Tarifs et règles
+    html += '<div style="font-weight:800;font-size:13px;margin:14px 0 6px;"><i class="fa-solid fa-tags"></i> Tarifs de livraison des colis transitaires</div>';
+    html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">Prix par colis selon la zone, + un prix par kilo au-delà du poids compris.</div>';
+    cfg.zones.forEach(function(z, i) {
+      html += '<div style="background:var(--bg-body);border-radius:10px;padding:8px;margin-bottom:6px;min-width:0;">';
+      html += '<input class="input" id="trz-name-' + i + '" value="' + esc(z.name) + '" style="padding:6px 8px;font-size:12px;" />';
+      html += '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:6px;">';
+      html += '<select class="input" id="trz-kind-' + i + '" style="padding:6px 8px;font-size:12px;min-width:0;"><option value="relais"' + (z.kind !== "domicile" ? ' selected' : '') + '>Point de Retrait</option><option value="domicile"' + (z.kind === "domicile" ? ' selected' : '') + '>Domicile</option></select>';
+      html += '<input class="input" type="number" min="0" id="trz-price-' + i + '" value="' + (Number(z.price) || 0) + '" title="Prix par colis (FCFA)" style="padding:6px 8px;font-size:12px;min-width:0;" />';
+      html += '<input class="input" type="number" min="0" step="0.5" id="trz-kg-' + i + '" value="' + (Number(z.kgIncluded) || 0) + '" title="Kilos compris" style="padding:6px 8px;font-size:12px;min-width:0;" />';
+      html += '<input class="input" type="number" min="0" id="trz-perkg-' + i + '" value="' + (Number(z.perKg) || 0) + '" title="Prix par kg en plus (FCFA)" style="padding:6px 8px;font-size:12px;min-width:0;" />';
+      html += '</div><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;font-size:10px;color:var(--text-dim);margin-top:2px;"><span>Type · Prix par colis (FCFA)</span><span>Kilos compris · Prix/kg en plus</span></div>';
+      if (cfg.zones.length > 1) html += '<button class="link-btn" style="font-size:11px;color:var(--danger);margin-top:4px;" data-action="transit-remove-zone" data-value="' + i + '"><i class="fa-solid fa-trash"></i> Retirer cette zone</button>';
+      html += '</div>';
+    });
+    html += '<button class="link-btn" style="font-size:12px;" data-action="transit-add-zone"><i class="fa-solid fa-plus"></i> Ajouter une zone</button>';
+    html += '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px;">';
+    html += '<div style="min-width:0;"><label class="field-label" style="font-size:10px;margin-top:0;">Appel après (j)</label><input class="input" type="number" min="1" id="tr-call-days" value="' + cfg.unclaimedCallDays + '" style="min-width:0;" /></div>';
+    html += '<div style="min-width:0;"><label class="field-label" style="font-size:10px;margin-top:0;">Appels max.</label><input class="input" type="number" min="1" id="tr-call-max" value="' + cfg.maxCallAttempts + '" style="min-width:0;" /></div>';
+    html += '<div style="min-width:0;"><label class="field-label" style="font-size:10px;margin-top:0;">Rappel (h)</label><input class="input" type="number" min="1" id="tr-call-retry" value="' + cfg.callRetryHours + '" style="min-width:0;" /></div>';
+    html += '</div>';
+    html += '<button class="btn-primary" style="margin-top:10px;" data-action="save-transitaire-defaults"><i class="fa-solid fa-floppy-disk"></i> Enregistrer tarifs et règles</button>';
   }
   html += '</div>';
   return html;
@@ -24711,6 +25096,7 @@ function renderAdminExternalParcelsTab() {
     }
   }
 
+  html += renderAdminTransitairesSection();
   html += renderExternalParcelFormSection();
 
   html += '<div class="glass-card" style="padding:14px;">';
@@ -31570,6 +31956,149 @@ root.addEventListener("click", function(e) {
       if (retraitInput) confirmRelaisRetrait(value, retraitInput.value);
       break;
     }
+    case "open-transitaire-space": state.showRoleMenu = false; state.view = "transitaire"; render(); window.scrollTo(0, 0); break;
+    case "transit-open-form": state.showTransitForm = true; state.transitDraft = emptyTransitDraft(); render(); break;
+    case "transit-close-form": state.showTransitForm = false; state.transitDraft = null; render(); break;
+    case "transit-set-zone": if (state.transitDraft) state.transitDraft.zoneId = value; render(); break;
+    case "transit-set-payer": if (state.transitDraft) state.transitDraft.deliveryPaidBy = value; render(); break;
+    case "transit-toggle-finished": state.showTransitFinished = !state.showTransitFinished; render(); break;
+    case "transit-submit-parcel": {
+      var trNew = announceTransitaireParcel(state.transitDraft || {});
+      if (trNew) { state.showTransitForm = false; state.transitDraft = null; showToast("✅ Colis " + trNew.trackingNumber + " annoncé à Sounsouni."); render(); }
+      break;
+    }
+    case "transit-cancel-parcel": {
+      var trC = findExternalParcel(value);
+      if (!trC || trC.status !== "Annoncé") break;
+      if (!confirm("Annuler le colis " + trC.trackingNumber + " ?")) break;
+      trC.status = "Annulé"; trC.statusHistory = (trC.statusHistory || []).concat([{ status: "Annulé", at: Date.now(), note: null }]);
+      saveExternalParcel(trC); render();
+      break;
+    }
+    case "transit-parcel-arrived": {
+      var trA = findExternalParcel(value);
+      if (trA && trA.customsBy === "destinataire" && trA.customsXof == null && !confirm("Aucun montant de douane saisi pour ce colis. Continuer quand même (douane = 0) ?")) break;
+      markTransitParcelArrived(trA);
+      showToast("✅ Colis arrivé — visible par les livreurs.");
+      render();
+      break;
+    }
+    case "transit-lot-arrived": {
+      var lotPs = (state.externalParcels || []).filter(function(p) { return p.transitaireId && p.status === "Annoncé" && ((p.transitairePhone || '') + '|' + (p.lotNumber || '')) === value; });
+      var missingCustoms = lotPs.filter(function(p) { return p.customsBy === "destinataire" && p.customsXof == null; }).length;
+      if (!confirm("Marquer " + lotPs.length + " colis comme arrivés à Bamako ?" + (missingCustoms ? "\n" + missingCustoms + " colis sans montant de douane (compté 0)." : ""))) break;
+      lotPs.forEach(markTransitParcelArrived);
+      showToast("✅ " + lotPs.length + " colis arrivés — visibles par les livreurs.");
+      render();
+      break;
+    }
+    case "parcel-call-reached":
+    case "parcel-call-unreachable": {
+      var pc = findExternalParcel(value);
+      if (!pc) break;
+      var ccfg = getTransitaireConfig(), reached = action === "parcel-call-reached";
+      pc.callLog = (pc.callLog || []).concat([{ at: Date.now(), by: state.profile ? state.profile.name : "Admin", result: reached ? "joint" : "injoignable" }]);
+      pc.nextCallAt = Date.now() + (Number(ccfg.callRetryHours) || 24) * 3600000;
+      if (reached) { pc.callAttempts = 0; pc.transitaireAlerted = false; }
+      else {
+        pc.callAttempts = (Number(pc.callAttempts) || 0) + 1;
+        if (pc.callAttempts >= (Number(ccfg.maxCallAttempts) || 3)) {
+          pc.transitaireAlerted = true; pc.transitaireAlertedAt = Date.now();
+          if (pc.transitaireId) addNotification("whatsapp", "📞 Votre destinataire " + pc.recipientName + " (" + pc.recipientPhone + ") est injoignable après " + pc.callAttempts + " appels. Son colis " + pc.trackingNumber + " attend chez " + (pc.relaisShopName || "le Point de Retrait") + ". Merci de le prévenir.", pc.transitaireId, "transitaire");
+        }
+      }
+      saveExternalParcel(pc);
+      showToast(reached ? "✅ Appel noté." : (pc.transitaireAlerted ? "📣 Injoignable — transitaire prévenu." : "📞 Appel sans réponse noté (" + pc.callAttempts + ")."));
+      render();
+      break;
+    }
+    case "parcel-return-sender": {
+      if (!confirm("Retourner ce colis à l'expéditeur ?")) break;
+      setExternalParcelStatus(value, "Retour à l'expéditeur", "Destinataire injoignable");
+      render();
+      break;
+    }
+    case "toggle-transitaire-open": state.openTransitaireId = state.openTransitaireId === value ? null : value; render(); break;
+    case "add-transitaire": {
+      var ntPhoneEl = document.getElementById("new-transitaire-phone"), ntCountryEl = document.getElementById("new-transitaire-country");
+      var ntPhone = ntPhoneEl ? ntPhoneEl.value.trim() : "";
+      if (ntPhone.replace(/\D/g, "").length < 8) { showToast(t("toast_enter_valid_number")); break; }
+      var ntAcc = findAccountByPhone(ntPhone);
+      if (ntAcc) ntPhone = ntAcc.phone;
+      var ntList = transitaireList().slice();
+      if (ntList.some(function(x) { return normalizeWalletPhone(x.phone) === normalizeWalletPhone(ntPhone); })) { showToast(t("toast_number_already_authorized")); break; }
+      ntList.push({ id: uid(), phone: ntPhone, name: ntAcc ? ntAcc.name : "", country: (ntCountryEl && ntCountryEl.value) || INTL_DEFAULT_COUNTRY, deliveryPayer: "choix", freightMode: "transitaire", commissionPct: 0, customsBy: "transitaire", active: true, createdAt: Date.now() });
+      saveTransitaireList(ntList);
+      showToast("✅ Transitaire ajouté.");
+      render();
+      break;
+    }
+    case "remove-transitaire": {
+      var rtList = transitaireList().map(function(x) { return x.id === value ? Object.assign({}, x, { active: x.active === false }) : x; });
+      saveTransitaireList(rtList); render();
+      break;
+    }
+    case "save-transitaire-settings": {
+      var gv = function(id) { var el = document.getElementById(id + value); return el ? el.value : null; };
+      var comm = parseFloat(gv("tr-comm-"));
+      if (isNaN(comm) || comm < 0 || comm > 100) { showToast("❌ Commission entre 0 et 100 %."); break; }
+      var stList = transitaireList().map(function(x) {
+        if (x.id !== value) return x;
+        return Object.assign({}, x, { name: (gv("tr-name-") || "").trim(), deliveryPayer: gv("tr-payer-") || "choix", freightMode: gv("tr-freight-") === "app" ? "app" : "transitaire", commissionPct: comm, customsBy: gv("tr-customs-") === "destinataire" ? "destinataire" : "transitaire", country: gv("tr-country-") || x.country });
+      });
+      saveTransitaireList(stList);
+      showToast("✅ Réglages du transitaire enregistrés (valables pour ses prochains colis).");
+      render();
+      break;
+    }
+    case "transitaire-mark-settled": {
+      var stE = transitaireList().find(function(x) { return x.id === value; });
+      if (!stE) break;
+      var stBal = transitaireBalance(stE);
+      if (!confirm("Confirmer le règlement de " + stBal.parcels.length + " colis ?\n" + (stBal.net >= 0 ? "Sounsouni a versé " : "Le transitaire a versé ") + money(Math.abs(stBal.net)) + ".")) break;
+      var stAt = Date.now();
+      stBal.parcels.forEach(function(p) { p.settled = true; p.settledAt = stAt; saveDoc("externalParcels", p); });
+      save();
+      showToast("✅ Compte réglé.");
+      render();
+      break;
+    }
+    case "transit-add-zone": {
+      var azCfg = getTransitaireConfig();
+      azCfg.zones = azCfg.zones.concat([{ id: "z" + uid().slice(-6), name: "Nouvelle zone", kind: "relais", price: 1500, kgIncluded: 5, perKg: 300 }]);
+      saveSettingsDoc(azCfg); render();
+      break;
+    }
+    case "transit-remove-zone": {
+      var rzCfg = getTransitaireConfig();
+      if (rzCfg.zones.length <= 1) break;
+      rzCfg.zones = rzCfg.zones.filter(function(z, i) { return i !== Number(value); });
+      saveSettingsDoc(rzCfg); render();
+      break;
+    }
+    case "save-transitaire-defaults": {
+      var sdCfg = getTransitaireConfig();
+      var numOf = function(id) { var el = document.getElementById(id); var v = el ? parseFloat(el.value) : NaN; return isNaN(v) || v < 0 ? null : v; };
+      var bad = false;
+      sdCfg.zones = sdCfg.zones.map(function(z, i) {
+        var nm = document.getElementById("trz-name-" + i), kd = document.getElementById("trz-kind-" + i);
+        var pr = numOf("trz-price-" + i), kg = numOf("trz-kg-" + i), pk = numOf("trz-perkg-" + i);
+        if (pr == null || kg == null || pk == null) bad = true;
+        return { id: z.id, name: (nm && nm.value.trim()) || z.name, kind: kd && kd.value === "domicile" ? "domicile" : "relais", price: pr || 0, kgIncluded: kg || 0, perKg: pk || 0 };
+      });
+      var cd = numOf("tr-call-days"), cm = numOf("tr-call-max"), cr = numOf("tr-call-retry");
+      if (bad || !(cd >= 1) || !(cm >= 1) || !(cr >= 1)) { showToast("❌ Tous les champs doivent être des nombres valides."); break; }
+      sdCfg.unclaimedCallDays = cd; sdCfg.maxCallAttempts = Math.round(cm); sdCfg.callRetryHours = cr;
+      saveSettingsDoc(sdCfg);
+      showToast("✅ Tarifs et règles enregistrés.");
+      render();
+      break;
+    }
+    case "confirm-transit-home-delivery": {
+      var hdIn = document.getElementById('parcel-retrait-input-' + value);
+      if (hdIn) confirmExternalParcelRetrieval(value, hdIn.value.trim());
+      break;
+    }
     case "open-external-parcels": {
       state.view = "externalParcels";
       state.showExternalParcelForm = false;
@@ -32653,6 +33182,12 @@ root.addEventListener("input", function(e) {
   if (actionInput === "admin-sellers-search") {
     state.adminSellersSearch = el.value;
     render();
+    return;
+  }
+  if (actionInput === "transit-customs") {
+    var tcP = findExternalParcel(el.dataset.config);
+    var tcV = el.value === "" ? null : Math.max(0, Math.round(parseFloat(el.value) || 0));
+    if (tcP && tcP.status === "Annoncé" && tcP.customsXof !== tcV) { tcP.customsXof = tcV; saveExternalParcel(tcP); }
     return;
   }
   if (actionInput === "admin-parcels-search") {

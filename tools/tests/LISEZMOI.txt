@@ -4,3 +4,5 @@ Résultat attendu : « 52 réussis, 0 échoués ».
 Deuxième fichier (comptes, données privées, push, avis) : test-comptes-donnees.ts (même commande).
 Sounsouni Gestion : test-gestion.ts (38) et test-gestion-paiement.ts (10), même commande.
 Connexion Google : test-google.ts (15), même commande.
+Pays partenaires + transitaires : test-transitaire.ts (34), même commande.
+Écrans (navigateur, 63 vérifications) : servir le dépôt avec « python3 -m http.server 8765 » puis « python3 tools/tests/navigateur/test-transitaire-ecrans.py ».

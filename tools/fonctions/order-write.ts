@@ -1,5 +1,5 @@
 // ============================================================
-// Fonction serveur : order-write (version 2026-10-29, audit sécurité)
+// Fonction serveur : order-write (version 2026-11-04 : pays partenaires — taux contrôlé selon la monnaie du vendeur)
 // Seul chemin pour créer ou modifier une commande.
 // Nouveau (failles CMD-1, CMD-2, CMD-3, CMD-5, ARG-1) :
 // - À la création, le serveur relit le VRAI prix de chaque article (prix
@@ -56,7 +56,7 @@ async function verifySession(req: Request) {
   }
 }
 const CONTENT_FIELDS = ["items", "subtotal", "total", "subtotalInr", "shippingCostInr", "totalInr", "exchangeRate", "commissionTotal", "affiliateAmount", "platformCommissionAmount"];
-const LOCKED_AFTER_CREATION = ["buyerId", "sellerIds", "commissionRate", "commissionMode", "affiliateId", "isDigital", "isInternational", "deliveryMode", "relaisShopId", "createdAt"];
+const LOCKED_AFTER_CREATION = ["country", "intlCountry", "intlCurrency", "buyerId", "sellerIds", "commissionRate", "commissionMode", "affiliateId", "isDigital", "isInternational", "deliveryMode", "relaisShopId", "createdAt"];
 // Champs que seul le serveur écrit (jamais un téléphone, même l'Admin).
 const SERVER_ONLY = ["otp", "codeRetrait", "codeDepot", "deliveryVerified", "deliveryVerifiedAt", "deliveryVerifiedBy", "stockReserved", "stockReleased", "walletPaid", "paymentIssue",
   "affiliateCommissionCredited", "sellerPayoutSettled", "commissionAmount", "commissionSettled", "commissionSettledAt", "payoutId"];
@@ -84,6 +84,10 @@ function unitPrice(prod: any, qty: number, color: unknown): number {
 }
 const STATUS_RANK: Record<string, number> = { "Nouvelle": 0, "Prête": 1, "Paiement reçu": 1, "Récupérée": 2, "Vérification agent": 2, "En route": 3, "Transitaire": 3, "En transit": 4, "En boutique": 4, "Arrivé": 5, "Non livrable": 8, "Refusée au retrait": 8, "Livrée": 9, "Annulée": 9 };
 const VS_RANK: Record<string, number> = { "Nouvelle": 0, "Prête": 1, "Refusée": 2, "Annulée": 2 };
+// Monnaie d'un pays partenaire et plage de taux acceptée (1 unité = x FCFA).
+const INTL_CUR: Record<string, string> = { "Inde": "INR", "Chine": "CNY", "France": "EUR", "Belgique": "EUR", "Allemagne": "EUR", "Italie": "EUR", "Espagne": "EUR", "Portugal": "EUR", "Pays-Bas": "EUR", "Émirats arabes unis": "AED", "États-Unis": "USD", "Canada": "CAD", "Royaume-Uni": "GBP", "Turquie": "TRY", "Maroc": "MAD" };
+const RATE_RANGE: Record<string, [number, number]> = { INR: [5, 10], CNY: [50, 150], EUR: [650, 660], USD: [400, 900], CAD: [300, 700], AED: [100, 250], GBP: [500, 1100], TRY: [5, 40], MAD: [35, 100] };
+const rateOk = (cur: string, r: number) => { const g = RATE_RANGE[cur]; return !!g && r >= g[0] && r <= g[1]; };
 const CODE_WINDOW_MS = 3600 * 1000, CODE_MAX_FAILS = 6;
 
 Deno.serve(async (req) => {
@@ -177,7 +181,11 @@ Deno.serve(async (req) => {
       if (isIntl) {
         if (clientSubtotal + 1 < subtotal || num(contentPayload.subtotalInr) + 1 < subtotal) return fail(409, "price_changed");
         const rate = num(contentPayload.exchangeRate);
-        if (rate < 5 || rate > 10 || num(contentPayload.subtotal) + 1 < subtotal * rate * 0.99) return fail(409, "price_changed");
+        const intlCountry = String(prods[Object.keys(prods)[0]].country || "Inde");
+        const cur = INTL_CUR[intlCountry];
+        if (!cur || Object.values(prods).some((p: any) => String(p.country || "Inde") !== intlCountry)) return fail(400, "country_not_supported");
+        if (!rateOk(cur, rate) || num(contentPayload.subtotal) + 1 < subtotal * rate * 0.99) return fail(409, "price_changed");
+        data.country = intlCountry; data.intlCountry = intlCountry; data.intlCurrency = cur;
         contentPayload.subtotalInr = subtotal;
         total = num(contentPayload.total);
         data.deliveryFee = Math.max(0, Math.round(num(data.deliveryFee)));

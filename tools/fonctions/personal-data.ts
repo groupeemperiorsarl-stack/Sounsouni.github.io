@@ -1,5 +1,5 @@
 // ============================================================
-// Fonction serveur : personal-data (version 2026-10-29)
+// Fonction serveur : personal-data (version 2026-11-04 : colis des transitaires)
 // Renvoie à chacun SES commandes, notifications et conversations.
 // Nouveau : codes de livraison masqués pour tous sauf l'acheteur (voir maskCodes).
 // Version 2026-10-30 (audit BDD-3/4) : les collections privées (candidatures,
@@ -230,9 +230,11 @@ privates.disputes = dedupe([dBuyer, ...dSellers]);
 const pLists = await Promise.all([
 all(() => q().eq("collection", "externalParcels").in("data->>relaisShopId", idList)),
 all(() => q().eq("collection", "externalParcels").in("data->>livreurId", idList)),
+all(() => q().eq("collection", "externalParcels").in("data->>transitaireId", idList)),
 ...(isCourier ? [all(() => q().eq("collection", "externalParcels").eq("data->>status", "Créé"))] : []),
 ]);
-privates.externalParcels = dedupe(pLists);
+// Le code de retrait n'est montré qu'au Point de Retrait et au transitaire (jamais au livreur).
+privates.externalParcels = dedupe(pLists).map((p: any) => (idList.includes(p.relaisShopId) || idList.includes(p.transitaireId)) ? p : { ...p, codeRetrait: undefined });
 return json({ success: true, full: false, role: me.role || null, orders, notifications, conversations, accounts: myAccounts, privates });
 } catch (e) {
 return json({ success: false, error: String(e) }, 500);

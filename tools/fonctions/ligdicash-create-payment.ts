@@ -4,6 +4,10 @@
 // depuis le 31/10/2026, abonnement Sounsouni Gestion « gestion »).
 // ============================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Monnaie d'un pays partenaire et plage de taux acceptée (1 unité = x FCFA).
+const INTL_CUR: Record<string, string> = { "Inde": "INR", "Chine": "CNY", "France": "EUR", "Belgique": "EUR", "Allemagne": "EUR", "Italie": "EUR", "Espagne": "EUR", "Portugal": "EUR", "Pays-Bas": "EUR", "Émirats arabes unis": "AED", "États-Unis": "USD", "Canada": "CAD", "Royaume-Uni": "GBP", "Turquie": "TRY", "Maroc": "MAD" };
+const RATE_RANGE: Record<string, [number, number]> = { INR: [5, 10], CNY: [50, 150], EUR: [650, 660], USD: [400, 900], CAD: [300, 700], AED: [100, 250], GBP: [500, 1100], TRY: [5, 40], MAD: [35, 100] };
+const rateOk = (cur: string, r: number) => { const g = RATE_RANGE[cur]; return !!g && r >= g[0] && r <= g[1]; };
 // Clés LigdiCash : gardées dans le coffre chiffré (Vault) de Supabase, lues au
 // démarrage par la fonction protégée ligdicash_keys (rôle service seulement).
 // Les secrets de fonction (s'ils existent) restent pris en secours.
@@ -124,7 +128,8 @@ const subtotal = o.isInternational ? num(o.subtotalInr) : num(o.subtotal);
 if (subtotal + 1 < expected) return json({ success: false, error: "price_changed" }, 409);
 if (o.isInternational) {
 const rate = num(o.exchangeRate);
-if (rate < 5 || rate > 10 || num(o.subtotal) + 1 < subtotal * rate * 0.99) return json({ success: false, error: "price_changed" }, 409);
+const cur = String(o.intlCurrency || INTL_CUR[String(o.country || "Inde")] || "");
+if (!rateOk(cur, rate) || num(o.subtotal) + 1 < subtotal * rate * 0.99) return json({ success: false, error: "price_changed" }, 409);
 }
 if (num(o.deliveryFee) < 0 || Math.abs(num(o.subtotal) + num(o.deliveryFee) - num(o.total)) > 1) return json({ success: false, error: "amount_mismatch" }, 409);
 amount = Math.round(num(o.total));
