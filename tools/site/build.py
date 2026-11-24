@@ -54,7 +54,7 @@ JOURNEY = [("chine", "Achat en Chine", "Votre Pôle Sounsouni va chez le vendeur
            ("moto", "En route", "Un livreur Sounsouni traverse la ville jusqu'à votre quartier — ou dépose le colis au Point de Retrait le plus proche."),
            ("remise", "Remis en main propre", "Vous donnez votre code secret, le colis est à vous. Simple, sûr, transparent.")]
 def journey():
-    POS = {"chine": "68% 50%", "avion": "62% 50%", "aeroport": "28% 50%", "moto": "60% 50%", "remise": "38% 50%"}
+    POS = {"chine": "58% 50%", "avion": "62% 50%", "aeroport": "72% 50%", "moto": "48% 50%", "remise": "52% 50%"}
     sl = "".join('<div class="slide%s"><img src="img/site/%s.webp" alt="" style="object-position:%s" %s></div>' % (" on" if i == 0 else "", im, POS.get(im, "50% 50%"), 'loading="lazy"' if i else "") for i, (im, t, d) in enumerate(JOURNEY))
     tx = "".join('<div class="tx%s"><div class="num">0%d</div><div class="ttl">%s</div><p class="dsc">%s</p></div>' % (" on" if i == 0 else "", i + 1, t, d) for i, (im, t, d) in enumerate(JOURNEY))
     return ('<section class="journey" id="voyage"><div class="stage">' + sl + '<div class="shade"></div>'
