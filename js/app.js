@@ -1208,6 +1208,18 @@ function intlCountryList() {
   if (list.indexOf(INTL_DEFAULT_COUNTRY) === -1) list.unshift(INTL_DEFAULT_COUNTRY);
   return list;
 }
+// Tous les pays proposables (actifs + pris en charge), pour choisir le pays d'un Pôle ou d'un transitaire.
+function intlAllCountries() {
+  var l = intlCountryList();
+  INTL_SUPPORTED_COUNTRIES.forEach(function(cc) { if (l.indexOf(cc) === -1) l.push(cc); });
+  return l;
+}
+// Active un pays partenaire s'il ne l'est pas encore (ex. nouveau Pôle en Chine).
+function ensureIntlCountryActive(cc) {
+  if (!cc) return;
+  var l = intlCountryList();
+  if (l.indexOf(cc) === -1) { l.push(cc); saveIntlCountryList(l); refreshAutoExchangeRateFor(cc); }
+}
 function saveIntlCountryList(list) {
   var doc = { id: "intl_countries", list: list };
   var idx = state.settings.findIndex(function(x) { return x.id === "intl_countries"; });
@@ -6288,10 +6300,10 @@ function switchRole(role) {
     // passait jamais par ce raccourci et atterrissait dans l'admin général.
     var isSourcingAgentNow = (state.profile && state.profile.isSourcingAgent) ||
       (myPhoneForSourcing && isPhoneOnSourcingAgentWhitelist(myPhoneForSourcing));
-    if (isSourcingAgentNow) {
-      applyRoleSwitch("agent_sourcing");
-      return;
-    }
+    // Le Pôle a maintenant son propre bouton « Espace Pôle » dans le menu :
+    // le bouton Administration mène toujours à l'Admin (mot de passe ou
+    // liste blanche), même si la personne est aussi Pôle.
+    void isSourcingAgentNow;
   }
   var staleAdminSession = state.adminUnlocked && typeof state.adminIsOwner !== "boolean";
   if (RESTRICTED_ROLES.indexOf(role) !== -1 && (!state.adminUnlocked || staleAdminSession)) {
@@ -21282,7 +21294,7 @@ function renderAdminTransitairesSection() {
       html += '<label class="field-label" style="font-size:10.5px;">Fret international</label>' + sel('tr-freight-' + e.id, e.freightMode || "transitaire", [["transitaire", "Géré par le transitaire"], ["app", "Encaissé par l'app"]]);
       html += '<label class="field-label" style="font-size:10.5px;">Commission Sounsouni sur le fret (%)</label><input class="input" type="number" min="0" max="100" step="0.5" id="tr-comm-' + e.id + '" value="' + (Number(e.commissionPct) || 0) + '" />';
       html += '<label class="field-label" style="font-size:10.5px;">Douane au Mali payée par</label>' + sel('tr-customs-' + e.id, e.customsBy || "transitaire", [["transitaire", "Le transitaire"], ["destinataire", "Le destinataire"]]);
-      html += '<label class="field-label" style="font-size:10.5px;">Pays</label><select class="input" id="tr-country-' + e.id + '">' + intlCountryList().map(function(cc) { return '<option value="' + esc(cc) + '"' + (cc === e.country ? ' selected' : '') + '>' + esc(intlFlagLabel(cc)) + '</option>'; }).join('') + '</select>';
+      html += '<label class="field-label" style="font-size:10.5px;">Pays</label><select class="input" id="tr-country-' + e.id + '">' + intlAllCountries().map(function(cc) { return '<option value="' + esc(cc) + '"' + (cc === e.country ? ' selected' : '') + '>' + esc(intlFlagLabel(cc)) + '</option>'; }).join('') + '</select>';
       html += '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;"><button class="btn-primary" style="flex:1 1 140px;width:auto;min-width:0;padding:8px;font-size:12px;" data-action="save-transitaire-settings" data-value="' + esc(e.id) + '"><i class="fa-solid fa-floppy-disk"></i> Enregistrer</button>';
       html += '<button class="btn-secondary" style="flex:1 1 140px;width:auto;min-width:0;padding:8px;font-size:12px;" data-action="remove-transitaire" data-value="' + esc(e.id) + '">' + (e.active === false ? 'Réactiver' : 'Désactiver') + '</button></div>';
     }
@@ -21290,7 +21302,7 @@ function renderAdminTransitairesSection() {
   });
   if (isOwner) {
     html += '<div style="display:flex;gap:6px;margin-top:6px;min-width:0;"><input class="input" id="new-transitaire-phone" placeholder="Numéro (ex : +86…)" style="flex:1;min-width:0;" /><button class="btn-primary" style="flex:0 0 auto;width:auto;padding:0 14px;" data-action="add-transitaire"><i class="fa-solid fa-plus"></i></button></div>';
-    html += '<select class="input" id="new-transitaire-country" style="margin-top:6px;">' + intlCountryList().map(function(cc) { return '<option value="' + esc(cc) + '">' + esc(intlFlagLabel(cc)) + '</option>'; }).join('') + '</select>';
+    html += '<select class="input" id="new-transitaire-country" style="margin-top:6px;">' + intlAllCountries().map(function(cc) { return '<option value="' + esc(cc) + '">' + esc(intlFlagLabel(cc)) + '</option>'; }).join('') + '</select>';
     html += '<div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;">Le transitaire crée son compte Sounsouni avec ce numéro, puis trouve « Espace Transitaire » dans le menu des rôles. Un responsable de Pôle Sounsouni peut aussi être transitaire.</div>';
 
     // 4) Tarifs et règles
@@ -24901,7 +24913,7 @@ function renderAdminSecurity() {
   html += '<button class="btn-primary" style="flex:0;padding:0 16px;" data-action="add-sourcing-agent-whitelist"><i class="fa-solid fa-plus"></i></button>';
   html += '</div>';
   html += '<label class="field-label" style="margin-top:0;font-size:10.5px;">Pays du Pôle (il ne verra que les vendeurs de ce pays)</label>';
-  html += '<select class="input" id="sourcing-agent-country" style="margin-bottom:10px;">' + intlCountryList().map(function(cc) { return '<option value="' + esc(cc) + '">' + esc(intlFlagLabel(cc)) + '</option>'; }).join('') + '</select>';
+  html += '<select class="input" id="sourcing-agent-country" style="margin-bottom:10px;">' + intlAllCountries().map(function(cc) { return '<option value="' + esc(cc) + '">' + esc(intlFlagLabel(cc)) + '</option>'; }).join('') + '</select>';
   var saList = state.sourcingAgentWhitelist || [];
   if (saList.length === 0) {
     html += '<div style="font-size:11.5px;color:var(--text-dim);">Aucun numéro autorisé pour l\'instant.</div>';
@@ -24913,6 +24925,7 @@ function renderAdminSecurity() {
       html += '<div style="min-width:0;"><div style="font-weight:700;font-size:12.5px;">' + esc(saAcc ? saAcc.name : (saw.name || "Compte")) + '</div><div style="font-size:11px;color:var(--text-dim);">' + esc(saw.phone) + ' · ' + esc(saw.country || (saAcc && saAcc.country) || INTL_DEFAULT_COUNTRY) + '</div></div>';
       html += '<button class="link-btn" style="color:var(--danger);" data-action="remove-sourcing-agent-whitelist" data-value="' + esc(saw.id) + '"><i class="fa-solid fa-trash"></i></button>';
       html += '</div>';
+      html += '<div style="display:flex;gap:6px;margin:0 0 8px;min-width:0;"><select class="input" id="sa-country-' + esc(saw.id) + '" style="flex:1;min-width:0;font-size:12px;">' + intlAllCountries().map(function(cc) { return '<option value="' + esc(cc) + '"' + (cc === (saw.country || INTL_DEFAULT_COUNTRY) ? ' selected' : '') + '>' + esc(intlFlagLabel(cc)) + '</option>'; }).join('') + '</select><button class="btn-secondary" style="flex:0 0 auto;width:auto;padding:0 12px;font-size:12px;" data-action="set-sourcing-agent-country" data-value="' + esc(saw.id) + '">Changer le pays</button></div>';
     }
   }
   html += '</div>';
@@ -31452,9 +31465,21 @@ root.addEventListener("click", function(e) {
       var saCountryEl = document.getElementById('sourcing-agent-country');
       var saEntry = { id: uid(), phone: saResolvedPhone, name: saMatchedAcc ? saMatchedAcc.name : "", country: (saCountryEl && saCountryEl.value) || INTL_DEFAULT_COUNTRY };
       state.sourcingAgentWhitelist.push(saEntry);
+      ensureIntlCountryActive(saEntry.country);
       save();
       saveDoc("sourcingAgentWhitelist", saEntry);
       showToast(t("toast_number_authorized_sourcing"));
+      render();
+      break;
+    }
+    case "set-sourcing-agent-country": {
+      var scEl = document.getElementById("sa-country-" + value);
+      var scW = (state.sourcingAgentWhitelist || []).find(function(w) { return w.id === value; });
+      if (!scEl || !scW) break;
+      scW.country = scEl.value;
+      ensureIntlCountryActive(scW.country);
+      save(); saveDoc("sourcingAgentWhitelist", scW);
+      showToast("✅ Pays du Pôle : " + scW.country);
       render();
       break;
     }
@@ -32173,6 +32198,7 @@ root.addEventListener("click", function(e) {
       if (ntList.some(function(x) { return normalizeWalletPhone(x.phone) === normalizeWalletPhone(ntPhone); })) { showToast(t("toast_number_already_authorized")); break; }
       ntList.push({ id: uid(), phone: ntPhone, name: ntAcc ? ntAcc.name : "", country: (ntCountryEl && ntCountryEl.value) || INTL_DEFAULT_COUNTRY, deliveryPayer: "choix", freightMode: "transitaire", commissionPct: 0, customsBy: "transitaire", active: true, createdAt: Date.now() });
       saveTransitaireList(ntList);
+      ensureIntlCountryActive(ntList[ntList.length - 1].country);
       showToast("✅ Transitaire ajouté.");
       render();
       break;
