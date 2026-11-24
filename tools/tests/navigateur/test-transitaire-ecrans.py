@@ -21,7 +21,7 @@ with sync_playwright() as p:
             return r.fulfill(status=200, content_type="application/json", body=json.dumps({"success":False,"error":"test"}) if "/functions/" in u else "[]")
         return r.continue_()
     pg.route("**/*", route)
-    pg.add_init_script("try{localStorage.setItem('sounsouni_language','fr')}catch(e){}")
+    pg.add_init_script("try{localStorage.setItem('sounsouni_language','fr');sessionStorage.setItem('sns_portail_ferme','1')}catch(e){}")
     pg.goto("http://localhost:8765/index.html"); pg.wait_for_timeout(3500)
     def ev(js, arg=None): return pg.evaluate(js, arg)
     def click(sel, wait=350):
