@@ -13006,6 +13006,8 @@ function setupMarketInfiniteScroll() {
 }
 
 function render() {
+  // Site vitrine : un compte connecté va droit au marché (le portail d'accueil ne s'affiche qu'aux visiteurs).
+  try { var hp = state.profile ? "1" : "0"; if (window.__snsHp !== hp) { window.__snsHp = hp; localStorage.setItem("sns_has_profile", hp); } } catch (e) {}
   // L'écran de la pomme cannelle reste affiché jusqu'à la fin du démarrage
   // (au moins 5 s) : aucun affichage ne doit l'écraser avant.
   if (typeof _splashFinished !== "undefined" && !_splashFinished && document.querySelector("#root > .sns-sp")) return;
