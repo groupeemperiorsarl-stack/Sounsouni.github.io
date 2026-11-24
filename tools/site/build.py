@@ -160,8 +160,11 @@ srv = cine_hero(False, "Sounsouni Services", ["Votre projet,", '<span class="ser
            "Construction, mines, industrie, immobilier, digital, intelligence artificielle, énergie : décrivez votre besoin, Sounsouni vous fait une offre.",
            '<a class="pill p-w" href="#demande">Demander une offre</a><a class="pill p-o" href="#domaines">Nos domaines</a>', "img/site/btp.webp", "services.html")
 srv += '<main class="wrap"><section class="sec" id="domaines"><div class="k rv">Nos domaines</div><h2 class="rv d1">Tout Sounsouni <span class="serif">au service des entreprises.</span></h2><div class="steps">'
+PH = {"etiquetage": "img/site/etiquetage.webp", "mines": "img/site/mines.webp", "btp": "img/site/btp.webp", "energie": "img/site/solaire.webp", "digital": "img/site/digital.webp"}
 srv += "".join('<div class="step rv" id="%s" style="background:%s"><i class="fa-solid %s big"></i><h3>Sounsouni<br>%s</h3><p>%s</p><a class="pill p-w" style="margin-top:14px;align-self:flex-start" href="#demande" data-svc="%s">Demander une offre</a></div>'
                % (k, ("#1b5e20", "#6b4a12", "#24452c", "#1f4f6e", "#2e7d32", "#0f2e14", "#22662a", "#1d3b49", "#3a4a1f", "#33502f")[i], ic, n, d, k) for i, (k, ic, n, s, d) in enumerate(SERVICES))
+for _k, _img in PH.items():
+    srv = srv.replace('id="%s" style="background:' % _k, 'id="%s" style="background:linear-gradient(180deg,rgba(0,0,0,.05) 0%%,rgba(4,20,10,.88) 62%%),url(%s) center/cover,' % (_k, _img), 1)
 srv += '</div></section><section class="sec two" id="demande"><div><div class="k rv">Demande d\'offre</div><h2 class="rv d1">Parlez-nous <span class="serif">de votre projet.</span></h2><p class="lead rv d2">Votre demande arrive directement chez Sounsouni, sur WhatsApp. Nous vous répondons avec une offre adaptée.</p></div>'
 srv += ('<form class="card form rv d1" id="sns-offre"><select name="domaine" required><option value="">Domaine</option>%s</select><input name="nom" placeholder="Votre nom ou votre entreprise" required>'
         '<input name="tel" type="tel" placeholder="Votre téléphone" required><input name="ville" placeholder="Ville (ex. Bamako)"><textarea name="besoin" placeholder="Décrivez votre besoin" required></textarea>'

@@ -264,3 +264,4 @@ body.snsv{margin:0}
 .snsv .pi-txt li:before{content:"\2713";position:absolute;left:0;color:var(--glow);font-weight:900}
 .snsv .valeurs small{font-size:12px}
 @media (min-width:820px){.snsv .pilier{grid-template-columns:5fr 6fr}.snsv .pilier:nth-child(even) .pi-vis{order:2}.snsv .pi-vis{min-height:340px}.snsv .valeurs{grid-template-columns:repeat(4,1fr)}}
+.snsv .step[style*="url("]{min-height:420px}
