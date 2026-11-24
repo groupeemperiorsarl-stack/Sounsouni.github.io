@@ -196,7 +196,7 @@ ap += pilier("02", "fa-truck-fast", "Sounsouni Logistique", "Du bout du monde ju
              ["Transit Chine · Inde · France · Europe · Golfe", "Réception scannée et suivi en direct", "Livraison express et réseau de Points de Retrait"], "img/site/camionnette.webp", "#1f4f6e")
 ap += pilier("03", "fa-gem", "Sounsouni Mines", "Le marché de la mine, en toute confiance.",
              "Le secteur minier est aussi un marché, et Sounsouni s'y engage. Nous fournissons aux orpailleurs, aux petites mines et aux carrières le matériel dont ils ont besoin, importé et vérifié par nos Pôles, et nous accompagnons les projets miniers du premier équipement jusqu'à la production.",
-             ["Détecteurs, motopompes, concasseurs, groupes électrogènes", "Équipements de sécurité et pièces détachées", "Mise en relation, conseil et suivi de projet"], None, "#6b4a12")
+             ["Détecteurs, motopompes, concasseurs, groupes électrogènes", "Équipements de sécurité et pièces détachées", "Mise en relation, conseil et suivi de projet"], "img/site/mines.webp", "#6b4a12")
 ap += pilier("04", "fa-helmet-safety", "Sounsouni Services", "Les experts qui font avancer vos projets.",
              "Pour les entreprises et les particuliers, Sounsouni réunit les savoir-faire qui permettent de bâtir et de grandir : construire, équiper, digitaliser, automatiser et gérer.",
              ["BTP et construction · Immobilier", "Solutions industrielles · Énergie solaire", "Digital, applications et intelligence artificielle", "Caisse, étiquetage et gestion de stock (Gestion Pro)", "Import, sourcing et conseil aux entreprises"], "img/site/btp.webp", "#24452c")
