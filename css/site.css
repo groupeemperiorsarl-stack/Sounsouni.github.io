@@ -233,3 +233,12 @@ body.snsv{margin:0}
 .snsv .mgrid .mi.ph img{width:100%;height:100%;object-fit:cover}
 @media (min-width:760px){.snsv .mc{width:200px}.snsv .mrows{padding:4px 34px 10px;scroll-padding:0 34px}}
 @media (min-width:1100px){.snsv .mnav{display:flex}.snsv .mc{width:230px}.snsv .mrows{padding:4px max(34px,calc((100vw - 1240px)/2 + 34px)) 10px}}
+/* Langue */
+.snsv .langbtn{display:inline-flex;align-items:center;gap:6px;border:1.5px solid rgba(255,255,255,.55);border-radius:999px;padding:8px 12px;font-weight:800;font-size:12px;color:#fff}
+.snsv .langmodal{position:fixed;inset:0;z-index:2147483200;background:rgba(4,20,10,.72);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:18px}
+.snsv .langbox{position:relative;background:#fff;color:var(--ink);border-radius:28px;padding:28px 22px;width:100%;max-width:360px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;box-shadow:0 30px 70px rgba(0,0,0,.4);animation:snsPop .5s cubic-bezier(.2,.9,.25,1.2)}
+.snsv .langbox b{font-size:22px;font-weight:900;letter-spacing:-.4px;margin-top:4px}
+.snsv .langbox small{color:var(--dim);font-size:13px;margin-bottom:8px}
+.snsv .langbox [data-lang]{width:100%;padding:15px;border-radius:16px;border:1.5px solid var(--line);font-weight:800;font-size:16px;background:var(--card);transition:background .2s,border-color .2s}
+.snsv .langbox [data-lang]:hover{background:#e3f1d8;border-color:var(--g)}
+.snsv .langbox .close{position:absolute;top:12px;right:14px;font-size:18px;color:var(--dim);width:auto;padding:4px}

@@ -40,6 +40,7 @@ def nav(on, portail=False):
     links = [("logistique.html", "Logistique"), ("services.html", "Services"), ("a-propos.html", "À propos")]
     l = m + "".join('<a href="%s"%s>%s</a>' % (h, ' class="on"' if on == h else "", t) for h, t in links)
     log = '<a href="%s" class="pill p-w"%s>Se connecter</a>' % ("./" if portail else "./#marche", " data-portail-fermer" if portail else "")
+    log = '<button type="button" class="langbtn" data-lang-open aria-label="Langue"><i class="fa-solid fa-globe"></i><span>FR</span></button>' + log
     return ('<div class="nav"><a class="b" href="%s"><img src="%s" alt="Sounsouni" width="34" height="34">Sounsouni</a><nav class="links">%s</nav>'
             '<div class="r"><a class="lnk" href="a-propos.html">À propos</a>%s</div></div>') % ("./#accueil" if not portail else "#accueil", LOGO, l, log)
 def footer():
@@ -57,7 +58,10 @@ def network(title=True):
             '<p class="lead rv d2">De la Chine, de l\'Inde, de l\'Europe et des pays arabes jusqu\'à Bamako, puis de quartier en quartier : chaque point lumineux est un quartier où Sounsouni livre.</p>'
             '<div class="maps"><div class="map rv" data-sns-map="monde"></div><div class="map rv d1" data-sns-map="bamako"></div></div>'
             '<div class="legend"><span><i style="background:#ffd54a"></i>Point de Retrait Sounsouni</span><span><i style="background:#c8ff8a"></i>Livraison express</span><span><i style="background:#9aa79c"></i>Quartier desservi</span></div>'
-            '<div class="stats"><div><b class="counter" data-to="65">65</b><span>quartiers desservis</span></div><div><b class="counter" data-to="29">29</b><span>zones express</span></div><div><b class="counter" data-to="12">12</b><span>pays reliés</span></div><div><b class="counter" data-to="24" data-suf=" h">24 h</b><span>livraison à Bamako</span></div></div></section>')
+            '<div class="two" style="margin-top:34px;align-items:center"><div><div class="k rv">Partout au Mali</div><h3 class="rv d1" style="font-weight:900;font-size:clamp(28px,6vw,46px);letter-spacing:-1px;line-height:1.02;margin-top:8px">Toutes les régions, <span class="serif" style="color:var(--glow)">reliées à Bamako.</span></h3>'
+            '<p class="lead rv d2">Kayes, Koulikoro, Sikasso, Ségou, Mopti, Tombouctou, Gao, Kidal, Ménaka, Taoudénit et les nouvelles régions : vos colis partent de Bamako vers le Point de Retrait Sounsouni de votre région.</p></div>'
+            '<div class="map rv d1" data-sns-map="mali" style="margin-top:16px"></div></div>'
+            '<div class="stats"><div><b class="counter" data-to="65">65</b><span>quartiers desservis</span></div><div><b class="counter" data-to="19">19</b><span>régions du Mali</span></div><div><b class="counter" data-to="12">12</b><span>pays reliés</span></div><div><b class="counter" data-to="24" data-suf=" h">24 h</b><span>livraison à Bamako</span></div></div></section>')
 JOURNEY = [("chine", "Achat en Chine", "Votre Pôle Sounsouni va chez le vendeur, vérifie l'article, la couleur, la quantité et la qualité."),
            ("avion", "Le grand voyage", "Par avion ou par bateau, votre colis traverse le monde. Vous suivez chaque étape dans l'application."),
            ("aeroport", "Scanné à Bamako", "Notre équipe récupère le lot et scanne chaque colis : « Arrivé » s'affiche aussitôt, chez vous et chez l'expéditeur."),
@@ -119,7 +123,7 @@ def page(file, title, desc, on, body, dark=False):
             '<link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">'
             '<meta name="theme-color" content="#2e7d32">%s<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">'
             '<link rel="stylesheet" href="css/site.css?v=%s"></head><body class="snsv">') % (title, desc, file, title, desc, file, FONTS, V)
-    html = head + body + footer() + '<script src="js/site.js?v=%s"></script></body></html>' % V
+    html = head + body + footer() + '<script src="js/site-i18n.js?v=%s"></script><script src="js/site.js?v=%s"></script></body></html>' % (V, V)
     open(file, "w").write(html)
 def hero(on, kicker, h1, p, cta, dark=False):
     return ('<header class="top%s"><div class="glow-bg"></div><div class="wrap">%s<div class="hero"><div><div class="k" style="color:#d7f5c0">%s</div><h1>%s</h1><p>%s</p><div class="cta">%s</div></div>'
@@ -198,7 +202,7 @@ ix = re.sub(r"<!--PORTAIL-->.*?<!--/PORTAIL-->", "", ix, flags=re.S)
 ix = ix.replace("</head>", GATE + "\n</head>", 1)
 ix = re.sub(r'<!--PORTAIL-BODY-->.*?<!--/PORTAIL-BODY-->\n?', "", ix, flags=re.S)
 body = ('<!--PORTAIL-BODY-->' + portail() + '<script>if(window.__snsPortail)document.getElementById("portail").removeAttribute("hidden");</script>'
-        '<script src="js/site.js?v=' + V + '" defer></script><!--/PORTAIL-BODY-->\n')
+        '<script src="js/site-i18n.js?v=' + V + '" defer></script><script src="js/site.js?v=' + V + '" defer></script><!--/PORTAIL-BODY-->\n')
 ix = ix.replace("<body>\n", "<body>\n" + body, 1)
 TITLE = "Sounsouni — Marché en ligne, logistique et services au Mali | Bamako"
 ix = re.sub(r"<title>.*?</title>", "<title>%s</title>" % TITLE, ix, count=1)

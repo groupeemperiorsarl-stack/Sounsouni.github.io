@@ -111,9 +111,48 @@
     var b = el("text", { x: bko[0] - 170, y: bko[1] + 70, "font-size": fs * 1.25, fill: "#fff", "font-family": "Inter Tight, sans-serif", "font-weight": "800", "letter-spacing": "3" }, svg); b.textContent = "BAMAKO";
     box.innerHTML = ""; box.appendChild(svg);
   }
+
+  // ---------- Carte du Mali : toutes les régions reliées à Bamako ----------
+  var MALI = [[-12.2,14.7],[-11.5,15.6],[-10.7,15.1],[-9.4,15.5],[-5.5,15.5],[-5.3,16.4],[-6.5,24.9],[-4.8,25.0],[1.1,21.3],[1.2,20.7],[3.2,19.8],[4.2,19.2],[4.3,16.9],[3.6,15.6],[1.3,15.3],[0.3,14.9],[-0.4,15.1],[-1.3,14.7],[-2.0,14.2],[-3.0,13.6],[-4.3,13.2],[-4.9,12.0],[-5.4,10.4],[-6.2,10.5],[-6.9,10.1],[-7.6,10.4],[-8.3,11.0],[-8.7,11.9],[-9.3,12.3],[-10.2,11.9],[-10.9,12.2],[-11.4,12.4],[-11.6,13.4]];
+  var REGIONS = [["Kayes",14.45,-11.44],["Koulikoro",12.86,-7.56],["Sikasso",11.32,-5.67],["Ségou",13.43,-6.27],["Mopti",14.49,-4.19],["Tombouctou",16.77,-3.01],["Gao",16.27,-0.04],["Kidal",18.44,1.41],["Ménaka",15.92,2.4],["Taoudénit",22.68,-3.98],["Nioro du Sahel",15.23,-9.59],["Kita",13.03,-9.49],["Dioïla",12.49,-6.79],["Nara",15.17,-7.29],["Bougouni",11.42,-7.48],["Koutiala",12.39,-5.46],["San",13.3,-4.9],["Douentza",15.0,-2.95],["Bandiagara",14.35,-3.61]];
+  window.SNS_REGIONS = REGIONS;
+  function drawMali(box) {
+    var compact = box.clientWidth < 560, W = 1000, H = 900;
+    var LO0 = -12.6, LO1 = 4.7, LA0 = 9.9, LA1 = 25.3;
+    function X(lo) { return 40 + (lo - LO0) / (LO1 - LO0) * (W - 80); }
+    function Y(la) { return 30 + (LA1 - la) / (LA1 - LA0) * (H - 60); }
+    var svg = el("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "Carte du Mali : Sounsouni relie Bamako à toutes les régions" });
+    defs(svg, "snsg", 3.6);
+    var pts = MALI.map(function (p) { return X(p[0]).toFixed(1) + "," + Y(p[1]).toFixed(1); }).join(" ");
+    el("polygon", { points: pts, fill: "rgba(200,255,138,.06)", stroke: "#c8ff8a", "stroke-width": "3", "stroke-opacity": ".55", "stroke-linejoin": "round" }, svg);
+    // fleuve Niger (approximatif)
+    var niger = [[-10.7,10.6],[-9.2,11.6],[-8.0,12.64],[-6.27,13.43],[-4.6,14.3],[-4.19,14.49],[-3.4,15.8],[-3.01,16.6],[-1.5,16.9],[-0.04,16.27],[1.2,15.4],[3.6,13.6]];
+    el("polyline", { points: niger.map(function (p) { return X(p[0]).toFixed(1) + "," + Y(p[1]).toFixed(1); }).join(" "), fill: "none", stroke: "#2d7fa3", "stroke-width": "7", "stroke-linecap": "round", "stroke-linejoin": "round", opacity: ".8" }, svg);
+    var bx = X(-8.0), by = Y(12.64), fs = compact ? 30 : 22;
+    REGIONS.forEach(function (r, i) {
+      var x = X(r[2]), y = Y(r[1]);
+      var pd = "M" + bx.toFixed(1) + " " + by.toFixed(1) + " Q" + ((bx + x) / 2).toFixed(1) + " " + (Math.min(by, y) - 60).toFixed(1) + " " + x.toFixed(1) + " " + y.toFixed(1);
+      el("path", { d: pd, stroke: "#c8ff8a", "stroke-width": "2.2", fill: "none", opacity: ".5", "stroke-dasharray": "7 9", "class": "sns-dash" }, svg);
+      traveller(svg, pd, 3 + (i % 5) * 0.5, (i * 0.45) % 5, 5, "#ffffff");
+      var halo = el("circle", { cx: x, cy: y, r: 16, fill: "#c8ff8a", opacity: ".18" }, svg);
+      if (!reduce) el("animate", { attributeName: "r", values: "12;24;12", dur: (2.2 + (i % 6) * 0.3) + "s", repeatCount: "indefinite" }, halo);
+      el("circle", { cx: x, cy: y, r: 7, fill: "#c8ff8a", filter: "url(#snsg)" }, svg);
+      var MAIN = { "Kayes": 1, "Koulikoro": 1, "Sikasso": 1, "Ségou": 1, "Mopti": 1, "Tombouctou": 1, "Gao": 1, "Kidal": 1, "Ménaka": 1, "Taoudénit": 1 };
+      var POSL = { "Mopti": ["end", -10], "Nara": ["start", 26], "Nioro du Sahel": ["end", -10], "Dioïla": ["start", 28], "Bougouni": ["end", 24], "Sikasso": ["start", 26], "Koulikoro": ["start", -12], "Kita": ["end", -10], "Bandiagara": ["start", 26], "Ségou": ["end", -10] };
+      if (!compact || MAIN[r[0]]) {
+        var pl = POSL[r[0]] || [x > W * 0.7 ? "end" : "start", -9], endA = pl[0] === "end";
+        var t = el("text", { x: x + (endA ? -13 : 13), y: y + pl[1], "text-anchor": pl[0], "font-size": fs, fill: "#fff", "font-family": "Inter Tight, sans-serif", "font-weight": "700" }, svg); t.textContent = r[0];
+      }
+    });
+    var h = el("circle", { cx: bx, cy: by, r: 26, fill: "#c8ff8a", opacity: ".22" }, svg);
+    if (!reduce) el("animate", { attributeName: "r", values: "20;38;20", dur: "2.4s", repeatCount: "indefinite" }, h);
+    el("circle", { cx: bx, cy: by, r: 12, fill: "#fff", filter: "url(#snsg)" }, svg);
+    var bt = el("text", { x: bx - 20, y: by + 44, "text-anchor": "end", "font-size": fs * 1.2, fill: "#fff", "font-family": "Inter Tight, sans-serif", "font-weight": "800", "letter-spacing": "2" }, svg); bt.textContent = "BAMAKO";
+    box.innerHTML = ""; box.appendChild(svg);
+  }
   function drawMaps() {
     var b = document.querySelectorAll("[data-sns-map]");
-    for (var i = 0; i < b.length; i++) (b[i].getAttribute("data-sns-map") === "monde" ? drawWorld : drawBamako)(b[i]);
+    for (var i = 0; i < b.length; i++) { var kind = b[i].getAttribute("data-sns-map"); (kind === "monde" ? drawWorld : kind === "mali" ? drawMali : drawBamako)(b[i]); }
     var n = document.querySelectorAll("[data-sns-count]");
     for (var k = 0; k < n.length; k++) {
       var w = n[k].getAttribute("data-sns-count");
@@ -269,6 +308,67 @@
       if (a1) rows[0].insertAdjacentHTML("afterbegin", a1);
       if (a2) rows[1].insertAdjacentHTML("afterbegin", a2);
     }).catch(function () {});
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+})();
+// ---------- Langues : choix au premier passage, bouton dans le menu, même langue que l'application ----------
+(function () {
+  "use strict";
+  var LANGS = [["fr", "Français", "FR"], ["en", "English", "EN"], ["hi", "हिंदी", "HI"]];
+  var orig = new WeakMap(), origAttr = new WeakMap(), titleFr = document.title;
+  function cur() { try { var l = localStorage.getItem("sounsouni_language"); if (l === "fr" || l === "en" || l === "hi") return l; } catch (e) {} return null; }
+  function roots() { var p = document.getElementById("portail"); return p ? [p] : [document.body]; }
+  function apply(lang) {
+    var D = window.SNS_I18N || {};
+    function tr(fr) { var k = fr.trim(); if (lang === "fr" || !D[k] || !D[k][lang]) return fr; return fr.replace(k, D[k][lang]); }
+    roots().forEach(function (root) {
+      var w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null), n;
+      while ((n = w.nextNode())) {
+        var p = n.parentNode; if (!p || /SCRIPT|STYLE/.test(p.nodeName) || (p.closest && p.closest("svg"))) continue;
+        if (!orig.has(n)) { if (!n.nodeValue.trim()) continue; orig.set(n, n.nodeValue); }
+        n.nodeValue = tr(orig.get(n));
+      }
+      var els = root.querySelectorAll("[placeholder],[aria-label]");
+      for (var i = 0; i < els.length; i++) {
+        var e = els[i]; if (e.closest("svg")) continue;
+        if (!origAttr.has(e)) origAttr.set(e, { ph: e.getAttribute("placeholder"), al: e.getAttribute("aria-label") });
+        var o = origAttr.get(e); if (o.ph) e.setAttribute("placeholder", tr(o.ph)); if (o.al) e.setAttribute("aria-label", tr(o.al));
+      }
+    });
+    if (!document.getElementById("portail")) document.title = tr(titleFr);
+    document.documentElement.setAttribute("lang", lang);
+    var b = document.querySelectorAll("[data-lang-open] span");
+    for (var j = 0; j < b.length; j++) b[j].textContent = (LANGS.filter(function (x) { return x[0] === lang; })[0] || LANGS[0])[2];
+  }
+  function choose(lang) {
+    try { localStorage.setItem("sounsouni_language", lang); } catch (e) {}
+    apply(lang);
+    // L'application (sous l'accueil) suit tout de suite la même langue.
+    try { if (typeof window.setLanguage === "function") window.setLanguage(lang); } catch (e) {}
+    var m = document.getElementById("sns-lang"); if (m) m.remove();
+  }
+  function picker(first) {
+    if (document.getElementById("sns-lang")) return;
+    var host = document.getElementById("portail") || document.body;
+    var d = document.createElement("div"); d.id = "sns-lang"; d.className = "langmodal";
+    d.innerHTML = '<div class="langbox"><img src="img/e/210deb8220be.webp" alt="" width="86" height="86"><b>Choisissez votre langue</b><small>Choose your language · अपनी भाषा चुनें</small>' +
+      LANGS.map(function (l) { return '<button type="button" data-lang="' + l[0] + '">' + l[1] + '</button>'; }).join("") +
+      (first ? "" : '<button type="button" class="close" data-lang-close>✕</button>') + '</div>';
+    host.appendChild(d);
+    d.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-lang]"); if (b) return choose(b.getAttribute("data-lang"));
+      if (!first && (e.target === d || e.target.closest("[data-lang-close]"))) d.remove();
+    });
+  }
+  window.snsLang = { choose: choose, picker: picker, apply: apply };
+  function boot() {
+    document.addEventListener("click", function (e) { if (e.target.closest && e.target.closest("[data-lang-open]")) { e.preventDefault(); picker(false); } });
+    var l = cur();
+    var portail = document.getElementById("portail");
+    var visible = !portail || !portail.hasAttribute("hidden");
+    if (l) apply(l); else if (visible) picker(true); else apply("fr");
+    // Les nouveautés du carrousel arrivent après : on traduit aussi ce qui s'ajoute.
+    var t; new MutationObserver(function () { clearTimeout(t); t = setTimeout(function () { var x = cur(); if (x && x !== "fr") apply(x); }, 150); }).observe(document.body, { childList: true, subtree: true });
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();
