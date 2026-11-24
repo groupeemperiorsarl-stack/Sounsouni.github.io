@@ -47,35 +47,62 @@ def network(title=True):
             '<p class="lead rv d2">De la Chine, de l\'Inde et des Émirats jusqu\'à Bamako, puis de quartier en quartier : chaque point lumineux est un quartier où Sounsouni livre.</p>'
             '<div class="maps"><div class="map rv" data-sns-map="monde"></div><div class="map rv d1" data-sns-map="bamako"></div></div>'
             '<div class="legend"><span><i style="background:#ffd54a"></i>Point de Retrait Sounsouni</span><span><i style="background:#c8ff8a"></i>Livraison express</span><span><i style="background:#9aa79c"></i>Quartier desservi</span></div>'
-            '<div class="stats"><div><b data-sns-count="quartiers">65</b><span>quartiers desservis</span></div><div><b data-sns-count="lumiere">30</b><span>zones express</span></div><div><b>5</b><span>pays reliés</span></div><div><b>24 h</b><span>livraison à Bamako</span></div></div></section>')
+            '<div class="stats"><div><b class="counter" data-to="65">65</b><span>quartiers desservis</span></div><div><b class="counter" data-to="29">29</b><span>zones express</span></div><div><b class="counter" data-to="5">5</b><span>pays reliés</span></div><div><b class="counter" data-to="24" data-suf=" h">24 h</b><span>livraison à Bamako</span></div></div></section>')
+JOURNEY = [("chine", "Achat en Chine", "Votre Pôle Sounsouni va chez le vendeur, vérifie l'article, la couleur, la quantité et la qualité."),
+           ("avion", "Le grand voyage", "Par avion ou par bateau, votre colis traverse le monde. Vous suivez chaque étape dans l'application."),
+           ("aeroport", "Scanné à Bamako", "Notre équipe récupère le lot et scanne chaque colis : « Arrivé » s'affiche aussitôt, chez vous et chez l'expéditeur."),
+           ("moto", "En route", "Un livreur Sounsouni traverse la ville jusqu'à votre quartier — ou dépose le colis au Point de Retrait le plus proche."),
+           ("remise", "Remis en main propre", "Vous donnez votre code secret, le colis est à vous. Simple, sûr, transparent.")]
+def journey():
+    POS = {"chine": "68% 50%", "avion": "62% 50%", "aeroport": "28% 50%", "moto": "60% 50%", "remise": "38% 50%"}
+    sl = "".join('<div class="slide%s"><img src="img/site/%s.webp" alt="" style="object-position:%s" %s></div>' % (" on" if i == 0 else "", im, POS.get(im, "50% 50%"), 'loading="lazy"' if i else "") for i, (im, t, d) in enumerate(JOURNEY))
+    tx = "".join('<div class="tx%s"><div class="num">0%d</div><div class="ttl">%s</div><p class="dsc">%s</p></div>' % (" on" if i == 0 else "", i + 1, t, d) for i, (im, t, d) in enumerate(JOURNEY))
+    return ('<section class="journey" id="voyage"><div class="stage">' + sl + '<div class="shade"></div>'
+            '<div class="head wrap"><div class="k" style="color:var(--glow)">Le voyage de votre colis</div></div>'
+            '<img class="colis" src="img/site/colis-seul.webp" alt="">'
+            '<div class="txt wrap">' + tx + '</div><div class="bar">' + "<span><b></b></span>" * len(JOURNEY) + '</div></div></section>')
+def cine_hero(portail_mode, kicker, h1_lines, p, cta, bg="img/site/bamako-nuit.webp", on=None):
+    h1 = "<br>".join('<span class="split"><span style="animation-delay:%.2fs">%s</span></span>' % (0.15 + i * 0.12, l) for i, l in enumerate(h1_lines))
+    return ('<header class="cine-hero"><div class="bg" style="background-image:url(%s)"></div><div class="veil"></div>'
+            '<div class="navx"><div class="wrap">%s</div></div>'
+            '<img class="hero-colis fadein" style="animation-delay:.9s" src="img/site/colis-seul.webp" alt="">'
+            '<div class="inner wrap"><div class="k fadein" style="color:var(--glow);animation-delay:.1s">%s</div><h1 style="margin-top:14px">%s</h1>'
+            '<p class="fadein" style="animation-delay:.6s">%s</p><div class="cta fadein" style="animation-delay:.8s">%s</div></div>'
+            '<div class="scrollcue">Défiler<i></i></div></header>') % (bg, nav(on, portail_mode), kicker, h1, p, cta)
 def portail():
     vt = VIT[0]
     thumbs = "".join('<button type="button" data-vit data-nom="%s" data-cat="%s" data-prix="%s" data-href="p/%s.html"%s><img src="img/site/%s.webp" alt="%s" loading="lazy"></button>'
                      % (n, c, p, i, ' class="on"' if k == 0 else "", im, n) for k, (im, n, c, p, i) in enumerate(VIT))
-    return ('<div id="portail" class="snsv" hidden>'
-      '<header class="top"><div class="glow-bg"></div><div class="wrap">' + nav(None, True) +
-      '<div class="hero"><div><div class="k" style="color:#d7f5c0">La plateforme ouest-africaine</div>'
-      '<h1>Tout Sounsouni,<br><span class="serif" style="color:var(--glow)">en un clic.</span></h1>'
-      '<p>Marché en ligne, logistique de la Chine et de l\'Inde jusqu\'à votre porte, et services aux entreprises — une seule plateforme, née à Bamako.</p>'
-      '<div class="cta"><a href="./" class="pill p-w" data-portail-fermer>Entrer dans le marché</a><a href="logistique.html" class="pill p-o">Envoyer un colis</a></div></div>'
-      '<div class="hero-art"><img src="img/3d/livraison-banner.webp" alt="Camionnette et livreur Sounsouni" width="1000" height="465"></div></div></div></header>'
-      '<main class="wrap"><div class="doors">'
-      '<a href="./" class="door market rv" data-portail-fermer><div class="k">01 — Marché</div><div class="t">Le marché<br><span class="serif">du Mali.</span></div>'
+    out = '<div id="portail" class="snsv" hidden>'
+    out += cine_hero(True, "Sounsouni · Bamako", ["Tout", "Sounsouni,", '<span class="serif" style="color:var(--glow)">en un clic.</span>'],
+                     "Le marché du Mali, la logistique du monde jusqu'à votre porte, et des services pour bâtir — une seule plateforme, née à Bamako.",
+                     '<a href="./" class="pill p-w" data-portail-fermer>Entrer dans le marché</a><a href="#voyage" class="pill p-o">Voir le voyage d\'un colis</a>')
+    out += ('<main class="wrap"><div class="doors" style="margin-top:56px">'
+      '<a href="./" class="door market rv" data-portail-fermer style="min-height:440px"><div class="k">01 — Marché</div><div class="t">Le marché<br><span class="serif">du Mali.</span></div>'
       '<div class="float"><img src="img/site/chaussure.webp" alt="" style="width:34%%"><img src="img/site/ecouteurs.webp" alt="" style="width:28%%"><img src="img/site/sac.webp" alt="" style="width:24%%"></div>'
       '<div style="font-size:12.5px;color:#666;margin-top:8px;padding-right:56px">Des milliers d\'articles, vendeurs vérifiés, paiement sécurisé.</div><span class="go" style="background:#111;color:#fff"><i class="fa-solid fa-arrow-right"></i></span></a>'
-      '<a href="logistique.html" class="door logi rv d1"><div class="k" style="color:var(--glow)">02 — Logistique</div><div class="t">Du monde<br><span class="serif" style="color:var(--glow)">à votre porte.</span></div>'
-      '<img class="ban" src="img/3d/livraison-banner.webp" alt="" loading="lazy" width="1000" height="465">'
-      '<div style="font-size:12.5px;opacity:.75;padding-right:56px">Transit Chine · Inde → Bamako, livraison à domicile et Points de Retrait.</div><span class="go" style="background:var(--glow);color:var(--gd)"><i class="fa-solid fa-arrow-right"></i></span></a>'
-      '</div>'
-      '<section class="sec vit"><div><div class="k rv">La vitrine</div><h2 class="rv d1">Sélection de la semaine</h2><p class="lead rv d2">Touchez un article pour le voir en grand.</p></div>'
+      '<a href="logistique.html" class="door photo rv d1"><img class="ph" src="img/site/camionnette.webp" alt="" loading="lazy"><div class="k">02 — Logistique</div><div class="t">Du monde<br><span class="serif" style="color:var(--glow)">à votre porte.</span></div>'
+      '<div style="font-size:13px;opacity:.85;margin-top:10px;padding-right:56px">Transit Chine · Inde → Bamako, livraison à domicile et Points de Retrait.</div><span class="go" style="background:var(--glow);color:var(--gd)"><i class="fa-solid fa-arrow-right"></i></span></a>'
+      '</div></main>')
+    out += journey()
+    out += ('<main class="wrap"><section class="sec vit"><div><div class="k rv">La vitrine</div><h2 class="rv d1">Sélection de la semaine</h2><p class="lead rv d2">Touchez un article pour le voir en grand.</p></div>'
       '<div class="rv d1"><div class="feat" id="vit-feat"><img src="img/site/%s.webp" alt=""><div><div style="font-size:11px;color:#777" data-f="cat">%s</div><div style="font-weight:800;font-size:18px;margin-top:2px" data-f="nom">%s</div>'
       '<div style="font-weight:800;color:var(--g);margin-top:6px" data-f="prix">%s</div><a class="pill p-d" style="margin-top:10px" data-f="lien" href="p/%s.html">Voir l\'article</a></div></div>'
-      '<div class="thumbs">%s</div></div></section>' % (vt[0], vt[2], vt[1], vt[3], vt[4], thumbs)
-      + network() +
-      '<section class="sec"><div class="k rv">Sounsouni Services</div><h2 class="rv d1">Votre projet, <span class="serif">notre expertise.</span></h2>'
+      '<div class="thumbs">%s</div></div></section></main>') % (vt[0], vt[2], vt[1], vt[3], vt[4], thumbs)
+    out += '<div class="darksec" style="margin-top:70px"><div class="wrap">' + network() + '</div></div>'
+    out += ('<main class="wrap"><section class="sec"><div class="k rv">Sounsouni Services</div><h2 class="rv d1">Votre projet, <span class="serif">notre expertise.</span></h2>'
       '<p class="lead rv d2">Un besoin en construction, industrie, immobilier, digital ou intelligence artificielle ? Dites-le-nous : Sounsouni vous fait une offre.</p>'
+      '<div class="svc-ph">'
+      '<a href="services.html#btp" class="rv"><img src="img/site/btp.webp" alt="" loading="lazy"><b>Sounsouni BTP</b><small>Construction, routes, rénovation</small></a>'
+      '<a href="services.html#digital" class="rv d1"><img src="img/site/digital.webp" alt="" loading="lazy"><b>Digital &amp; IA</b><small>Sites, applications, intelligence artificielle</small></a>'
+      '<a href="services.html#energie" class="rv d2"><img src="img/site/solaire.webp" alt="" loading="lazy"><b>Énergie &amp; industrie</b><small>Solaire, machines, maintenance</small></a></div>'
       '<div class="svc">' + svc_cards() + '</div><a class="btnw" href="services.html#demande">Demander une offre</a></section>'
-      '</main>' + footer() + '</div>')
+      '<section class="band rv"><img src="img/site/point-retrait.webp" alt="" loading="lazy"><div class="k" style="color:var(--glow)">Commerçants de Bamako</div>'
+      '<h2 style="max-width:620px">Devenez <span class="serif" style="color:var(--glow)">Point de Retrait</span> Sounsouni.</h2>'
+      '<p class="lead" style="color:#d9e6d6">Recevez les colis de votre quartier, gagnez une commission sur chaque retrait et attirez de nouveaux clients dans votre boutique.</p>'
+      '<div class="cta"><a class="pill p-w" href="https://wa.me/' + WA + '?text=Bonjour%20Sounsouni%2C%20je%20veux%20devenir%20Point%20de%20Retrait.">Je veux devenir Point de Retrait</a></div></section></main>')
+    out += footer() + '</div>'
+    return out
 def page(file, title, desc, on, body, dark=False):
     head = ('<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             '<title>%s</title><meta name="description" content="%s"><link rel="canonical" href="https://sounsouni.pro/%s">'
@@ -96,12 +123,12 @@ STEPS = [("fa-store", "Achat ou dépôt", "Votre fournisseur en Chine ou en Inde
          ("fa-barcode", "Arrivé à Bamako", "Notre équipe récupère le lot à l'aéroport ou au port et scanne chaque colis : l'état « Arrivé » s'affiche aussitôt.", "#24452c"),
          ("fa-motorcycle", "Livraison", "Un livreur Sounsouni l'apporte à domicile, ou il attend dans le Point de Retrait le plus proche.", "#2e7d32"),
          ("fa-key", "Remise avec code", "Le client donne son code secret : le colis est remis, et tout le monde le voit en direct.", "#0f2e14")]
-logi = hero("logistique.html", "Sounsouni Logistique", 'Du monde<br><span class="serif" style="color:var(--glow)">à votre porte.</span>',
+logi = cine_hero(False, "Sounsouni Logistique", ["Du monde", '<span class="serif" style="color:var(--glow)">à votre porte.</span>'],
             "Transit depuis la Chine et l'Inde, réception à Bamako, livraison express à domicile et réseau de Points de Retrait : Sounsouni s'occupe de tout, et vous suivez chaque étape.",
-            '<a class="pill p-w" href="https://wa.me/%s?text=%s">Envoyer un colis</a><a class="pill p-o" href="#reseau">Voir le réseau</a>' % (WA, "Bonjour%20Sounsouni%2C%20je%20veux%20envoyer%20un%20colis."), True)
-logi += '<main class="wrap"><section class="sec"><div class="k rv">Le voyage d\'un colis</div><h2 class="rv d1">Six étapes, <span class="serif">zéro souci.</span></h2><div class="steps">'
+            '<a class="pill p-w" href="https://wa.me/%s?text=%s">Envoyer un colis</a><a class="pill p-o" href="#reseau">Voir le réseau</a>' % (WA, "Bonjour%20Sounsouni%2C%20je%20veux%20envoyer%20un%20colis."), "img/site/camionnette.webp", "logistique.html")
+logi += journey() + '<main class="wrap"><section class="sec"><div class="k rv">Le voyage d\'un colis</div><h2 class="rv d1">Six étapes, <span class="serif">zéro souci.</span></h2><div class="steps">'
 logi += "".join('<div class="step rv%s" style="background:%s"><span class="n">0%d</span><i class="fa-solid %s big"></i><h3>%s</h3><p>%s</p></div>' % ((" d1", " d2", "")[i % 3], c, i + 1, ic, t, d) for i, (ic, t, d, c) in enumerate(STEPS))
-logi += '</div></section>' + network()
+logi += '</div></section></main><div class="darksec" style="margin-top:70px"><div class="wrap">' + network() + '</div></div><main class="wrap">'
 logi += ('<section class="sec"><div class="k rv">Tarifs de livraison à Bamako</div><h2 class="rv d1">Clairs, <span class="serif">sans surprise.</span></h2><div class="tarifs">'
          '<div class="tarif rv"><div class="k">Point de Retrait</div><b>dès 1 000 FCFA</b><small>Jusqu\'à 5 kg, puis 200 FCFA par kg. Le client retire avec son code.</small></div>'
          '<div class="tarif rv d1"><div class="k">À domicile</div><b>dès 2 000 FCFA</b><small>Jusqu\'à 5 kg, puis 300 FCFA par kg. Livré par un livreur Sounsouni.</small></div>'
@@ -115,9 +142,9 @@ logi += ('<section class="sec"><div class="k rv">Tarifs de livraison à Bamako</
 page("logistique.html", "Sounsouni Logistique — Transit Chine, Inde → Bamako, livraison et Points de Retrait",
      "Sounsouni Logistique : transit de colis depuis la Chine et l'Inde vers Bamako, réception scannée à l'arrivée, livraison express à domicile et Points de Retrait dans plus de 60 quartiers de Bamako.", "logistique.html", logi)
 # ---------- Services ----------
-srv = hero("services.html", "Sounsouni Services", 'Votre projet,<br><span class="serif" style="color:var(--glow)">notre expertise.</span>',
+srv = cine_hero(False, "Sounsouni Services", ["Votre projet,", '<span class="serif" style="color:var(--glow)">notre expertise.</span>'],
            "Construction, industrie, immobilier, digital, intelligence artificielle, énergie : décrivez votre besoin, Sounsouni vous fait une offre.",
-           '<a class="pill p-w" href="#demande">Demander une offre</a><a class="pill p-o" href="#domaines">Nos domaines</a>')
+           '<a class="pill p-w" href="#demande">Demander une offre</a><a class="pill p-o" href="#domaines">Nos domaines</a>', "img/site/btp.webp", "services.html")
 srv += '<main class="wrap"><section class="sec" id="domaines"><div class="k rv">Nos domaines</div><h2 class="rv d1">Tout Sounsouni <span class="serif">au service des entreprises.</span></h2><div class="steps">'
 srv += "".join('<div class="step rv" id="%s" style="background:%s"><i class="fa-solid %s big"></i><h3>Sounsouni<br>%s</h3><p>%s</p><a class="pill p-w" style="margin-top:14px;align-self:flex-start" href="#demande" data-svc="%s">Demander une offre</a></div>'
                % (k, ("#1b5e20", "#24452c", "#1f4f6e", "#2e7d32", "#0f2e14", "#22662a", "#1d3b49", "#33502f")[i], ic, n, d, k) for i, (k, ic, n, s, d) in enumerate(SERVICES))
@@ -135,9 +162,9 @@ srv += ('<script>(function(){var f=document.getElementById("sns-offre");if(!f)re
 page("services.html", "Sounsouni Services — BTP, industrie, immobilier, digital, IA, énergie au Mali",
      "Sounsouni Services : construction et BTP, solutions industrielles, immobilier, sites web et applications, intelligence artificielle, énergie solaire, import et sourcing, conseil aux entreprises au Mali.", "services.html", srv)
 # ---------- À propos ----------
-ap = hero("a-propos.html", "À propos de nous", 'Née à Bamako,<br><span class="serif" style="color:var(--glow)">ouverte au monde.</span>',
+ap = cine_hero(False, "À propos de nous", ["Née à Bamako,", '<span class="serif" style="color:var(--glow)">ouverte au monde.</span>'],
           "Sounsouni est une entreprise ouest-africaine qui rapproche les Maliens de tout ce dont ils ont besoin : les produits, les colis du monde entier et les services pour bâtir.",
-          '<a class="pill p-w" href="./">Découvrir le marché</a><a class="pill p-o" href="#contact">Nous contacter</a>')
+          '<a class="pill p-w" href="./">Découvrir le marché</a><a class="pill p-o" href="#contact">Nous contacter</a>', "img/site/bamako-nuit-2.webp", "a-propos.html")
 ap += ('<main class="wrap"><section class="sec two"><div><div style="display:flex;justify-content:center"><img class="rv" src="%s" alt="Logo Sounsouni" width="260" height="260" style="width:220px;height:220px;filter:drop-shadow(0 24px 30px rgba(40,90,20,.25))"></div></div>'
        '<div><div class="k rv">Qui sommes-nous</div><h2 class="rv d1">Sounsouni, <span class="serif">toute l\'Afrique en un clic.</span></h2>'
        '<p class="lead rv d2">Sounsouni est née à Bamako avec une idée simple : qu\'acheter, envoyer et entreprendre au Mali devienne aussi facile qu\'ailleurs. Aujourd\'hui, Sounsouni réunit trois métiers sur une seule plateforme.</p></div></section>'

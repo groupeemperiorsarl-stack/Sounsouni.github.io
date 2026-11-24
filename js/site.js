@@ -175,3 +175,50 @@
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();
+// ---------- Version cinéma : menu qui se fige, voyage du colis commandé par le défilement, compteurs ----------
+(function () {
+  "use strict";
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function tick() {
+    var navs = document.querySelectorAll(".navx");
+    for (var i = 0; i < navs.length; i++) {
+      var hero = navs[i].closest(".cine-hero") || navs[i].parentNode;
+      navs[i].classList.toggle("solid", hero.getBoundingClientRect().top < -40);
+    }
+    var js = document.querySelectorAll(".journey");
+    for (var j = 0; j < js.length; j++) {
+      var J = js[j], r = J.getBoundingClientRect(), vh = window.innerHeight;
+      var total = r.height - vh, p = Math.min(1, Math.max(0, -r.top / total));
+      var slides = J.querySelectorAll(".slide"), txs = J.querySelectorAll(".tx"), bars = J.querySelectorAll(".bar b"), n = slides.length;
+      var f = p * n, idx = Math.min(n - 1, Math.floor(f)), local = f - idx;
+      for (var k = 0; k < n; k++) {
+        slides[k].classList.toggle("on", k === idx);
+        if (txs[k]) txs[k].classList.toggle("on", k === idx);
+        if (bars[k]) bars[k].style.transform = "scaleX(" + (k < idx ? 1 : (k === idx ? local : 0)) + ")";
+        if (k === idx && !reduce) { var im = slides[k].querySelector("img"); if (im) im.style.transform = "scale(" + (1.18 - 0.14 * local).toFixed(4) + ")"; }
+      }
+      var c = J.querySelector(".colis");
+      if (c && !reduce) {
+        var w = window.innerWidth, x = Math.sin(p * Math.PI * 2.2) * w * 0.08, y = Math.cos(p * Math.PI * 3) * vh * 0.05 + (p - 0.5) * vh * 0.1;
+        c.style.transform = "translate(" + x.toFixed(1) + "px," + y.toFixed(1) + "px) rotate(" + (Math.sin(p * 9) * 8).toFixed(2) + "deg) scale(" + (0.85 + 0.3 * Math.sin(p * Math.PI)).toFixed(3) + ")";
+      }
+    }
+    var cs = document.querySelectorAll(".counter[data-to]:not(.done)");
+    for (var q = 0; q < cs.length; q++) {
+      var e = cs[q], rr = e.getBoundingClientRect();
+      if (rr.top < window.innerHeight * 0.9 && rr.bottom > 0) (function (el) {
+        el.classList.add("done"); var to = +el.getAttribute("data-to"), t0 = performance.now(), suf = el.getAttribute("data-suf") || "";
+        (function step(t) { var a = Math.min(1, (t - t0) / 1400), v = Math.round(to * (1 - Math.pow(1 - a, 3))); el.textContent = v + suf; if (a < 1) requestAnimationFrame(step); })(t0);
+      })(e);
+    }
+  }
+  var pending = false;
+  function onScroll() { if (!pending) { pending = true; requestAnimationFrame(function () { pending = false; tick(); }); } }
+  function boot() {
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    var p = document.getElementById("portail"); if (p) p.addEventListener("scroll", onScroll, { passive: true });
+    tick();
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+})();
