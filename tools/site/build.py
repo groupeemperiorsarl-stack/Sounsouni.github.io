@@ -78,9 +78,10 @@ def portail():
                      "Le marché du Mali, la logistique du monde jusqu'à votre porte, et des services pour bâtir — une seule plateforme, née à Bamako.",
                      '<a href="./" class="pill p-w" data-portail-fermer>Entrer dans le marché</a><a href="#voyage" class="pill p-o">Voir le voyage d\'un colis</a>')
     out += ('<main class="wrap"><div class="doors" style="margin-top:56px">'
-      '<a href="./" class="door market rv" data-portail-fermer style="min-height:440px"><div class="k">01 — Marché</div><div class="t">Le marché<br><span class="serif">du Mali.</span></div>'
-      '<div class="float"><img src="img/site/chaussure.webp" alt="" style="width:34%%"><img src="img/site/ecouteurs.webp" alt="" style="width:28%%"><img src="img/site/sac.webp" alt="" style="width:24%%"></div>'
-      '<div style="font-size:12.5px;color:#666;margin-top:8px;padding-right:56px">Des milliers d\'articles, vendeurs vérifiés, paiement sécurisé.</div><span class="go" style="background:#111;color:#fff"><i class="fa-solid fa-arrow-right"></i></span></a>'
+      '<div class="door market rv"><div class="k">01 — Marché</div><div class="t">Le marché<br><span class="serif">du Mali.</span></div>'
+      '<p style="font-size:13.5px;color:#5e7462;margin-top:10px">Des milliers d\'articles de vendeurs vérifiés, livrés chez vous ou au Point de Retrait. Paiement Orange Money, Moov Money ou à la livraison.</p>'
+      '<div class="mgrid">' + "".join('<a href="p/%s.html"><span class="mi"><img src="img/site/%s.webp" alt="%s" loading="lazy"></span><span class="mn">%s</span><span class="mp">%s</span></a>' % (i, im, n, n, pr) for (im, n, c, pr, i) in VIT[:4]) + '</div>'
+      '<a href="./" class="gobtn" data-portail-fermer><i class="fa-solid fa-cart-shopping"></i> Cliquez ici pour accéder au marché <i class="fa-solid fa-arrow-right"></i></a></div>'
       '<a href="logistique.html" class="door photo rv d1"><img class="ph" src="img/site/camionnette.webp" alt="" loading="lazy"><div class="k">02 — Logistique</div><div class="t">Du monde<br><span class="serif" style="color:var(--glow)">à votre porte.</span></div>'
       '<div style="font-size:13px;opacity:.85;margin-top:10px;padding-right:56px">Transit Chine · Inde → Bamako, livraison à domicile et Points de Retrait.</div><span class="go" style="background:var(--glow);color:var(--gd)"><i class="fa-solid fa-arrow-right"></i></span></a>'
       '</div></main>')
@@ -101,7 +102,7 @@ def portail():
       '<h2 style="max-width:620px">Devenez <span class="serif" style="color:var(--glow)">Point de Retrait</span> Sounsouni.</h2>'
       '<p class="lead" style="color:#d9e6d6">Recevez les colis de votre quartier, gagnez une commission sur chaque retrait et attirez de nouveaux clients dans votre boutique.</p>'
       '<div class="cta"><a class="pill p-w" href="https://wa.me/' + WA + '?text=Bonjour%20Sounsouni%2C%20je%20veux%20devenir%20Point%20de%20Retrait.">Je veux devenir Point de Retrait</a></div></section></main>')
-    out += footer() + '</div>'
+    out += footer() + '<a href="./" class="gomarket" data-portail-fermer><i class="fa-solid fa-cart-shopping"></i> Accéder au marché</a></div>'
     return out
 def page(file, title, desc, on, body, dark=False):
     head = ('<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
