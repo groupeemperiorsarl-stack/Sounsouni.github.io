@@ -24,7 +24,7 @@ with sync_playwright() as p:
                 chk(pg.evaluate("document.querySelectorAll('#portail [data-sns-map] svg').length")==2,f"{dev} cartes")
                 pg.set_viewport_size({"width":w,"height":h})
                 pg.click("#portail [data-vit]:nth-child(3)"); chk(pg.inner_text("#vit-feat [data-f=nom]")=="Sac à dos",f"{dev} vitrine")
-                pg.click("#portail .door.market"); pg.wait_for_timeout(500)
+                pg.click("#portail .door.market .gobtn"); pg.wait_for_timeout(500)
                 chk(pg.evaluate("document.getElementById('portail').hidden"),f"{dev} porte marché ferme le portail")
             else:
                 sw=pg.evaluate("document.documentElement.scrollWidth"); chk(sw<=w,f"{dev} {page} largeur {sw}")
