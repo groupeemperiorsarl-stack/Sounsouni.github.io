@@ -7,7 +7,7 @@ V = sys.argv[1] if len(sys.argv) > 1 else "dev"
 WA = "22393010123"
 FONTS = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800;900&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">'
 LOGO = "img/e/210deb8220be.webp"
-DESC_ORG = "Sounsouni, entreprise ouest-africaine née à Bamako : marché en ligne, logistique internationale (Chine, Inde, Europe, pays arabes) jusqu'au Mali (livraison, Points de Retrait, transit) et services aux entreprises (BTP, industrie, immobilier, digital, intelligence artificielle, énergie)."
+DESC_ORG = "Sounsouni, entreprise née à Bamako : marché en ligne au Mali, transit Chine, Inde, Europe et pays arabes vers Bamako, livraison et Points de Retrait, étiquetage code-barres et caisse avec scanner pour supermarchés, et services (BTP, mines, énergie, digital, IA)."
 SERVICES = [
  ("btp", "fa-helmet-safety", "BTP & Construction", "Bâtiments, routes, rénovation", "Études, construction de bâtiments et d'ouvrages, rénovation, suivi de chantier et fourniture de matériaux."),
  ("mines", "fa-gem", "Solutions minières", "Équipements, sourcing, conseil", "Équipements pour l'orpaillage, les petites mines et les carrières (détecteurs, motopompes, concasseurs, groupes électrogènes, sécurité), importés et vérifiés par nos Pôles, mise en relation et accompagnement des projets miniers."),
@@ -119,14 +119,14 @@ def portail():
       '<div class="cta"><a class="pill p-w" href="https://wa.me/' + WA + '?text=Bonjour%20Sounsouni%2C%20je%20veux%20devenir%20Point%20de%20Retrait.">Je veux devenir Point de Retrait</a></div></section></main>')
     out += footer() + '<a href="./" class="gomarket" data-portail-fermer><i class="fa-solid fa-cart-shopping"></i> Accéder au marché</a></div>'
     return out
-def page(file, title, desc, on, body, dark=False):
+def page(file, title, desc, on, body, dark=False, ld=None):
     head = ('<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             '<title>%s</title><meta name="description" content="%s"><link rel="canonical" href="https://sounsouni.pro/%s">'
             '<meta property="og:type" content="website"><meta property="og:site_name" content="Sounsouni"><meta property="og:title" content="%s"><meta property="og:description" content="%s">'
             '<meta property="og:url" content="https://sounsouni.pro/%s"><meta property="og:image" content="https://sounsouni.pro/og-image.jpg"><meta name="twitter:card" content="summary_large_image">'
             '<link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">'
             '<meta name="theme-color" content="#2e7d32">%s<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">'
-            '<link rel="stylesheet" href="css/site.css?v=%s"></head><body class="snsv">') % (title, desc, file, title, desc, file, FONTS, V)
+            '<link rel="stylesheet" href="css/site.css?v=%s">%s</head><body class="snsv">') % (title, desc, file, title, desc, file, FONTS, V, ('<script type="application/ld+json">' + json.dumps(ld, ensure_ascii=False) + '</script>') if ld else "")
     html = head + body + footer() + '<script src="js/site-i18n.js?v=%s"></script><script src="js/site.js?v=%s"></script></body></html>' % (V, V)
     open(file, "w").write(html)
 def hero(on, kicker, h1, p, cta, dark=False):
@@ -156,7 +156,7 @@ logi += ('<section class="sec"><div class="k rv">Tarifs de livraison à Bamako</
          '<p class="lead">En Chine, en Inde, en Europe et dans les pays arabes, nos Pôles Sounsouni vont chez le vendeur, vérifient la marchandise, la paient et la remettent au transitaire. Vous achetez à l\'étranger en toute confiance.</p></div></section></main>'
          ) % (WA, "Bonjour%20Sounsouni%2C%20je%20suis%20transitaire.", WA, "Bonjour%20Sounsouni%2C%20je%20veux%20ouvrir%20un%20Point%20de%20Retrait.")
 page("logistique.html", "Sounsouni Logistique — Transit Chine, Inde, Europe, pays arabes → Bamako, livraison et Points de Retrait",
-     "Sounsouni Logistique : transit de colis depuis la Chine, l'Inde, la France, l'Europe et les pays arabes vers Bamako, réception scannée à l'arrivée, livraison express à domicile et Points de Retrait dans plus de 60 quartiers de Bamako.", "logistique.html", logi)
+     "Sounsouni Logistique : transit de colis depuis la Chine, l'Inde, la France, l'Europe et les pays arabes vers Bamako, réception scannée à l'arrivée, livraison express à domicile et Points de Retrait dans plus de 60 quartiers de Bamako.", "logistique.html", logi, ld={"@context": "https://schema.org", "@type": "Service", "name": "Sounsouni Logistique", "serviceType": "Transit international et livraison", "provider": {"@id": "https://sounsouni.pro/#org", "@type": "Organization", "name": "Sounsouni", "url": "https://sounsouni.pro/"}, "areaServed": [{"@type": "Country", "name": "Mali"}], "description": "Transit depuis la Chine, l'Inde, la France, l'Europe et les pays arabes vers Bamako, réception scannée, livraison express à domicile et Points de Retrait."})
 # ---------- Services ----------
 srv = cine_hero(False, "Sounsouni Services", ["Votre projet,", '<span class="serif" style="color:var(--glow)">notre expertise.</span>'],
            "Construction, mines, industrie, immobilier, digital, intelligence artificielle, énergie : décrivez votre besoin, Sounsouni vous fait une offre.",
@@ -178,8 +178,8 @@ srv += ('<script>(function(){var f=document.getElementById("sns-offre");if(!f)re
         'f.addEventListener("submit",function(e){e.preventDefault();var d=new FormData(f),o=sel.options[sel.selectedIndex].text;'
         'var m="Bonjour Sounsouni, je souhaite une offre.\\nDomaine : "+o+"\\nNom : "+d.get("nom")+"\\nTéléphone : "+d.get("tel")+"\\nVille : "+(d.get("ville")||"-")+"\\nBesoin : "+d.get("besoin");'
         'window.open("https://wa.me/%s?text="+encodeURIComponent(m),"_blank");});})();</script>') % WA
-page("services.html", "Sounsouni Services — BTP, industrie, immobilier, digital, IA, énergie au Mali",
-     "Sounsouni Services : construction et BTP, solutions industrielles, immobilier, sites web et applications, intelligence artificielle, énergie solaire, import et sourcing, conseil aux entreprises au Mali.", "services.html", srv)
+page("services.html", "Sounsouni Services — Étiquetage et caisse, BTP, mines, énergie, digital, IA au Mali",
+     "Sounsouni Services à Bamako : étiquetage code-barres et caisse avec scanner pour supermarchés et boutiques, BTP, solutions minières, industrie, immobilier, énergie solaire, sites web et applications, intelligence artificielle, sourcing et conseil.", "services.html", srv, ld={"@context": "https://schema.org", "@type": "ItemList", "name": "Sounsouni Services", "itemListElement": [{"@type": "ListItem", "position": i + 1, "item": {"@type": "Service", "name": "Sounsouni " + n, "description": d, "url": "https://sounsouni.pro/services.html#" + k, "provider": {"@id": "https://sounsouni.pro/#org", "@type": "Organization", "name": "Sounsouni", "url": "https://sounsouni.pro/"}, "areaServed": "ML"}} for i, (k, ic, n, x, d) in enumerate(SERVICES)]})
 # ---------- À propos ----------
 def pilier(n, ic, k, t, d, items, img=None, bg="#0f2e14"):
     vis = ('<img src="%s" alt="" loading="lazy">' % img) if img else ('<span class="pi-ic"><i class="fa-solid %s"></i></span>' % ic)
@@ -216,8 +216,8 @@ ap += ('</div></section>'
        '<div class="card rv d1" style="font-size:15px;line-height:2">'
        '<div><b>Registre du commerce (RCCM)</b> : ML-BKO-01-2026-A-05755</div><div><b>D-U-N-S (Dun &amp; Bradstreet)</b> : 85-042-6646</div>'
        '<div><b>Siège</b> : Sotelco, face à Bougouba, Bamako, Mali</div><div><b>Téléphone</b> : <a href="tel:+22393010123">+223 93 01 01 23</a></div><div><b>E-mail</b> : <a href="mailto:direction@sounsouni.pro">direction@sounsouni.pro</a></div></div></section></main>')
-page("a-propos.html", "À propos de Sounsouni — Entreprise ouest-africaine née à Bamako",
-     "Sounsouni, entreprise ouest-africaine née à Bamako (RCCM ML-BKO-01-2026-A-05755, D-U-N-S 85-042-6646) : marché en ligne, logistique internationale, solutions minières et services aux entreprises.", "a-propos.html", ap)
+page("a-propos.html", "À propos de Sounsouni — Marché, logistique, étiquetage et services, née à Bamako",
+     "Sounsouni, entreprise ouest-africaine née à Bamako (RCCM ML-BKO-01-2026-A-05755, D-U-N-S 85-042-6646) : marché en ligne, logistique internationale, étiquetage et caisse pour les commerces, services aux entreprises.", "a-propos.html", ap, ld={"@context": "https://schema.org", "@type": "AboutPage", "url": "https://sounsouni.pro/a-propos.html", "about": {"@id": "https://sounsouni.pro/#org", "@type": "Organization", "name": "Sounsouni", "url": "https://sounsouni.pro/"}})
 # ---------- Portail dans index.html ----------
 ix = open("index.html").read()
 GATE = ('<!--PORTAIL-->' + FONTS + '<link rel="stylesheet" href="css/site.css?v=%s">'
@@ -231,7 +231,7 @@ ix = re.sub(r'<!--PORTAIL-BODY-->.*?<!--/PORTAIL-BODY-->\n?', "", ix, flags=re.S
 body = ('<!--PORTAIL-BODY-->' + portail() + '<script>if(window.__snsPortail)document.getElementById("portail").removeAttribute("hidden");</script>'
         '<script src="js/site-i18n.js?v=' + V + '" defer></script><script src="js/site.js?v=' + V + '" defer></script><!--/PORTAIL-BODY-->\n')
 ix = ix.replace("<body>\n", "<body>\n" + body, 1)
-TITLE = "Sounsouni — Marché en ligne, logistique et services au Mali | Bamako"
+TITLE = "Sounsouni — Marché en ligne, livraison, transit et caisse pour commerces au Mali | Bamako"
 ix = re.sub(r"<title>.*?</title>", "<title>%s</title>" % TITLE, ix, count=1)
 ix = re.sub(r'(<meta name="description" content=")[^"]*', lambda m: m.group(1) + DESC_ORG, ix, count=1)
 ix = re.sub(r'(<meta property="og:title" content=")[^"]*', lambda m: m.group(1) + TITLE, ix, count=1)
@@ -246,7 +246,10 @@ ix = re.sub(r'<script type="application/ld\+json">.*?</script>', lambda m: '<scr
 open("index.html", "w").write(ix)
 # plan du site
 sm = open("sitemap.xml").read()
+TODAY = __import__("datetime").date.today().isoformat()
+sm = re.sub(r"(<loc>https://sounsouni.pro/</loc><lastmod>)[^<]*", lambda m: m.group(1) + TODAY, sm)
 for f, pr in (("logistique.html", "0.9"), ("services.html", "0.8"), ("a-propos.html", "0.7")):
+    sm = re.sub(r"(<loc>https://sounsouni.pro/%s</loc><lastmod>)[^<]*" % re.escape(f), lambda m: m.group(1) + TODAY, sm)
     if f not in sm: sm = sm.replace("</urlset>", "  <url><loc>https://sounsouni.pro/%s</loc><lastmod>2026-11-24</lastmod><changefreq>monthly</changefreq><priority>%s</priority></url>\n</urlset>" % (f, pr))
 open("sitemap.xml", "w").write(sm)
 print("site fabriqué", V)
