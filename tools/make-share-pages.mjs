@@ -1,6 +1,7 @@
 // Fabrique une petite page par article (p/<id>.html) avec la photo, le prix et
 // une courte description, pour que WhatsApp / Facebook affichent un bel aperçu
-// quand on partage le lien. La page renvoie aussitôt vers l'article dans l'app.
+// quand on partage le lien. Les visiteurs sont renvoyés aussitôt vers l'article dans l'app ;
+// les robots (Google…) lisent la vraie fiche produit, identique, pour le référencement.
 import fs from "node:fs";
 const html = fs.readFileSync(fs.existsSync("js/app.js") ? "js/app.js" : "index.html", "utf8");
 const url = (html.match(/url:\s*"(https:\/\/[a-z0-9]+\.supabase\.co)"/) || [])[1];
@@ -19,6 +20,7 @@ const safeId = (id) => /^[A-Za-z0-9_\-]{1,80}$/.test(id);
 fs.mkdirSync("p", { recursive: true });
 const keep = new Set();
 let written = 0;
+const smap = [];
 for (const { id, data: p } of rows) {
   if (!p || !safeId(id) || p.banned || p.deleted) continue;
   const name = String(p.name || "Article").slice(0, 90);
@@ -28,12 +30,22 @@ for (const { id, data: p } of rows) {
   const title = price ? `${name} — ${price}` : name;
   const description = ((shop ? shop + " · " : "") + (desc || "Disponible sur Sounsouni, le marché digital du Mali.")).slice(0, 180);
   const img = (Array.isArray(p.images) ? p.images : []).find((u) => typeof u === "string" && /^https:\/\//.test(u)) || SITE + "/og-image.jpg";
+  const imgs = (Array.isArray(p.images) ? p.images : []).filter((u) => typeof u === "string" && /^https:\/\//.test(u)).slice(0, 6);
+  const indexable = !p.hidden && p.moderationStatus !== "pending" && p.moderationStatus !== "rejected" && Number(p.price) > 0 && imgs.length > 0;
+  const cat = String(p.category || "");
+  const inStock = !(typeof p.stock === "number" && p.stock <= 0);
+  const ld = { "@context": "https://schema.org", "@type": "Product", name, image: imgs.length ? imgs : [img], description: desc || name, sku: id,
+    ...(cat ? { category: cat } : {}), ...(shop ? { brand: { "@type": "Brand", name: shop } } : {}),
+    ...(price ? { offers: { "@type": "Offer", url: `${SITE}/p/${id}.html`, priceCurrency: "XOF", price: Math.round(Number(p.price)), availability: "https://schema.org/" + (inStock ? "InStock" : "OutOfStock"),
+      itemCondition: "https://schema.org/" + (p.condition === "occasion" ? "UsedCondition" : "NewCondition"), seller: { "@type": "Organization", name: shop || "Sounsouni" } } } : {}) };
+  const crumbs = { "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [{ "@type": "ListItem", position: 1, name: "Sounsouni", item: SITE + "/" },
+    ...(cat ? [{ "@type": "ListItem", position: 2, name: cat, item: SITE + "/#marche" }] : []), { "@type": "ListItem", position: cat ? 3 : 2, name }] };
   const page = `<!doctype html>
 <html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(title)} | Sounsouni</title>
+<title>${esc(title)} | Sounsouni Bamako</title>
 <meta name="description" content="${esc(description)}">
-<meta property="og:type" content="product">
+${indexable ? "" : '<meta name="robots" content="noindex">\n'}<meta property="og:type" content="product">
 <meta property="og:site_name" content="Sounsouni">
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(description)}">
@@ -45,13 +57,28 @@ ${price ? `<meta property="product:price:amount" content="${Math.round(Number(p.
 <meta name="twitter:title" content="${esc(title)}">
 <meta name="twitter:description" content="${esc(description)}">
 <meta name="twitter:image" content="${esc(img)}">
-<link rel="canonical" href="${SITE}/?product=${id}">
-<script>var q=new URLSearchParams(location.search),r=q.get("ref");location.replace("/?product=${id}"+(r?"&ref="+encodeURIComponent(r):""));</script>
-</head><body style="font-family:sans-serif;text-align:center;padding:40px 16px">
-<p>Ouverture de l'article sur Sounsouni…</p>
-<p><a href="/?product=${id}">Voir l'article</a></p>
-</body></html>
+<link rel="canonical" href="${SITE}/p/${id}.html">
+<link rel="icon" type="image/png" href="/favicon-192.png">
+<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>
+<script type="application/ld+json">${JSON.stringify(crumbs).replace(/</g, "\\u003c")}</script>
+<script>if(!/bot|crawl|spider|slurp|google|bing|yandex|baidu|duckduck|facebookexternalhit|whatsapp|telegram|twitter|linkedin|lighthouse/i.test(navigator.userAgent)){var q=new URLSearchParams(location.search),r=q.get("ref");location.replace("/?product=${id}"+(r?"&ref="+encodeURIComponent(r):""));}</script>
+<style>body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1d2433;background:#f5f7f3}a{color:inherit}.w{max-width:960px;margin:auto;padding:16px}
+.h{display:flex;align-items:center;gap:10px;font-weight:800;text-decoration:none;color:#1b5e20}.h img{width:34px;height:34px;border-radius:9px}
+.g{display:grid;gap:20px;margin-top:16px}.ph{display:grid;gap:8px}.ph img{width:100%;border-radius:18px;background:#fff;aspect-ratio:1;object-fit:cover}.ph .t{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.ph .t img{border-radius:10px}
+h1{font-size:24px;line-height:1.2;margin:4px 0 8px}.pr{font-size:26px;font-weight:900;color:#1b5e20}.c{font-size:13px;color:#5e7462;text-transform:uppercase;letter-spacing:1px}.d{white-space:pre-line;line-height:1.6;font-size:15px}
+.b{display:block;text-align:center;background:#2e7d32;color:#fff;text-decoration:none;font-weight:800;padding:15px;border-radius:999px;margin:16px 0}.i{font-size:13.5px;color:#5e7462;line-height:1.7}
+@media(min-width:760px){.g{grid-template-columns:1fr 1fr}}</style>
+</head><body><div class="w">
+<a class="h" href="/"><img src="/favicon-192.png" alt="Sounsouni">Sounsouni</a>
+<div class="g"><div class="ph"><img src="${esc(img)}" alt="${esc(name)}">${imgs.length > 1 ? '<div class="t">' + imgs.slice(1, 5).map((u) => `<img src="${esc(u)}" alt="${esc(name)}" loading="lazy">`).join("") + "</div>" : ""}</div>
+<div>${cat ? `<div class="c">${esc(cat)}</div>` : ""}<h1>${esc(name)}</h1>${price ? `<div class="pr">${price}</div>` : ""}
+<a class="b" href="/?product=${id}">Commander sur Sounsouni</a>
+${desc ? `<div class="d">${esc(String(p.description || "").trim().slice(0, 3000))}</div>` : ""}
+<p class="i">${shop ? "Vendu par <b>" + esc(shop) + "</b> · " : ""}Livraison à domicile à Bamako ou au Point de Retrait, partout au Mali. Paiement Orange Money, Moov Money ou à la livraison.</p></div></div>
+<p class="i" style="margin-top:28px"><a href="/">Sounsouni</a> · <a href="/logistique.html">Logistique</a> · <a href="/services.html">Services</a> · <a href="/a-propos.html">À propos</a></p>
+</div></body></html>
 `;
+  if (indexable) smap.push(`  <url><loc>${SITE}/p/${id}.html</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>`);
   const file = `p/${id}.html`;
   keep.add(`${id}.html`);
   if (!fs.existsSync(file) || fs.readFileSync(file, "utf8") !== page) { fs.writeFileSync(file, page); written++; }
@@ -87,6 +114,11 @@ console.log(`catalogues : ${keepC.size} (articles : ${all.length})`);
 let removed = 0;
 for (const f of fs.readdirSync("p")) if (f.endsWith(".html") && !keep.has(f)) { fs.unlinkSync("p/" + f); removed++; }
 console.log(`articles : ${keep.size}, pages écrites : ${written}, supprimées : ${removed}`);
+{ // Plan du site des articles, pour Google
+  const out = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + smap.join("\n") + "\n</urlset>\n";
+  if (!fs.existsSync("sitemap-produits.xml") || fs.readFileSync("sitemap-produits.xml", "utf8") !== out) fs.writeFileSync("sitemap-produits.xml", out);
+  console.log(`plan du site des articles : ${smap.length}`);
+}
 
 // ---- Nouveautés du carrousel de l'accueil (site/nouveautes.json) ----
 // Les articles publiés APRÈS la sélection faite à la main le 24/11/2026 (avec photo et prix),
