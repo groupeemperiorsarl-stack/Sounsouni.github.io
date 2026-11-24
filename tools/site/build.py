@@ -81,7 +81,7 @@ def cine_hero(portail_mode, kicker, h1_lines, p, cta, bg="img/site/bamako-nuit.w
             '<div class="navx"><div class="wrap">%s</div></div>'
             '<img class="hero-colis fadein" style="animation-delay:.9s" src="img/site/colis-seul.webp" alt="">'
             '<div class="inner wrap"><div class="k fadein" style="color:var(--glow);animation-delay:.1s">%s</div><h1 style="margin-top:14px">%s</h1>'
-            '<p class="fadein" style="animation-delay:.6s">%s</p><div class="cta fadein" style="animation-delay:.8s">%s</div></div>'
+            '<p class="fadein" style="animation-delay:.6s">%s</p><div class="cta fadein" style="animation-delay:.8s">%s</div>' + ('' if on == "a-propos.html" else '<a class="aboutchip fadein" style="animation-delay:1s" href="a-propos.html"><i class="fa-solid fa-circle-info"></i> À propos de nous</a>') + '</div>'
             '<div class="scrollcue">Défiler<i></i></div></header>') % (bg, nav(on, portail_mode), kicker, h1, p, cta)
 def portail():
     vt = VIT[0]

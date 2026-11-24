@@ -242,3 +242,10 @@ body.snsv{margin:0}
 .snsv .langbox [data-lang]{width:100%;padding:15px;border-radius:16px;border:1.5px solid var(--line);font-weight:800;font-size:16px;background:var(--card);transition:background .2s,border-color .2s}
 .snsv .langbox [data-lang]:hover{background:#e3f1d8;border-color:var(--g)}
 .snsv .langbox .close{position:absolute;top:12px;right:14px;font-size:18px;color:var(--dim);width:auto;padding:4px}
+/* Menu du haut sur téléphone : « À propos » descend sous le titre, rien ne se chevauche */
+.snsv .nav .r .lnk{display:none}
+.snsv .nav .pill{white-space:nowrap}
+.snsv .aboutchip{display:inline-flex;align-self:flex-start;align-items:center;gap:8px;margin-top:14px;font-size:13.5px;font-weight:700;color:#fff;opacity:.92;border-bottom:1.5px solid rgba(200,255,138,.7);padding-bottom:3px}
+@media (max-width:420px){.snsv .nav .b{font-size:16px}.snsv .nav .b img{width:30px;height:30px}.snsv .nav .r{gap:8px}.snsv .nav .pill{padding:9px 13px;font-size:12px}.snsv .langbtn{padding:7px 10px}}
+@media (max-width:760px){.snsv .scrollcue{display:none}}
+@media (min-width:1100px){.snsv .aboutchip{display:none}}
