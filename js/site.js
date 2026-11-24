@@ -222,3 +222,30 @@
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();
+// ---------- Carrousel du marché (flèches) et bouton Retour qui ramène à l'accueil ----------
+(function () {
+  "use strict";
+  function boot() {
+    var w = document.querySelectorAll(".mrow-wrap");
+    for (var i = 0; i < w.length; i++) (function (box) {
+      var rows = box.querySelector(".mrows");
+      function go(d) { rows.scrollBy({ left: d * rows.clientWidth * 0.8, behavior: "smooth" }); }
+      box.querySelector(".prev").addEventListener("click", function () { go(-1); });
+      box.querySelector(".next").addEventListener("click", function () { go(1); });
+    })(w[i]);
+    // Quand le visiteur entre au marché depuis l'accueil, on ajoute une étape à l'historique :
+    // le bouton Retour du téléphone le ramène alors sur l'accueil, là où il était.
+    var p = document.getElementById("portail");
+    if (!p || !window.snsPortail) return;
+    var fermer = window.snsPortail.fermer, ouvrir = window.snsPortail.ouvrir, pos = 0;
+    window.snsPortail.fermer = function () {
+      pos = p.scrollTop;
+      try { history.replaceState({ snsPortail: 1 }, "", location.pathname + location.search); history.pushState({ snsMarche: 1 }, "", location.pathname + location.search); } catch (e) {}
+      fermer();
+    };
+    window.addEventListener("popstate", function (e) {
+      if (e.state && e.state.snsPortail) { try { sessionStorage.removeItem("sns_portail_ferme"); } catch (x) {} ouvrir(); p.scrollTop = pos; }
+    });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+})();

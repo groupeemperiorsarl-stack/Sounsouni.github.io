@@ -18,6 +18,16 @@ SERVICES = [
  ("sourcing", "fa-globe", "Import & Sourcing", "Chine, Inde, Émirats…", "Nos Pôles Sounsouni achètent et vérifient vos marchandises sur place, puis les acheminent jusqu'à Bamako."),
  ("conseil", "fa-briefcase", "Conseil & Services", "Projets d'entreprise", "Études de marché, montage de projets, accompagnement administratif et services généraux aux entreprises."),
 ]
+M = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vitrine.json')))
+def mcard(x):
+    return '<a class="mc" href="p/%s.html"><span class="mci"><img src="img/site/m-%s.webp" alt="%s" loading="lazy" width="480" height="600"></span><span class="mcc">%s</span><span class="mcn">%s</span><span class="mcp">%s</span></a>' % (x[0], x[0], x[2], x[1], x[2], x[3])
+def carousel():
+    r1 = ''.join(mcard(x) for x in M[0::2]); r2 = ''.join(mcard(x) for x in M[1::2])
+    return ('<section class="sec mkt"><div class="wrap"><div class="k rv">Dans le marché en ce moment</div><h2 class="rv d1">Mode, montres, high-tech… <span class="serif" style="color:var(--g)">tout est là.</span></h2>'
+            '<p class="lead rv d2">Faites glisser pour découvrir les articles de nos vendeurs, puis entrez dans le marché.</p></div>'
+            '<div class="mrow-wrap"><button class="mnav prev" type="button" aria-label="Précédent"><i class="fa-solid fa-arrow-left"></i></button><button class="mnav next" type="button" aria-label="Suivant"><i class="fa-solid fa-arrow-right"></i></button>'
+            '<div class="mrows" tabindex="0"><div class="mrow">' + r1 + '</div><div class="mrow">' + r2 + '</div></div></div>'
+            '<div class="wrap"><a href="./" class="gobtn" data-portail-fermer style="max-width:520px;margin:22px auto 0"><i class="fa-solid fa-cart-shopping"></i> Cliquez ici pour accéder au marché <i class="fa-solid fa-arrow-right"></i></a></div></section>')
 VIT = [  # image, nom, catégorie, prix, id de l'article
  ("ecouteurs", "Casque Bluetooth sans fil", "Électronique", "10 000 FCFA", "id-mtmt5uapmckhk"),
  ("chaussure", "Chaussure fermée homme", "Mode", "15 000 FCFA", "id-mtngoaype4xk7"),
@@ -26,10 +36,10 @@ VIT = [  # image, nom, catégorie, prix, id de l'article
  ("hoverboard", "Hoverboard Giro Drive", "Loisirs", "75 000 FCFA", "id-mtk9h8m0jjnyy"),
 ]
 def nav(on, portail=False):
-    m = '<a href="./" data-portail-fermer>Marché</a>' if portail else '<a href="./">Marché</a>'
+    m = '<a href="./" data-portail-fermer>Marché</a>' if portail else '<a href="./#marche">Marché</a>'
     links = [("logistique.html", "Logistique"), ("services.html", "Services"), ("a-propos.html", "À propos")]
     l = m + "".join('<a href="%s"%s>%s</a>' % (h, ' class="on"' if on == h else "", t) for h, t in links)
-    log = '<a href="./" class="pill p-w"%s>Se connecter</a>' % (" data-portail-fermer" if portail else "")
+    log = '<a href="%s" class="pill p-w"%s>Se connecter</a>' % ("./" if portail else "./#marche", " data-portail-fermer" if portail else "")
     return ('<div class="nav"><a class="b" href="%s"><img src="%s" alt="Sounsouni" width="34" height="34">Sounsouni</a><nav class="links">%s</nav>'
             '<div class="r"><a class="lnk" href="a-propos.html">À propos</a>%s</div></div>') % ("./#accueil" if not portail else "#accueil", LOGO, l, log)
 def footer():
@@ -80,16 +90,13 @@ def portail():
     out += ('<main class="wrap"><div class="doors" style="margin-top:56px">'
       '<div class="door market rv"><div class="k">01 — Marché</div><div class="t">Le marché<br><span class="serif">du Mali.</span></div>'
       '<p style="font-size:13.5px;color:#5e7462;margin-top:10px">Des milliers d\'articles de vendeurs vérifiés, livrés chez vous ou au Point de Retrait. Paiement Orange Money, Moov Money ou à la livraison.</p>'
-      '<div class="mgrid">' + "".join('<a href="p/%s.html"><span class="mi"><img src="img/site/%s.webp" alt="%s" loading="lazy"></span><span class="mn">%s</span><span class="mp">%s</span></a>' % (i, im, n, n, pr) for (im, n, c, pr, i) in VIT[:4]) + '</div>'
+      '<div class="mgrid">' + "".join('<a href="p/%s.html"><span class="mi ph"><img src="img/site/m-%s.webp" alt="%s" loading="lazy"></span><span class="mn">%s</span><span class="mp">%s</span></a>' % (x[0], x[0], x[2], x[2], x[3]) for x in (M[0], M[7], M[11], M[2])) + '</div>'
       '<a href="./" class="gobtn" data-portail-fermer><i class="fa-solid fa-cart-shopping"></i> Cliquez ici pour accéder au marché <i class="fa-solid fa-arrow-right"></i></a></div>'
       '<a href="logistique.html" class="door photo rv d1"><img class="ph" src="img/site/camionnette.webp" alt="" loading="lazy"><div class="k">02 — Logistique</div><div class="t">Du monde<br><span class="serif" style="color:var(--glow)">à votre porte.</span></div>'
       '<div style="font-size:13px;opacity:.85;margin-top:10px;padding-right:56px">Transit Chine · Inde → Bamako, livraison à domicile et Points de Retrait.</div><span class="go" style="background:var(--glow);color:var(--gd)"><i class="fa-solid fa-arrow-right"></i></span></a>'
       '</div></main>')
+    out += carousel()
     out += journey()
-    out += ('<main class="wrap"><section class="sec vit"><div><div class="k rv">La vitrine</div><h2 class="rv d1">Sélection de la semaine</h2><p class="lead rv d2">Touchez un article pour le voir en grand.</p></div>'
-      '<div class="rv d1"><div class="feat" id="vit-feat"><img src="img/site/%s.webp" alt=""><div><div style="font-size:11px;color:#777" data-f="cat">%s</div><div style="font-weight:800;font-size:18px;margin-top:2px" data-f="nom">%s</div>'
-      '<div style="font-weight:800;color:var(--g);margin-top:6px" data-f="prix">%s</div><a class="pill p-d" style="margin-top:10px" data-f="lien" href="p/%s.html">Voir l\'article</a></div></div>'
-      '<div class="thumbs">%s</div></div></section></main>') % (vt[0], vt[2], vt[1], vt[3], vt[4], thumbs)
     out += '<div class="darksec" style="margin-top:70px"><div class="wrap">' + network() + '</div></div>'
     out += ('<main class="wrap"><section class="sec"><div class="k rv">Sounsouni Services</div><h2 class="rv d1">Votre projet, <span class="serif">notre expertise.</span></h2>'
       '<p class="lead rv d2">Un besoin en construction, industrie, immobilier, digital ou intelligence artificielle ? Dites-le-nous : Sounsouni vous fait une offre.</p>'
@@ -165,7 +172,7 @@ page("services.html", "Sounsouni Services — BTP, industrie, immobilier, digita
 # ---------- À propos ----------
 ap = cine_hero(False, "À propos de nous", ["Née à Bamako,", '<span class="serif" style="color:var(--glow)">ouverte au monde.</span>'],
           "Sounsouni est une entreprise ouest-africaine qui rapproche les Maliens de tout ce dont ils ont besoin : les produits, les colis du monde entier et les services pour bâtir.",
-          '<a class="pill p-w" href="./">Découvrir le marché</a><a class="pill p-o" href="#contact">Nous contacter</a>', "img/site/bamako-nuit-2.webp", "a-propos.html")
+          '<a class="pill p-w" href="./#marche">Découvrir le marché</a><a class="pill p-o" href="#contact">Nous contacter</a>', "img/site/bamako-nuit-2.webp", "a-propos.html")
 ap += ('<main class="wrap"><section class="sec two"><div><div style="display:flex;justify-content:center"><img class="rv" src="%s" alt="Logo Sounsouni" width="260" height="260" style="width:220px;height:220px;filter:drop-shadow(0 24px 30px rgba(40,90,20,.25))"></div></div>'
        '<div><div class="k rv">Qui sommes-nous</div><h2 class="rv d1">Sounsouni, <span class="serif">toute l\'Afrique en un clic.</span></h2>'
        '<p class="lead rv d2">Sounsouni est née à Bamako avec une idée simple : qu\'acheter, envoyer et entreprendre au Mali devienne aussi facile qu\'ailleurs. Aujourd\'hui, Sounsouni réunit trois métiers sur une seule plateforme.</p></div></section>'
