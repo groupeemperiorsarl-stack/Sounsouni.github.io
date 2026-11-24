@@ -100,6 +100,8 @@ def portail():
       '<a href="./" class="gobtn" data-portail-fermer><i class="fa-solid fa-cart-shopping"></i> Cliquez ici pour accéder au marché <i class="fa-solid fa-arrow-right"></i></a></div>'
       '<a href="logistique.html" class="door photo rv d1"><img class="ph" src="img/site/camionnette.webp" alt="" loading="lazy"><div class="k">02 — Logistique</div><div class="t">Du monde<br><span class="serif" style="color:var(--glow)">à votre porte.</span></div>'
       '<div style="font-size:13px;opacity:.85;margin-top:10px;padding-right:56px">Transit Chine · Inde · France · Europe → Bamako, livraison à domicile et Points de Retrait.</div><span class="go" style="background:var(--glow);color:var(--gd)"><i class="fa-solid fa-arrow-right"></i></span></a>'
+      '<a href="services.html#etiquetage" class="door photo wide rv"><img class="ph" src="img/site/etiquetage.webp" alt="" loading="lazy"><div class="k">03 — Étiquetage &amp; Caisse</div><div class="t">Votre magasin,<br><span class="serif" style="color:var(--glow)">au code-barres près.</span></div>'
+      '<div style="font-size:13.5px;opacity:.9;margin-top:10px;max-width:560px;padding-right:56px">Supermarchés, alimentations et boutiques : nous enregistrons et étiquetons toute votre marchandise, installons la caisse avec scanner Sounsouni Gestion Pro et suivons votre stock à chaque arrivage.</div><span class="go" style="background:var(--glow);color:var(--gd)"><i class="fa-solid fa-arrow-right"></i></span></a>'
       '</div></main>')
     out += carousel()
     out += journey()
@@ -184,12 +186,12 @@ def pilier(n, ic, k, t, d, items, img=None, bg="#0f2e14"):
     return ('<article class="pilier rv" style="--pb:%s"><div class="pi-vis">%s<span class="pi-n">%s</span></div><div class="pi-txt"><div class="k" style="color:var(--glow)"><i class="fa-solid %s"></i> %s</div>'
             '<h3>%s</h3><p>%s</p><ul>%s</ul></div></article>') % (bg, vis, n, ic, k, t, d, "".join("<li>%s</li>" % x for x in items))
 ap = cine_hero(False, "À propos de nous", ["Un seul nom,", '<span class="serif" style="color:var(--glow)">tout un écosystème.</span>'],
-          "Marché en ligne, logistique internationale, solutions minières et services aux entreprises : Sounsouni rassemble, depuis Bamako, tout ce qu'il faut pour acheter, transporter, produire et bâtir.",
+          "Marché en ligne, logistique internationale, étiquetage et caisse pour les commerces, services aux entreprises : Sounsouni rassemble, depuis Bamako, tout ce qu'il faut pour acheter, transporter, produire et bâtir.",
           '<a class="pill p-w" href="#metiers">Nos métiers</a><a class="pill p-o" href="#contact">Nous contacter</a>', "img/site/bamako-nuit.webp", "a-propos.html")
 ap += ('<main class="wrap"><section class="sec two"><div style="display:flex;justify-content:center"><img class="rv" src="%s" alt="Logo Sounsouni" width="260" height="260" style="width:200px;height:200px;filter:drop-shadow(0 24px 30px rgba(40,90,20,.25))"></div>'
        '<div><div class="k rv">Notre histoire</div><h2 class="rv d1">Née à Bamako, <span class="serif">pensée pour toute l\'Afrique.</span></h2>'
        '<p class="lead rv d2">Tout a commencé par une question simple : pourquoi acheter, recevoir un colis ou lancer un projet au Mali serait-il plus compliqué qu\'ailleurs ? Sounsouni est née pour y répondre.</p>'
-       '<p class="lead rv d2">Aujourd\'hui, Sounsouni est une entreprise ouest-africaine qui relie les commerçants, les familles, les mineurs et les entrepreneurs du Mali au reste du monde. Elle a une seule exigence : la confiance, à chaque étape.</p></div></section>'
+       '<p class="lead rv d2">Aujourd\'hui, Sounsouni est une entreprise ouest-africaine qui relie les commerçants, les familles et les entrepreneurs du Mali au reste du monde. Elle a une seule exigence : la confiance, à chaque étape.</p></div></section>'
        '<section class="sec" id="metiers"><div class="k rv">Ce que nous faisons</div><h2 class="rv d1">Quatre métiers, <span class="serif">une seule promesse.</span></h2><div class="piliers">') % LOGO
 ap += pilier("01", "fa-bag-shopping", "Sounsouni Marché", "Le grand marché du Mali, dans votre poche.",
              "Des milliers d'articles de vendeurs vérifiés : mode, beauté, high-tech, maison, alimentation. Vous commandez en quelques secondes, vous payez par Orange Money, par Moov Money ou à la livraison, et vous suivez votre commande en direct.",
@@ -197,12 +199,12 @@ ap += pilier("01", "fa-bag-shopping", "Sounsouni Marché", "Le grand marché du 
 ap += pilier("02", "fa-truck-fast", "Sounsouni Logistique", "Du bout du monde jusqu'à votre porte.",
              "Nos Pôles en Chine, en Inde, en Europe et dans les pays arabes achètent et vérifient vos marchandises sur place. Le colis est scanné à son arrivée à Bamako, puis livré dans plus de 60 quartiers ou envoyé vers les 19 régions du Mali.",
              ["Transit Chine · Inde · France · Europe · Golfe", "Réception scannée et suivi en direct", "Livraison express et réseau de Points de Retrait"], "img/site/camionnette.webp", "#1f4f6e")
-ap += pilier("03", "fa-gem", "Sounsouni Mines", "Le marché de la mine, en toute confiance.",
-             "Le secteur minier est aussi un marché, et Sounsouni s'y engage. Nous fournissons aux orpailleurs, aux petites mines et aux carrières le matériel dont ils ont besoin, importé et vérifié par nos Pôles, et nous accompagnons les projets miniers du premier équipement jusqu'à la production.",
-             ["Détecteurs, motopompes, concasseurs, groupes électrogènes", "Équipements de sécurité et pièces détachées", "Mise en relation, conseil et suivi de projet"], "img/site/mines.webp", "#6b4a12")
+ap += pilier("03", "fa-barcode", "Sounsouni Étiquetage & Caisse", "Votre magasin, au code-barres près.",
+             "Pour les supermarchés, les alimentations et les boutiques, Sounsouni enregistre et étiquette toute la marchandise, installe la caisse avec scanner Sounsouni Gestion Pro et revient à chaque arrivage de stock. Le commerçant encaisse plus vite, connaît son stock à l'article près et stoppe les pertes.",
+             ["Enregistrement et étiquetage de chaque article", "Caisse avec douchette, tickets et rapports chaque jour", "Matériel fourni, installation, assistance et inventaires"], "img/site/etiquetage.webp", "#1d3b49")
 ap += pilier("04", "fa-helmet-safety", "Sounsouni Services", "Les experts qui font avancer vos projets.",
-             "Pour les entreprises et les particuliers, Sounsouni réunit les savoir-faire qui permettent de bâtir et de grandir : construire, équiper, digitaliser, automatiser et gérer.",
-             ["BTP et construction · Immobilier", "Solutions industrielles · Énergie solaire", "Digital, applications et intelligence artificielle", "Caisse, étiquetage et gestion de stock (Gestion Pro)", "Import, sourcing et conseil aux entreprises"], "img/site/btp.webp", "#24452c")
+             "Pour les entreprises et les particuliers, Sounsouni réunit les savoir-faire qui permettent de bâtir et de grandir : construire, exploiter les mines, équiper, digitaliser et automatiser.",
+             ["BTP et construction · Immobilier", "Solutions minières : équipements, sourcing, conseil", "Solutions industrielles · Énergie solaire", "Digital, applications et intelligence artificielle", "Import, sourcing et conseil aux entreprises"], "img/site/btp.webp", "#24452c")
 ap += ('</div></section>'
        '<section class="sec"><div class="k rv">Nos valeurs</div><h2 class="rv d1">Ce qui nous guide <span class="serif">chaque jour.</span></h2><div class="svc valeurs">'
        '<div class="rv"><i class="fa-solid fa-handshake"></i>Confiance<small>Des vendeurs vérifiés, des marchandises contrôlées et un argent protégé.</small></div>'

@@ -265,3 +265,5 @@ body.snsv{margin:0}
 .snsv .valeurs small{font-size:12px}
 @media (min-width:820px){.snsv .pilier{grid-template-columns:5fr 6fr}.snsv .pilier:nth-child(even) .pi-vis{order:2}.snsv .pi-vis{min-height:340px}.snsv .valeurs{grid-template-columns:repeat(4,1fr)}}
 .snsv .step[style*="url("]{min-height:420px}
+@media (min-width:820px){.snsv .door.photo.wide{grid-column:1/-1;min-height:480px}}
+.snsv .door.photo.wide .t{font-size:clamp(30px,6vw,56px)}
