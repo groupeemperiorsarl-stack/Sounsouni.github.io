@@ -93,7 +93,7 @@ def portail():
       '<div class="mgrid">' + "".join('<a href="p/%s.html"><span class="mi ph"><img src="img/site/m-%s.webp" alt="%s" loading="lazy"></span><span class="mn">%s</span><span class="mp">%s</span></a>' % (x[0], x[0], x[2], x[2], x[3]) for x in (M[0], M[7], M[11], M[2])) + '</div>'
       '<a href="./" class="gobtn" data-portail-fermer><i class="fa-solid fa-cart-shopping"></i> Cliquez ici pour accéder au marché <i class="fa-solid fa-arrow-right"></i></a></div>'
       '<a href="logistique.html" class="door photo rv d1"><img class="ph" src="img/site/camionnette.webp" alt="" loading="lazy"><div class="k">02 — Logistique</div><div class="t">Du monde<br><span class="serif" style="color:var(--glow)">à votre porte.</span></div>'
-      '<div style="font-size:13px;opacity:.85;margin-top:10px;padding-right:56px">Transit Chine · Inde · Europe · Golfe → Bamako, livraison à domicile et Points de Retrait.</div><span class="go" style="background:var(--glow);color:var(--gd)"><i class="fa-solid fa-arrow-right"></i></span></a>'
+      '<div style="font-size:13px;opacity:.85;margin-top:10px;padding-right:56px">Transit Chine · Inde · France · Europe → Bamako, livraison à domicile et Points de Retrait.</div><span class="go" style="background:var(--glow);color:var(--gd)"><i class="fa-solid fa-arrow-right"></i></span></a>'
       '</div></main>')
     out += carousel()
     out += journey()
