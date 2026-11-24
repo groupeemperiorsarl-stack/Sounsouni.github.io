@@ -13008,6 +13008,9 @@ function setupMarketInfiniteScroll() {
 function render() {
   // Site vitrine : un compte connecté va droit au marché (le portail d'accueil ne s'affiche qu'aux visiteurs).
   try { var hp = state.profile ? "1" : "0"; if (window.__snsHp !== hp) { window.__snsHp = hp; localStorage.setItem("sns_has_profile", hp); } } catch (e) {}
+  // Compte connecté : l'accueil vitrine (portail) n'a pas à rester au-dessus de l'application,
+  // sauf si la personne l'a demandé (sounsouni.pro/#accueil).
+  if (state.profile && location.hash !== "#accueil") { try { var snsP = document.getElementById("portail"); if (snsP && !snsP.hasAttribute("hidden")) { snsP.setAttribute("hidden", ""); document.documentElement.classList.remove("portail-on"); } } catch (e) {} }
   // L'écran de la pomme cannelle reste affiché jusqu'à la fin du démarrage
   // (au moins 5 s) : aucun affichage ne doit l'écraser avant.
   if (typeof _splashFinished !== "undefined" && !_splashFinished && document.querySelector("#root > .sns-sp")) return;
@@ -23694,7 +23697,10 @@ function renderAdminGestion() {
     html += '<div style="font-size:12px;font-weight:700;">' + st + '</div></div>';
     html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">';
     html += '<button class="btn-secondary" style="flex:1;font-size:12px;padding:7px;" data-action="gx-admin-offer" data-value="' + esc(co.id) + '" data-plan="' + (co.plan === "offert" ? "free" : "offert") + '">' + (co.plan === "offert" ? t("gx_admin_unoffer") : t("gx_admin_offer")) + '</button>';
-    html += '<button class="btn-secondary" style="flex:1;font-size:12px;padding:7px;" data-action="gx-admin-add30" data-value="' + esc(co.id) + '">' + t("gx_admin_add30") + '</button></div></div>';
+    html += '<button class="btn-secondary" style="flex:1;font-size:12px;padding:7px;" data-action="gx-admin-add30" data-value="' + esc(co.id) + '">' + t("gx_admin_add30") + '</button></div>';
+    var proOn = Number(co.proUntil) > Date.now();
+    html += '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border-color);"><div style="font-size:12px;font-weight:700;margin-bottom:6px;"><i class="fa-solid fa-barcode"></i> Gestion Pro (caisse + étiquettes) : ' + (proOn ? '✅ jusqu\'au ' + new Date(co.proUntil).toLocaleDateString("fr-FR") : '—') + '</div>';
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn-secondary" style="flex:1;font-size:12px;padding:7px;" data-action="gx-admin-pro" data-value="' + esc(co.id) + '" data-days="30">Pro +30 j</button><button class="btn-secondary" style="flex:1;font-size:12px;padding:7px;" data-action="gx-admin-pro" data-value="' + esc(co.id) + '" data-days="365">Pro +1 an</button>' + (proOn ? '<button class="btn-secondary" style="flex:1;font-size:12px;padding:7px;color:var(--danger);" data-action="gx-admin-pro" data-value="' + esc(co.id) + '" data-days="0">Retirer Pro</button>' : '') + '</div></div></div>';
   });
   return html;
 }
@@ -28534,6 +28540,7 @@ root.addEventListener("click", function(e) {
       break;
     }
     case "gx-admin-offer": gestionAdminApi("admin_set_plan", { companyId: value, plan: btn.dataset.plan }).then(function(r) { if (!r.success) showToast("❌ " + r.error); state.gxAdmin = null; render(); }); break;
+    case "gx-admin-pro": { var gxDays = Number(btn.dataset.days) || 0; if (!gxDays && !confirm("Retirer Gestion Pro à cette entreprise ?")) break; gestionAdminApi("admin_set_pro", { companyId: value, addDays: gxDays }).then(function(r) { showToast(r.success ? (gxDays ? "✅ Gestion Pro activée" : "Gestion Pro retirée") : "❌ " + r.error); state.gxAdmin = null; render(); }); break; }
     case "gx-admin-add30": gestionAdminApi("admin_set_plan", { companyId: value, addDays: 30 }).then(function(r) { if (!r.success) showToast("❌ " + r.error); state.gxAdmin = null; render(); }); break;
     case "gx-create": gestionCreate(); break;
     case "gx-accept": gestionRespond(value, true); break;

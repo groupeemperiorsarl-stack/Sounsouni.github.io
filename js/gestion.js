@@ -316,7 +316,7 @@
         paintSync(); return;
       }
       var changed = r.role !== S.role || r.expired !== S.expired || r.name !== S.name;
-      S.role = r.role; S.expired = !!r.expired; S.name = r.name; S.paidUntil = r.paidUntil; S.plan = r.plan;
+      S.role = r.role; S.expired = !!r.expired; S.name = r.name; S.paidUntil = r.paidUntil; S.plan = r.plan; S.proUntil = Number(r.proUntil) || 0;
       var rows = [], outOfOrder = false;
       (r.ops || []).forEach(function (o) {
         if (o.s > S.lastSeq) S.lastSeq = o.s;
@@ -352,7 +352,7 @@
     root.style.display = "";
     document.documentElement.classList.add("gx-open");
     S = { cid: company.id, name: company.name, role: company.role, isOwner: !!company.isOwner, ownerId: company.ownerId, expired: !!company.expired,
-      plan: company.plan, paidUntil: company.paidUntil, ops: {}, ent: blankEnt(), pending: [], lastSeq: 0, meta: { cid: company.id }, page: "home", modal: null,
+      plan: company.plan, paidUntil: company.paidUntil, proUntil: Number(company.proUntil) || 0, ops: {}, ent: blankEnt(), pending: [], lastSeq: 0, meta: { cid: company.id }, page: "home", modal: null,
       q: "", period: "month", locked: false, loading: true, openedAt: Date.now() };
     try { history.pushState({ gx: 1 }, ""); } catch (e) {}
     render();
@@ -499,18 +499,18 @@
 
   // ---------------- Affichage ----------------
   var NAV = [
-    ["home", "fa-house"], ["sales", "fa-cash-register"], ["items", "fa-boxes-stacked"], ["expenses", "fa-money-bill-wave"], ["purchases", "fa-truck-ramp-box"],
+    ["home", "fa-house"], ["caisse", "fa-barcode"], ["sales", "fa-cash-register"], ["items", "fa-boxes-stacked"], ["expenses", "fa-money-bill-wave"], ["purchases", "fa-truck-ramp-box"],
     ["clients", "fa-users"], ["suppliers", "fa-industry"], ["employees", "fa-id-badge"], ["reports", "fa-chart-column"], ["ohada", "fa-scale-balanced"], ["members", "fa-user-shield"], ["settings", "fa-gear"]
   ];
   function allowedPages() {
     var r = S.role;
     if (r === "partenaire") return ["home", "reports", "ohada", "members"];
-    if (r === "caissier") return ["home", "sales", "items", "clients", "members"];
+    if (r === "caissier") return ["home", "caisse", "sales", "items", "clients", "members"];
     return NAV.map(function (n) { return n[0]; });
   }
   // Barre du bas (téléphone) : les 4 pages les plus utiles, le reste dans « Plus ».
   function bottomPages(pages) {
-    var want = S.role === "caissier" ? ["home", "sales", "items", "clients"] : S.role === "partenaire" ? ["home", "reports", "ohada", "members"] : ["home", "sales", "expenses", "ohada"];
+    var want = S.role === "caissier" ? (isPro() ? ["caisse", "sales", "items", "clients"] : ["home", "sales", "items", "clients"]) : S.role === "partenaire" ? ["home", "reports", "ohada", "members"] : (isPro() ? ["home", "caisse", "sales", "expenses"] : ["home", "sales", "expenses", "ohada"]);
     var b = want.filter(function (p) { return pages.indexOf(p) >= 0; });
     if (pages.some(function (p) { return b.indexOf(p) < 0; })) b.push("more");
     return b;
@@ -567,6 +567,7 @@
     var map = { purchases: ["purchase", "newPurchase"], expenses: ["expense", "newExpense"], items: ["item", "newItem"], clients: ["client", "newClient"], suppliers: ["supplier", "newSupplier"], employees: ["employee", "newEmployee"] };
     var m = map[S.page];
     if (m && can(m[0] === "client" ? "client" : m[0])) h += '<button class="gx-btn gx-primary" data-a="new" data-v="' + m[0] + '"><i class="fa-solid fa-plus"></i> ' + L(m[1]) + '</button>';
+    if (S.page === "items" && can("item")) h += '<button class="gx-btn" data-a="labels"><i class="fa-solid fa-tags"></i> ' + L("labels") + (isPro() ? '' : ' <em class="gx-tag">Pro</em>') + '</button>';
     if (S.page === "reports") h += '<button class="gx-btn" data-a="csv"><i class="fa-solid fa-file-csv"></i> ' + L("exportCsv") + '</button>';
     if (S.page === "ohada") h += '<button class="gx-btn" data-a="csv-ohada"><i class="fa-solid fa-file-csv"></i> ' + L("exportCsv") + '</button>';
     if (S.page === "reports" || S.page === "ohada") h += '<button class="gx-btn" data-a="print-page"><i class="fa-solid fa-print"></i> ' + L("reportPrint") + '</button>';
@@ -575,6 +576,7 @@
   function page() {
     switch (S.page) {
       case "home": return pHome();
+      case "caisse": return pCaisse();
       case "sales": return pSales();
       case "purchases": return pPurchases();
       case "expenses": return pExpenses();
@@ -776,8 +778,8 @@
   function pMore() {
     var pages = allowedPages(), h = "";
     var ic = {}; NAV.forEach(function (n) { ic[n[0]] = n[1]; });
-    var D = { home: "dHome", sales: "dSales", items: "dItems", expenses: "dExpenses", purchases: "dPurchases", clients: "dClients", suppliers: "dSuppliers", employees: "dEmployees", reports: "dReports", ohada: "dOhada", members: "dMembers", settings: "dSettings" };
-    [["gMoney", ["ohada", "reports"]], ["gDaily", ["sales", "expenses", "purchases", "items"]], ["gPeople", ["clients", "suppliers", "employees", "members"]], ["gOther", ["settings"]]].forEach(function (g) {
+    var D = { home: "dHome", caisse: "dCaisse", sales: "dSales", items: "dItems", expenses: "dExpenses", purchases: "dPurchases", clients: "dClients", suppliers: "dSuppliers", employees: "dEmployees", reports: "dReports", ohada: "dOhada", members: "dMembers", settings: "dSettings" };
+    [["gMoney", ["ohada", "reports"]], ["gDaily", ["caisse", "sales", "expenses", "purchases", "items"]], ["gPeople", ["clients", "suppliers", "employees", "members"]], ["gOther", ["settings"]]].forEach(function (g) {
       var list = g[1].filter(function (p) { return pages.indexOf(p) >= 0; }); if (!list.length) return;
       h += '<h3 class="gx-more-h">' + L(g[0]) + '</h3><div class="gx-more">';
       list.forEach(function (p) { h += '<button class="' + (p === "ohada" ? 'gx-more-main' : '') + '" data-a="page" data-v="' + p + '"><i class="fa-solid ' + ic[p] + '"></i><span><b>' + L(p) + '</b><small>' + L(D[p]) + '</small></span><i class="fa-solid fa-chevron-right gx-more-go"></i></button>'; });
@@ -854,6 +856,8 @@
     else if (m.t === "purchase") body = fPurchase();
     else if (m.t === "expense") body = fExpense();
     else if (m.t === "item") body = fItem();
+    else if (m.t === "labels") body = fLabels();
+    else if (m.t === "pro") body = proWall() + '<div class="gx-sheet-foot"><button class="gx-btn" data-a="modal-close">' + L("close") + '</button></div>';
     else if (m.t === "client" || m.t === "supplier") body = fParty(m.t);
     else if (m.t === "employee") body = fEmployee();
     else if (m.t === "payment") body = fPayment();
@@ -946,6 +950,7 @@
     h += field(L("category"), "cat", d.cat, 'maxlength="40"');
     if (d.type !== "service") {
       h += field(L("unit"), "unit", d.unit, 'maxlength="12" placeholder="pièce, kg, sac…"');
+      h += '<div class="gx-field" style="grid-column:1/-1">' + L("barcode") + '<div style="display:flex;gap:6px"><input id="bc" data-f="bc" value="' + esc(d.bc || "") + '" maxlength="40" inputmode="numeric" style="flex:1;min-width:0"><button class="gx-btn" type="button" data-a="bc-scan"><i class="fa-solid fa-camera"></i></button><button class="gx-btn" type="button" data-a="bc-gen">' + L("bcGen") + '</button></div>' + (d._scan ? '<video id="gx-bc-video" playsinline muted autoplay style="width:100%;max-height:220px;border-radius:12px;margin-top:6px;background:#000;object-fit:cover"></video>' : '') + (d.bc ? '<div style="background:#fff;border-radius:8px;padding:6px;margin-top:6px;max-width:240px">' + barcodeSvg(d.bc, 40) + '</div>' : '') + '</div>';
       h += field(L("alertAt"), "alertAt", d.alertAt, 'inputmode="numeric"');
       if (!S.modal.id) h += field(L("initialStock"), "stock0", d.stock0, 'inputmode="decimal"');
     }
@@ -1441,7 +1446,7 @@
     if (num(d.paid) < tot && !d.supplier) return toast(L("supplier") + " : " + L("required"));
     write("purchase", S.modal.id || rid("p_"), { d: d.d || today(), lines: lines, total: tot, paid: Math.min(num(d.paid), tot), mode: d.mode, supplier: d.supplier || null, note: String(d.note || "").slice(0, 200) });
     // le prix d'achat de l'article suit le dernier achat
-    lines.forEach(function (l) { var it = l.item && getE("item", l.item); if (it && num(it.cost) !== l.cost && l.cost > 0) write("item", it.id, merge(clean(it, ["name", "type", "price", "cost", "cat", "unit", "alertAt", "sns"]), { cost: l.cost })); });
+    lines.forEach(function (l) { var it = l.item && getE("item", l.item); if (it && num(it.cost) !== l.cost && l.cost > 0) write("item", it.id, merge(clean(it, ITEM_KEYS), { cost: l.cost })); });
     done();
   }
   function saveExpense() {
@@ -1451,8 +1456,9 @@
   }
   function saveItem() {
     var d = S.modal.d; if (!String(d.name || "").trim()) return toast(L("name") + " : " + L("required"));
+    var dup = bcOwner(String(d.bc || "").trim(), S.modal.id); if (dup) return toast("⚠️ " + L("bcDup") + " « " + dup.name + " »");
     var e = S.modal.id || rid("i_");
-    write("item", e, { name: String(d.name).trim().slice(0, 80), type: d.type === "service" ? "service" : "article", price: num(d.price), cost: num(d.cost), cat: String(d.cat || "").slice(0, 40), unit: String(d.unit || "").slice(0, 12), alertAt: num(d.alertAt), sns: d.sns || null });
+    write("item", e, { name: String(d.name).trim().slice(0, 80), type: d.type === "service" ? "service" : "article", price: num(d.price), cost: num(d.cost), cat: String(d.cat || "").slice(0, 40), unit: String(d.unit || "").slice(0, 12), alertAt: num(d.alertAt), sns: d.sns || null, bc: String(d.bc || "").trim().slice(0, 40) || null });
     if (!S.modal.id && num(d.stock0)) write("adjust", rid("a_"), { item: e, qty: num(d.stock0), d: today(), note: L("initialStock") });
     done();
   }
@@ -1533,6 +1539,7 @@
       var a = el.getAttribute("data-a"), v = el.getAttribute("data-v"), k = el.getAttribute("data-k");
       if (a === "modal-bg" && ev.target !== el) return;
       if (el.tagName === "SELECT" || (el.tagName === "INPUT" && el.type !== "checkbox")) return;
+      if (proClick(a, v, el)) return;
       switch (a) {
         case "close": close(); break;
         case "page": S.page = v; S.q = ""; S.members = v === "members" ? null : S.members; window.scrollTo(0, 0); render(); var mn = root.querySelector(".gx-main"); if (mn) mn.scrollTop = 0; break;
@@ -1626,7 +1633,7 @@
         case "pin-forgot":
           if (!confirm(L("pinForgotConfirm"))) break;
           try { localStorage.removeItem(pinKey()); } catch (e) {}
-          var comp = { id: S.cid, name: S.name, role: S.role, isOwner: S.isOwner, ownerId: S.ownerId, expired: S.expired, plan: S.plan, paidUntil: S.paidUntil };
+          var comp = { id: S.cid, name: S.name, role: S.role, isOwner: S.isOwner, ownerId: S.ownerId, expired: S.expired, plan: S.plan, paidUntil: S.paidUntil, proUntil: S.proUntil };
           var keepPending = S.pending.length;
           if (keepPending) { S.locked = false; render(); break; } // ne jamais effacer des lignes pas encore envoyées
           dbClear(S.cid).then(function () { open(comp); });
@@ -1671,6 +1678,7 @@
       if (el.tagName === "SELECT" && el.getAttribute("data-f")) el.dispatchEvent(new Event("input", { bubbles: true }));
     });
     root.addEventListener("keydown", function (ev) { if (ev.key === "Enter" && ev.target.id === "gx-pin") { var b = root.querySelector('[data-a="pin-check"]'); if (b) b.click(); } });
+    proBind();
     window.addEventListener("resize", function () { if (!S) return; var w = isWide(); if (w !== S._wide) { S._wide = w; render(); } });
   }
   function refreshTotal() {
@@ -2064,9 +2072,272 @@
       ".gx-pick-list button{border:1px solid var(--bd);background:var(--bg);color:var(--tx);border-radius:10px;padding:7px 10px;font-size:12.5px;font-weight:700;text-align:left;max-width:100%}.gx-pick-list button small{display:block;font-weight:500;color:var(--dim);font-size:11px}.gx-pick-list .gx-other{color:var(--g)}",
       ".gx-meta{font-size:11.5px;color:var(--dim);margin-top:10px}.gx-hist{font-size:11.5px;color:var(--dim);margin-top:6px}.gx-hist div{padding:3px 0}",
       ".gx-payok{text-align:center;margin:4px 0 12px}.gx-payok>i{font-size:44px;color:var(--g)}.gx-payok h2{margin:6px 0 2px}.gx-payok .gx-amount{font-size:26px;font-weight:900;color:var(--g)}.gx-where{margin-top:10px;font-size:13px}.gx-where ul{margin:6px 0 0;padding-left:18px}.gx-where li{margin:3px 0}.gx-entry h3{margin:0 0 10px}.gx-entry-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.gx-wide .gx-entry-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.gx-entry-grid button{display:flex;align-items:flex-start;gap:8px;text-align:left;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:10px;color:var(--tx);min-width:0}.gx-entry-grid button>i{font-size:18px;color:var(--g);margin-top:2px;flex:0 0 20px;text-align:center}.gx-entry-grid span{display:flex;flex-direction:column;min-width:0}.gx-entry-grid b{font-size:13.5px}.gx-entry-grid small{font-size:11.5px;opacity:.7;line-height:1.25}.gx-entry-grid .gx-entry-main{grid-column:1/-1;background:var(--g);border-color:var(--g);color:#fff}.gx-entry-grid .gx-entry-main>i{color:#fff}.gx-entry-grid .gx-entry-main small{opacity:.9}.gx-sub{margin:14px 0 4px;font-size:14px}.gx-info-row{display:flex;align-items:flex-end;gap:8px}.gx-info-row .gx-field{flex:1;min-width:0}.gx-show{flex:0 0 auto;margin-bottom:12px;font-size:12.5px}.gx-tva-box{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:13px;margin-top:6px}.gx-tva-box div{display:flex;gap:10px}.gx-docopts{border:1px solid var(--bd);border-radius:12px;padding:10px;margin:8px 0;display:flex;flex-direction:column;gap:6px;font-size:13.5px}.gx-logo-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.gx-logo-prev{width:56px;height:56px;object-fit:contain;border:1px solid var(--bd);border-radius:10px;background:#fff}.gx-logo-empty{display:flex;align-items:center;justify-content:center;color:#999;font-size:22px}.gx-receipt{border:1px solid var(--bd);border-radius:12px;padding:16px 14px;text-align:left;background:#fff;color:#111;box-shadow:0 2px 10px rgba(0,0,0,.06)}" + RC_CSS + "@media(max-width:380px){.gx-receipt .rc-stamp svg{width:92px;height:92px}}",
-      "@media (max-width:360px){.gx-fgrid{grid-template-columns:1fr}.gx-kpi b{font-size:15px}}"
+      "@media (max-width:360px){.gx-fgrid{grid-template-columns:1fr}.gx-kpi b{font-size:15px}}",
+      ".gx-cx{display:grid;gap:12px}.gx-cx-scan{display:flex;align-items:center;gap:8px;background:var(--card);border:2px solid var(--g);border-radius:16px;padding:8px 8px 8px 14px}.gx-cx-scan>i{font-size:20px;color:var(--g)}.gx-cx-scan input{flex:1;min-width:0;border:0;background:transparent;color:var(--tx);font-size:17px;padding:8px 0;outline:none}",
+      ".gx-cx-cam{position:relative;margin-top:8px}.gx-cx-cam video{width:100%;max-height:260px;object-fit:cover;border-radius:14px;background:#000;display:block}.gx-cx-cam .gx-btn{position:absolute;top:8px;right:8px}",
+      ".gx-cx-sug{display:flex;flex-direction:column;gap:6px;margin-top:8px}.gx-cx-sug button{display:flex;justify-content:space-between;gap:10px;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:12px;padding:10px 12px;text-align:left;font-size:13.5px}",
+      ".gx-cx-ticket{background:var(--card);border:1px solid var(--bd);border-radius:18px;display:flex;flex-direction:column;overflow:hidden}.gx-cx-lines{max-height:46vh;overflow-y:auto;padding:6px}",
+      ".gx-cx-empty{text-align:center;color:var(--dim);padding:28px 10px;font-size:13px}.gx-cx-empty i{font-size:30px;margin-bottom:8px;opacity:.6}",
+      ".gx-cx-line{display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;padding:9px 8px;border-bottom:1px solid var(--bd)}.gx-cx-line.flash{animation:gxFlash .9s}@keyframes gxFlash{from{background:rgba(123,203,58,.35)}to{background:transparent}}",
+      ".gx-cx-line .nm{min-width:0}.gx-cx-line .nm b{display:block;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.gx-cx-line .nm span{font-size:11.5px;color:var(--dim)}",
+      ".gx-cx-line .qt{display:flex;align-items:center;gap:6px}.gx-cx-line .qt button{width:30px;height:30px;border-radius:9px;border:1px solid var(--bd);background:var(--bg);color:var(--tx);font-size:16px}.gx-cx-line .tt{font-weight:800;font-size:13.5px;min-width:70px;text-align:right}",
+      ".gx-cx-line .del{border:0;background:none;color:var(--red);padding:4px}.gx-cx-foot{padding:12px;border-top:1px solid var(--bd);display:flex;flex-direction:column;gap:10px;background:var(--bg)}",
+      ".gx-cx-tot{display:flex;justify-content:space-between;align-items:baseline;gap:10px}.gx-cx-tot span{color:var(--dim);font-size:12.5px}.gx-cx-tot b{font-size:28px;color:var(--g)}",
+      ".gx-cx-modes{display:flex;gap:6px;flex-wrap:wrap}.gx-cx-modes button{flex:1;min-width:70px;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:10px;padding:9px 6px;font-weight:700;font-size:12.5px}.gx-cx-modes button.on{background:var(--g);border-color:var(--g);color:#fff}",
+      ".gx-cx-cash{display:flex;gap:10px;align-items:flex-end}.gx-cx-cash label{flex:1;font-size:12px;color:var(--dim)}.gx-cx-cash input{width:100%;padding:9px;border-radius:10px;border:1px solid var(--bd);font-size:16px;background:var(--card);color:var(--tx)}.gx-cx-cash div{text-align:right}.gx-cx-cash span{display:block;font-size:12px;color:var(--dim)}.gx-cx-cash b{font-size:18px}",
+      ".gx-cx-pay{flex:1;justify-content:center;font-size:16px;padding:14px}.gx-btn[disabled]{opacity:.45}",
+      ".gx-lb-list{max-height:44vh;overflow-y:auto;border:1px solid var(--bd);border-radius:12px;margin-bottom:8px}.gx-lb-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border-bottom:1px solid var(--bd)}.gx-lb-row b{display:block;font-size:13px}.gx-lb-row span{font-size:11px;color:var(--dim)}.gx-lb-n{width:64px;padding:8px;border-radius:9px;border:1px solid var(--bd);text-align:center;font-size:15px;background:var(--card);color:var(--tx)}",
+      "@media (min-width:900px){.gx-cx{grid-template-columns:1fr 420px;align-items:start}.gx-cx-lines{max-height:58vh}}"
     ].join("\n");
     var st = document.createElement("style"); st.id = "gx-css"; st.textContent = css; document.head.appendChild(st);
+  }
+
+  // ============================================================
+  // Gestion Pro : CAISSE (scanner -> ticket -> encaisser) et ÉTIQUETTES
+  // (codes-barres EAN-13 / Code 128 à imprimer). Réservé aux entreprises
+  // « Pro » (activé par Sounsouni sur devis). Tout est ici, dans le module
+  // Gestion chargé à la demande : le marché n'en porte pas le poids.
+  // ============================================================
+  (function addTexts() {
+    var fr = {
+      caisse: "Caisse", dCaisse: "Scanner, encaisser, étiquettes (Pro)", cxScan: "Scannez ou tapez le code / le nom", cxEmpty: "Scannez un article pour commencer le ticket.",
+      cxCamera: "Caméra", cxTotal: "Total à payer", cxPay: "Encaisser", cxClear: "Vider", cxNotFound: "Code inconnu", cxAddedAs: "Ajouté",
+      cxGiven: "Montant reçu", cxChange: "Monnaie à rendre", cxItems: "articles", cxDouchette: "Lecteur de codes-barres (douchette) : branchez-le et scannez, tout simplement.",
+      barcode: "Code-barres", bcGen: "Créer un code", bcScan: "Scanner", bcDup: "Ce code-barres est déjà utilisé par", labels: "Étiquettes",
+      lbTitle: "Imprimer des étiquettes", lbFormat: "Format", lbA4s: "A4 — 40 petites étiquettes (48 × 25 mm)", lbA4: "A4 — 24 étiquettes (70 × 37 mm)", lbRoll: "Imprimante d'étiquettes (40 × 30 mm)",
+      lbCount: "Nombre", lbPrint: "Imprimer", lbShowPrice: "Afficher le prix", lbNone: "Choisissez au moins un article.", lbAuto: "Les articles sans code reçoivent un code interne automatiquement.",
+      lbAll: "Tout", lbStock: "= stock",
+      proTitle: "Fonction Gestion Pro", proText: "La caisse avec scanner et l'impression d'étiquettes code-barres font partie de Sounsouni Gestion Pro. Sounsouni peut aussi fournir la douchette, l'imprimante et étiqueter vos produits.",
+      proAsk: "Demander un devis", proActive: "Gestion Pro active jusqu'au", camErr: "Caméra indisponible : tapez le code ou utilisez une douchette."
+    };
+    var en = {
+      caisse: "Checkout", dCaisse: "Scan, take payment, labels (Pro)", cxScan: "Scan or type the code / name", cxEmpty: "Scan an item to start the receipt.", cxCamera: "Camera", cxTotal: "Total to pay",
+      cxPay: "Take payment", cxClear: "Clear", cxNotFound: "Unknown code", cxAddedAs: "Added", cxGiven: "Amount received", cxChange: "Change to give back", cxItems: "items",
+      cxDouchette: "Barcode scanner: plug it in and scan, that's all.", barcode: "Barcode", bcGen: "Create a code", bcScan: "Scan", bcDup: "This barcode is already used by",
+      labels: "Labels", lbTitle: "Print labels", lbFormat: "Format", lbA4s: "A4 — 40 small labels (48 × 25 mm)", lbA4: "A4 — 24 labels (70 × 37 mm)", lbRoll: "Label printer (40 × 30 mm)",
+      lbCount: "Count", lbPrint: "Print", lbShowPrice: "Show the price", lbNone: "Choose at least one item.", lbAuto: "Items without a code get an internal code automatically.",
+      lbAll: "All", lbStock: "= stock", proTitle: "Gestion Pro feature",
+      proText: "The scanning checkout and barcode label printing are part of Sounsouni Gestion Pro. Sounsouni can also supply the scanner and printer and label your products.",
+      proAsk: "Request a quote", proActive: "Gestion Pro active until", camErr: "Camera unavailable: type the code or use a barcode scanner."
+    };
+    for (var k in fr) FR[k] = fr[k];
+    for (var j in en) EN[j] = en[j];
+  })();
+  function isPro() { return !!S && (S.pro === true || Number(S.proUntil) > Date.now()); }
+  function proWall() {
+    var msg = "Bonjour Sounsouni, je veux un devis pour Sounsouni Gestion Pro (caisse, étiquettes, matériel) pour mon entreprise « " + (S.name || "") + " ».";
+    return '<div class="gx-card" style="text-align:center;padding:26px 18px"><div style="font-size:42px;color:#2e7d32"><i class="fa-solid fa-barcode"></i></div>' +
+      '<h2 style="margin:10px 0 6px">' + L("proTitle") + '</h2><p style="max-width:460px;margin:0 auto 16px;line-height:1.5">' + L("proText") + '</p>' +
+      '<a class="gx-btn gx-primary" target="_blank" rel="noopener" href="https://wa.me/22393010123?text=' + encodeURIComponent(msg) + '"><i class="fa-brands fa-whatsapp"></i> ' + L("proAsk") + '</a></div>';
+  }
+  // ---------- Codes-barres ----------
+  function eanCheck(d12) { var s = 0; for (var i = 0; i < 12; i++) s += (+d12[i]) * (i % 2 ? 3 : 1); return String((10 - s % 10) % 10); }
+  function isEan13(c) { return /^\d{13}$/.test(c) && eanCheck(c.slice(0, 12)) === c[12]; }
+  function bcOwner(code, exceptId) { if (!code) return null; var f = live("item").filter(function (i) { return i.bc === code && i.id !== exceptId; }); return f[0] || null; }
+  // Code interne : préfixe 2 (réservé à l'usage interne des magasins) + 11 chiffres + clé.
+  function newInternalCode() {
+    for (var t = 0; t < 50; t++) {
+      var body = "2" + String(Date.now() % 1e7).padStart(7, "0") + String(Math.floor(Math.random() * 1e4)).padStart(4, "0");
+      var c = body + eanCheck(body); if (!bcOwner(c)) return c;
+    }
+    return "";
+  }
+  var EAN_L = ["0001101", "0011001", "0010011", "0111101", "0100011", "0110001", "0101111", "0111011", "0110111", "0001011"];
+  var EAN_G = ["0100111", "0110011", "0011011", "0100001", "0011101", "0111001", "0000101", "0010001", "0001001", "0010111"];
+  var EAN_R = ["1110010", "1100110", "1101100", "1000010", "1011100", "1001110", "1010000", "1000100", "1001000", "1110100"];
+  var EAN_P = ["LLLLLL", "LLGLGG", "LLGGLG", "LLGGGL", "LGLLGG", "LGGLLG", "LGGGLL", "LGLGLG", "LGLGGL", "LGGLGL"];
+  function eanBits(c) {
+    var p = EAN_P[+c[0]], b = "101";
+    for (var i = 1; i <= 6; i++) b += (p[i - 1] === "L" ? EAN_L : EAN_G)[+c[i]];
+    b += "01010"; for (var j = 7; j <= 12; j++) b += EAN_R[+c[j]]; return b + "101";
+  }
+  var C128 = ["212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213", "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132", "221231", "213212", "223112", "312131", "311222", "321122", "321221", "312212", "322112", "322211", "212123", "212321", "232121", "111323", "131123", "131321", "112313", "132113", "132311", "211313", "231113", "231311", "112133", "112331", "132131", "113123", "113321", "133121", "313121", "211331", "231131", "213113", "213311", "213131", "311123", "311321", "331121", "312113", "312311", "332111", "314111", "221411", "431111", "111224", "111422", "121124", "121421", "141122", "141221", "112214", "112412", "122114", "122411", "142112", "142211", "241211", "221114", "413111", "241112", "134111", "111242", "121142", "121241", "114212", "124112", "124211", "411212", "421112", "421211", "212141", "214121", "412121", "111143", "111341", "131141", "114113", "114311", "411113", "411311", "113141", "114131", "311141", "411131", "211412", "211214", "211232", "2331112"];
+  function c128Bits(txt) {
+    var codes = [104], sum = 104;
+    for (var i = 0; i < txt.length; i++) { var v = txt.charCodeAt(i) - 32; if (v < 0 || v > 94) v = 0; codes.push(v); sum += v * (i + 1); }
+    codes.push(sum % 103); codes.push(106);
+    var b = ""; codes.forEach(function (c) { var w = C128[c]; for (var k = 0; k < w.length; k++) b += (k % 2 ? "0" : "1").repeat(+w[k]); }); return b;
+  }
+  function barcodeSvg(code, h) {
+    var ean = isEan13(code), bits = ean ? eanBits(code) : c128Bits(code), q = 10, w = bits.length + q * 2, rects = "";
+    for (var i = 0; i < bits.length; i++) if (bits[i] === "1") {
+      var long = ean && (i < 3 || (i >= 45 && i < 50) || i >= 92);
+      rects += '<rect x="' + (i + q) + '" y="0" width="1" height="' + (long ? h + 5 : h) + '"/>';
+    }
+    var txt = ean ? '<text x="2" y="' + (h + 12) + '" font-size="11">' + code[0] + '</text><text x="' + (q + 24) + '" y="' + (h + 12) + '" font-size="11" text-anchor="middle">' + code.slice(1, 7) + '</text><text x="' + (q + 70) + '" y="' + (h + 12) + '" font-size="11" text-anchor="middle">' + code.slice(7) + '</text>'
+      : '<text x="' + (w / 2) + '" y="' + (h + 12) + '" font-size="11" text-anchor="middle">' + esc(code) + '</text>';
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + (h + 14) + '" preserveAspectRatio="xMidYMid meet" font-family="monospace"><g fill="#000">' + rects + '</g>' + txt + '</svg>';
+  }
+  // ---------- Caisse ----------
+  function cx() { if (!S.cx) S.cx = { lines: [], mode: "cash", given: "" }; return S.cx; }
+  function cxTotal() { return cx().lines.reduce(function (a, l) { return a + l.qty * l.price; }, 0); }
+  function findItemByCode(v) {
+    v = String(v || "").trim(); if (!v) return null;
+    var its = live("item"), low = v.toLowerCase();
+    return its.filter(function (i) { return i.bc && i.bc === v; })[0] || its.filter(function (i) { return (i.name || "").toLowerCase() === low; })[0] || null;
+  }
+  function cxAdd(it) {
+    var c = cx(), ln = c.lines.filter(function (l) { return l.item === it.id; })[0];
+    if (ln) ln.qty += 1; else c.lines.unshift({ item: it.id, name: it.name, qty: 1, price: num(it.price), cost: num(it.cost) });
+    c.flash = it.id; beep(true);
+  }
+  function beep(ok) {
+    try { var A = window.AudioContext || window.webkitAudioContext; if (!A) return; var ac = S._ac || (S._ac = new A()), o = ac.createOscillator(), g = ac.createGain();
+      o.frequency.value = ok ? 1250 : 300; g.gain.value = 0.08; o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + (ok ? 0.08 : 0.25)); } catch (e) {}
+  }
+  function cxSubmit(raw) {
+    var it = findItemByCode(raw);
+    if (it) { cxAdd(it); render(); cxFocus(); return; }
+    beep(false); toast("❓ " + L("cxNotFound") + " : " + raw);
+    S.cxQ = String(raw || ""); render(); cxFocus();
+  }
+  function cxFocus() { setTimeout(function () { var i = document.getElementById("gx-cx"); if (i && !S.modal) i.focus(); }, 30); }
+  function pCaisse() {
+    if (!isPro()) return proWall();
+    var c = cx(), tot = cxTotal(), n = c.lines.reduce(function (a, l) { return a + l.qty; }, 0), q = String(S.cxQ || "").toLowerCase().trim();
+    var h = '<div class="gx-cx"><div class="gx-cx-left">';
+    h += '<div class="gx-cx-scan"><i class="fa-solid fa-barcode"></i><input id="gx-cx" autocomplete="off" inputmode="search" placeholder="' + L("cxScan") + '" value="' + esc(S.cxQ || "") + '"><button class="gx-btn" data-a="cx-cam"><i class="fa-solid fa-camera"></i> ' + L("cxCamera") + '</button></div>';
+    if (S.cxCam) h += '<div class="gx-cx-cam"><video id="gx-cx-video" playsinline muted autoplay></video><button class="gx-btn" data-a="cx-cam-off"><i class="fa-solid fa-xmark"></i></button></div>';
+    if (q) {
+      var sug = live("item").filter(function (i) { return i.type !== "service" || true; }).filter(function (i) { return (i.name || "").toLowerCase().indexOf(q) >= 0 || (i.bc || "").indexOf(q) === 0; }).slice(0, 8);
+      h += '<div class="gx-cx-sug">' + sug.map(function (i) { return '<button data-a="cx-add" data-v="' + esc(i.id) + '"><b>' + esc(i.name) + '</b><span>' + money(i.price) + '</span></button>'; }).join("") + '</div>';
+    }
+    h += '<p class="gx-muted" style="font-size:12px;margin:8px 2px"><i class="fa-solid fa-circle-info"></i> ' + L("cxDouchette") + '</p></div>';
+    h += '<div class="gx-cx-ticket"><div class="gx-cx-lines">';
+    if (!c.lines.length) h += '<div class="gx-cx-empty"><i class="fa-solid fa-cart-shopping"></i><br>' + L("cxEmpty") + '</div>';
+    c.lines.forEach(function (l, i) {
+      h += '<div class="gx-cx-line' + (c.flash === l.item && i === 0 ? ' flash' : '') + '"><div class="nm"><b>' + esc(l.name) + '</b><span>' + money(l.price) + '</span></div>' +
+        '<div class="qt"><button data-a="cx-q" data-v="' + i + '" data-d="-1">−</button><b>' + qtyFmt(l.qty) + '</b><button data-a="cx-q" data-v="' + i + '" data-d="1">+</button></div>' +
+        '<div class="tt">' + money(l.qty * l.price) + '</div><button class="del" data-a="cx-del" data-v="' + i + '"><i class="fa-solid fa-trash"></i></button></div>';
+    });
+    c.flash = null;
+    h += '</div><div class="gx-cx-foot"><div class="gx-cx-tot"><span>' + L("cxTotal") + ' · ' + qtyFmt(n) + ' ' + L("cxItems") + '</span><b>' + money(tot) + '</b></div>';
+    h += '<div class="gx-cx-modes">' + MODES.filter(function (m) { return m !== "bank"; }).map(function (m) { return '<button class="' + (c.mode === m ? 'on' : '') + '" data-a="cx-mode" data-v="' + m + '">' + modeLabel(m) + '</button>'; }).join("") + '</div>';
+    if (c.mode === "cash" && tot > 0) {
+      var giv = num(c.given), ch = giv - tot;
+      h += '<div class="gx-cx-cash"><label>' + L("cxGiven") + '<input id="gx-cx-given" inputmode="numeric" value="' + esc(c.given) + '"></label><div><span>' + L("cxChange") + '</span><b class="' + (ch < 0 ? 'red' : '') + '">' + (c.given ? money(ch) : "—") + '</b></div></div>';
+    }
+    h += '<div style="display:flex;gap:8px"><button class="gx-btn" data-a="cx-clear"' + (c.lines.length ? '' : ' disabled') + '>' + L("cxClear") + '</button><button class="gx-btn gx-primary gx-cx-pay" data-a="cx-pay"' + (c.lines.length && can("sale") ? '' : ' disabled') + '><i class="fa-solid fa-check"></i> ' + L("cxPay") + ' ' + money(tot) + '</button></div>';
+    h += '</div></div></div>';
+    return h;
+  }
+  function cxPay() {
+    var c = cx(); if (!c.lines.length || !can("sale")) return;
+    var lines = c.lines.map(function (l) { return { item: l.item, name: l.name, qty: l.qty, price: l.price, cost: l.cost }; });
+    var tot = cxTotal(), date = today(), year = Number(date.slice(0, 4)), no = nextNo("R", year), e = rid("s_");
+    noteNo("R", year, no);
+    var doc = docDefaults();
+    write("sale", e, { d: date, lines: lines, total: tot, paid: tot, mode: c.mode, client: null, cname: "", tva: null, show: { imm: !!doc.imm, rccm: !!doc.rccm, nif: !!doc.nif, bank: !!doc.bank }, no: no, nk: "R", ny: year, pos: true });
+    S.cx = { lines: [], mode: c.mode, given: "" };
+    S.modal = { t: "receipt", id: e }; render();
+    toast("✅ " + L("saved"));
+  }
+  // Caméra : lecteur natif du navigateur si présent, sinon ZXing chargé seulement à ce moment-là.
+  function cxCamStart() {
+    var v = document.getElementById("gx-cx-video"); if (!v) return;
+    var stopAll = function () { if (S._cxStream) { S._cxStream.getTracks().forEach(function (t) { t.stop(); }); S._cxStream = null; } if (S._cxZx) { try { S._cxZx.reset(); } catch (e) {} S._cxZx = null; } };
+    S._cxStop = stopAll;
+    var last = "", lastAt = 0;
+    var hit = function (val) { if (!val) return; var now = Date.now(); if (val === last && now - lastAt < 1500) return; last = val; lastAt = now; cxSubmit(val); setTimeout(cxCamStart, 50); };
+    if ("BarcodeDetector" in window) {
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(function (st) {
+        S._cxStream = st; v.srcObject = st;
+        var det = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "code_128", "upc_a", "upc_e", "qr_code"] });
+        var loop = function () { if (!S || !S.cxCam || !document.getElementById("gx-cx-video")) return stopAll(); det.detect(v).then(function (r) { if (r && r[0]) hit(r[0].rawValue); else requestAnimationFrame(loop); }).catch(function () { requestAnimationFrame(loop); }); };
+        v.onloadedmetadata = loop;
+      }).catch(function () { toast(L("camErr")); S.cxCam = false; render(); });
+      return;
+    }
+    var go = function () {
+      try { var R = new window.ZXing.BrowserMultiFormatReader(); S._cxZx = R; R.decodeFromVideoDevice(undefined, v, function (res) { if (res && S && S.cxCam) { try { R.reset(); } catch (e) {} hit(res.getText()); } }); }
+      catch (e) { toast(L("camErr")); S.cxCam = false; render(); }
+    };
+    if (window.ZXing) return go();
+    var sc = document.createElement("script"); sc.src = "https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"; sc.onload = go; sc.onerror = function () { toast(L("camErr")); S.cxCam = false; render(); }; document.head.appendChild(sc);
+  }
+  // ---------- Étiquettes ----------
+  function fLabels() {
+    var d = S.modal.d, st = stockMap(), its = live("item").filter(function (i) { return i.type !== "service"; }).sort(function (a, b) { return a.name.localeCompare(b.name); });
+    var h = '<h2><i class="fa-solid fa-tags"></i> ' + L("lbTitle") + '</h2>';
+    h += selectF(L("lbFormat"), "lbfmt", d.lbfmt, [["a4s", L("lbA4s")], ["a4", L("lbA4")], ["roll", L("lbRoll")]]);
+    h += '<label class="gx-check" style="margin:6px 0 10px"><input type="checkbox" data-a="lb-price"' + (d.price !== false ? ' checked' : '') + '> ' + L("lbShowPrice") + '</label>';
+    h += '<div style="display:flex;gap:8px;margin-bottom:8px"><button class="gx-btn" data-a="lb-all" data-v="1">' + L("lbAll") + ' × 1</button><button class="gx-btn" data-a="lb-all" data-v="stock">' + L("lbAll") + ' ' + L("lbStock") + '</button><button class="gx-btn" data-a="lb-all" data-v="0">0</button></div>';
+    h += '<div class="gx-lb-list">' + its.map(function (i) {
+      return '<div class="gx-lb-row"><div><b>' + esc(i.name) + '</b><span>' + (i.bc ? esc(i.bc) : '<em>' + L("bcGen") + '</em>') + ' · ' + money(i.price) + ' · ' + L("stock") + ' ' + qtyFmt(st[i.id] || 0) + '</span></div>' +
+        '<input class="gx-lb-n" data-lb="' + esc(i.id) + '" inputmode="numeric" value="' + esc(d.n[i.id] || "") + '" placeholder="0"></div>';
+    }).join("") + '</div><p class="gx-muted" style="font-size:12px">' + L("lbAuto") + '</p>';
+    h += '<div class="gx-sheet-foot"><button class="gx-btn" data-a="modal-close">' + L("cancel") + '</button><button class="gx-btn gx-primary" data-a="lb-print"><i class="fa-solid fa-print"></i> ' + L("lbPrint") + '</button></div>';
+    return h;
+  }
+  function lbPrint() {
+    var d = S.modal.d, list = [];
+    Object.keys(d.n).forEach(function (id) {
+      var n = Math.min(500, Math.max(0, Math.round(num(d.n[id])))), it = getE("item", id); if (!n || !it) return;
+      if (!it.bc) { var c = newInternalCode(); if (c) { write("item", it.id, merge(clean(it, ITEM_KEYS), { bc: c })); it = getE("item", id); } }
+      for (var k = 0; k < n; k++) list.push(it);
+    });
+    if (!list.length) return toast(L("lbNone"));
+    var f = d.lbfmt || "a4s", showP = d.price !== false;
+    var dims = f === "roll" ? { w: 40, h: 30, cols: 1 } : f === "a4" ? { w: 70, h: 37, cols: 3 } : { w: 48.5, h: 25.4, cols: 4 };
+    var css = '<style>@page{size:' + (f === "roll" ? '40mm 30mm' : 'A4') + ';margin:' + (f === "roll" ? '0' : '8mm 5mm') + '}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif}' +
+      '.lbs{display:grid;grid-template-columns:repeat(' + dims.cols + ',' + dims.w + 'mm);grid-auto-rows:' + dims.h + 'mm;gap:0}' +
+      '.lb{width:' + dims.w + 'mm;height:' + dims.h + 'mm;padding:1.5mm 2mm;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;page-break-inside:avoid;' + (f === "roll" ? 'page-break-after:always;' : 'border:0.1mm dashed #ccc;') + '}' +
+      '.lb .n{font-size:' + (dims.h < 28 ? 7 : 8.5) + 'pt;font-weight:bold;text-align:center;line-height:1.1;max-height:2.3em;overflow:hidden;width:100%}' +
+      '.lb .p{font-size:' + (dims.h < 28 ? 9 : 11) + 'pt;font-weight:900;margin-top:.5mm}.lb svg{width:100%;height:' + (dims.h < 28 ? 11 : dims.h < 33 ? 13 : 16) + 'mm;margin-top:.5mm}</style>';
+    var body = css + '<div class="lbs">' + list.map(function (it) { return '<div class="lb"><div class="n">' + esc(it.name) + '</div>' + (showP ? '<div class="p">' + money(it.price) + '</div>' : '') + barcodeSvg(it.bc, 40) + '</div>'; }).join("") + '</div>';
+    printDoc(body, { a4: true });
+  }
+  var ITEM_KEYS = ["name", "type", "price", "cost", "cat", "unit", "alertAt", "sns", "bc"];
+  // Clics propres à la caisse et aux étiquettes. Renvoie true si traité.
+  function proClick(a, v, el) {
+    switch (a) {
+      case "cx-cam": S.cxCam = true; render(); setTimeout(cxCamStart, 60); return true;
+      case "cx-cam-off": S.cxCam = false; if (S._cxStop) S._cxStop(); render(); cxFocus(); return true;
+      case "cx-add": { var it = getE("item", v); if (it) cxAdd(it); S.cxQ = ""; render(); cxFocus(); return true; }
+      case "cx-q": { var ln = cx().lines[+v]; if (ln) { ln.qty = Math.max(0, ln.qty + num(el.getAttribute("data-d"))); if (!ln.qty) cx().lines.splice(+v, 1); } render(); cxFocus(); return true; }
+      case "cx-del": cx().lines.splice(+v, 1); render(); cxFocus(); return true;
+      case "cx-mode": cx().mode = v; render(); cxFocus(); return true;
+      case "cx-clear": if (confirm(L("cxClear") + " ?")) { S.cx = null; render(); cxFocus(); } return true;
+      case "cx-pay": cxPay(); return true;
+      case "labels": if (!isPro()) { S.modal = { t: "pro" }; render(); return true; } S.modal = { t: "labels", d: { lbfmt: "a4s", price: true, n: {} } }; render(); return true;
+      case "lb-price": S.modal.d.price = !!el.checked; return true;
+      case "lb-all": { var st = stockMap(); live("item").forEach(function (i) { if (i.type === "service") return; S.modal.d.n[i.id] = v === "stock" ? Math.max(0, Math.round(st[i.id] || 0)) : +v; }); renderModalOnly(); return true; }
+      case "lb-print": lbPrint(); return true;
+      case "bc-gen": { var c = newInternalCode(); S.modal.d.bc = c; renderModalOnly(); return true; }
+      case "bc-scan": { S.modal.d._scan = true; renderModalOnly(); setTimeout(bcScanStart, 60); return true; }
+    }
+    return false;
+  }
+  function bcScanStart() {
+    // Lecture d'un code-barres pour la fiche article : même moteur que la caisse.
+    var v = document.getElementById("gx-bc-video"); if (!v) return;
+    var done = function (val) { if (S._cxStop) S._cxStop(); if (S.modal && S.modal.d) { S.modal.d.bc = val; S.modal.d._scan = false; renderModalOnly(); } };
+    var save = S.cxCam; S.cxCam = true;
+    var stop = function () { if (S._cxStream) { S._cxStream.getTracks().forEach(function (t) { t.stop(); }); S._cxStream = null; } if (S._cxZx) { try { S._cxZx.reset(); } catch (e) {} S._cxZx = null; } S.cxCam = save; };
+    S._cxStop = stop;
+    if ("BarcodeDetector" in window) {
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(function (st) {
+        S._cxStream = st; v.srcObject = st; var det = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "code_128", "upc_a", "upc_e"] });
+        var loop = function () { if (!document.getElementById("gx-bc-video")) return stop(); det.detect(v).then(function (r) { if (r && r[0]) done(r[0].rawValue); else requestAnimationFrame(loop); }).catch(function () { requestAnimationFrame(loop); }); };
+        v.onloadedmetadata = loop;
+      }).catch(function () { toast(L("camErr")); stop(); });
+      return;
+    }
+    var go = function () { try { var R = new window.ZXing.BrowserMultiFormatReader(); S._cxZx = R; R.decodeFromVideoDevice(undefined, v, function (res) { if (res) done(res.getText()); }); } catch (e) { toast(L("camErr")); } };
+    if (window.ZXing) return go();
+    var sc = document.createElement("script"); sc.src = "https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"; sc.onload = go; document.head.appendChild(sc);
+  }
+  function proBind() {
+    root.addEventListener("keydown", function (ev) {
+      if (!S) return;
+      if (ev.target.id === "gx-cx" && ev.key === "Enter") { ev.preventDefault(); var val = ev.target.value; ev.target.value = ""; S.cxQ = ""; if (String(val).trim()) cxSubmit(val.trim()); }
+    });
+    root.addEventListener("input", function (ev) {
+      if (!S) return;
+      if (ev.target.id === "gx-cx") { S.cxQ = ev.target.value; clearTimeout(S._cxt); S._cxt = setTimeout(function () { var pos = ev.target.selectionStart; render(); var i = document.getElementById("gx-cx"); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch (e) {} } }, 250); }
+      if (ev.target.id === "gx-cx-given") { cx().given = ev.target.value; clearTimeout(S._cxg); S._cxg = setTimeout(function () { render(); var g = document.getElementById("gx-cx-given"); if (g) { g.focus(); var l = g.value.length; try { g.setSelectionRange(l, l); } catch (e) {} } }, 400); }
+      if (ev.target.getAttribute && ev.target.getAttribute("data-lb") && S.modal && S.modal.d) S.modal.d.n[ev.target.getAttribute("data-lb")] = ev.target.value;
+    });
   }
 
   window.SnsGestion = { open: open, close: close, isOpen: function () { return !!S; }, onPaid: function () { if (S) pullNow(); } };

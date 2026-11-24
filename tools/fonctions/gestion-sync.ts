@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
     };
     const access = (c: any, cfg: any) => {
       const expired = cfg.mode === "paid" && c.plan !== "offert" && Number(c.paid_until) < Date.now();
-      return { expired, paidUntil: Number(c.paid_until) || 0, plan: c.plan };
+      return { expired, paidUntil: Number(c.paid_until) || 0, plan: c.plan, proUntil: Number(c.pro_until) || 0 };
     };
 
     // Abonnements payés par LigdiCash (transactions « completed » de type gestion) :
@@ -116,6 +116,17 @@ Deno.serve(async (req) => {
         const { error } = await db.from("gestion_companies").update(patch).eq("id", cid);
         if (error) throw error;
         return json({ success: true });
+      }
+      // Gestion Pro (caisse + étiquettes) : activé par Sounsouni après devis.
+      if (op === "admin_set_pro") {
+        const cid = String(body.companyId || "");
+        const { data: c } = await db.from("gestion_companies").select("*").eq("id", cid).maybeSingle();
+        if (!c) return json({ success: false, error: "not_found" }, 404);
+        const days = Math.round(Number(body.addDays) || 0);
+        const until = days > 0 ? Math.max(Date.now(), Number((c as any).pro_until) || 0) + days * DAY : 0;
+        const { error } = await db.from("gestion_companies").update({ pro_until: until, updated_at: new Date().toISOString() }).eq("id", cid);
+        if (error) throw error;
+        return json({ success: true, proUntil: until });
       }
       if (op === "admin_delete") {
         await db.from("gestion_companies").delete().eq("id", String(body.companyId || ""));

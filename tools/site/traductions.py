@@ -195,4 +195,8 @@ T = {
 "Montre homme Poedagar acier": ["Poedagar men's steel watch", "Poedagar पुरुषों की स्टील घड़ी"],
 "Écouteurs sans fil": ["Wireless earbuds", "वायरलेस ईयरबड"],
 "Sounsouni · Bamako": ["Sounsouni · Bamako", "Sounsouni · बामाको"],
+"Étiquetage & Caisse": ["Labelling & Checkout", "लेबलिंग और कैश काउंटर"],
+"Codes-barres, caisse, matériel": ["Barcodes, checkout, equipment", "बारकोड, कैश काउंटर, उपकरण"],
+"Inventaire et étiquetage de vos produits, caisse avec scanner Sounsouni Gestion Pro, fourniture de douchettes et d'imprimantes d'étiquettes. Sur devis.": ["Stock-taking and labelling of your products, scanning checkout with Sounsouni Gestion Pro, supply of barcode scanners and label printers. On quotation.", "आपके उत्पादों की गिनती और लेबलिंग, Sounsouni Gestion Pro के साथ स्कैनर वाला कैश काउंटर, बारकोड स्कैनर और लेबल प्रिंटर की आपूर्ति। कोटेशन पर।"],
+"Sounsouni Étiquetage & Caisse": ["Sounsouni Labelling & Checkout", "Sounsouni लेबलिंग और कैश काउंटर"],
 }
