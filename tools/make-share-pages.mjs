@@ -87,3 +87,25 @@ console.log(`catalogues : ${keepC.size} (articles : ${all.length})`);
 let removed = 0;
 for (const f of fs.readdirSync("p")) if (f.endsWith(".html") && !keep.has(f)) { fs.unlinkSync("p/" + f); removed++; }
 console.log(`articles : ${keep.size}, pages écrites : ${written}, supprimées : ${removed}`);
+
+// ---- Nouveautés du carrousel de l'accueil (site/nouveautes.json) ----
+// Les articles publiés APRÈS la sélection faite à la main le 24/11/2026 (avec photo et prix),
+// au plus 12, 4 par catégorie, ajoutés automatiquement devant la sélection de l'accueil.
+{
+  const when = ({ id, p }) => Number(p.createdAt) || Date.parse(p.createdAt) || parseInt(String(id).replace(/^id-(sso-)?/, "").slice(0, 8), 36) || 0;
+  const BAD = /rolex|celine|birken|gucci|louis ?vuitton|dior|chanel|nike|adidas/i;
+  const fresh = rows.map((r) => ({ id: r.id, p: r.data || {} }))
+    .filter(({ id, p }) => safeId(id) && !p.banned && !p.deleted && p.status !== "deleted" && Number(p.price) > 0 && !BAD.test(p.name || "")
+      && Array.isArray(p.images) && typeof p.images[0] === "string" && /^https:\/\//.test(p.images[0]))
+    .filter((x) => when(x) > Date.parse("2026-11-24T18:00:00Z"))
+    .sort((a, b) => when(b) - when(a));
+  const perCat = {}, list = [];
+  for (const { id, p } of fresh) {
+    const c = p.category || "Autre"; if ((perCat[c] = (perCat[c] || 0) + 1) > 4) continue;
+    list.push({ id, cat: c, name: String(p.name).replace(/\s*\((SM|KAM|RMTS)\)\s*$/i, "").slice(0, 60), price: fmt(p.price) + " FCFA", img: p.images[0], mode: /^Mode /.test(c) });
+    if (list.length >= 12) break;
+  }
+  fs.mkdirSync("site", { recursive: true });
+  const out = JSON.stringify({ maj: new Date().toISOString().slice(0, 10), articles: list }, null, 0);
+  if (!fs.existsSync("site/nouveautes.json") || fs.readFileSync("site/nouveautes.json", "utf8") !== out) fs.writeFileSync("site/nouveautes.json", out);
+}

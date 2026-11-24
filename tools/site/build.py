@@ -192,7 +192,7 @@ ix = open("index.html").read()
 GATE = ('<!--PORTAIL-->' + FONTS + '<link rel="stylesheet" href="css/site.css?v=%s">'
         '<script>(function(){var show=true;try{if(localStorage.getItem("sns_has_profile")==="1")show=false;if(sessionStorage.getItem("sns_portail_ferme")==="1")show=false;}catch(e){}'
         'if(window.Capacitor||/; wv\\)/.test(navigator.userAgent)||(window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches))show=false;'
-        'var h=location.hash;if(h&&h!=="#accueil")show=false;if(location.search.indexOf("p=")>-1)show=false;if(h==="#accueil")show=true;'
+        'var h=location.hash;if(h&&h!=="#accueil")show=false;if(location.search.length>1)show=false;if(h==="#accueil")show=true;'
         'window.__snsPortail=show;if(show)document.documentElement.classList.add("portail-on");})();</script><!--/PORTAIL-->') % V
 ix = re.sub(r"<!--PORTAIL-->.*?<!--/PORTAIL-->", "", ix, flags=re.S)
 ix = ix.replace("</head>", GATE + "\n</head>", 1)

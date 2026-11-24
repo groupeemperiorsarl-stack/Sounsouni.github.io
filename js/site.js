@@ -249,3 +249,26 @@
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();
+// ---------- Nouveautés : les derniers articles du marché s'ajoutent en tête du carrousel ----------
+(function () {
+  "use strict";
+  function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); }
+  function card(a) {
+    return '<a class="mc" href="p/' + esc(a.id) + '.html"><span class="mci"><img src="' + esc(a.img) + '" alt="' + esc(a.name) + '" loading="lazy"></span>' +
+      '<span class="mcc">Nouveau · ' + esc(a.cat) + '</span><span class="mcn">' + esc(a.name) + '</span><span class="mcp">' + esc(a.price) + '</span></a>';
+  }
+  function boot() {
+    var rows = document.querySelectorAll(".mrow");
+    if (rows.length < 2 || !window.fetch) return;
+    fetch("site/nouveautes.json?t=" + Math.floor(Date.now() / 600000)).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      if (!d || !d.articles) return;
+      var have = {}, links = document.querySelectorAll(".mrow .mc");
+      for (var i = 0; i < links.length; i++) have[(links[i].getAttribute("href") || "").replace(/^p\/|\.html$/g, "")] = 1;
+      var a1 = "", a2 = "";
+      d.articles.forEach(function (a) { if (have[a.id] || !/^id-[A-Za-z0-9_-]+$/.test(a.id)) return; if (a.mode) a1 += card(a); else a2 += card(a); });
+      if (a1) rows[0].insertAdjacentHTML("afterbegin", a1);
+      if (a2) rows[1].insertAdjacentHTML("afterbegin", a2);
+    }).catch(function () {});
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+})();
