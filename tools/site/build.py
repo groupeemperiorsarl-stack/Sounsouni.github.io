@@ -7,7 +7,7 @@ V = sys.argv[1] if len(sys.argv) > 1 else "dev"
 WA = "22393010123"
 FONTS = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800;900&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">'
 LOGO = "img/e/210deb8220be.webp"
-DESC_ORG = "Sounsouni, entreprise ouest-africaine née à Bamako : marché en ligne, logistique de la Chine et de l'Inde jusqu'au Mali (livraison, Points de Retrait, transit) et services aux entreprises (BTP, industrie, immobilier, digital, intelligence artificielle, énergie)."
+DESC_ORG = "Sounsouni, entreprise ouest-africaine née à Bamako : marché en ligne, logistique internationale (Chine, Inde, Europe, pays arabes) jusqu'au Mali (livraison, Points de Retrait, transit) et services aux entreprises (BTP, industrie, immobilier, digital, intelligence artificielle, énergie)."
 SERVICES = [
  ("btp", "fa-helmet-safety", "BTP & Construction", "Bâtiments, routes, rénovation", "Études, construction de bâtiments et d'ouvrages, rénovation, suivi de chantier et fourniture de matériaux."),
  ("industrie", "fa-industry", "Solutions industrielles", "Machines, installation, maintenance", "Achat et importation d'équipements, installation de lignes de production, maintenance et pièces détachées."),
@@ -15,7 +15,7 @@ SERVICES = [
  ("digital", "fa-code", "Digital", "Sites web & applications", "Sites internet, boutiques en ligne et applications mobiles sur mesure, comme l'application Sounsouni."),
  ("ia", "fa-brain", "Intelligence artificielle", "Assistants, automatisation", "Assistants intelligents, automatisation des tâches, analyse de données et formation des équipes à l'IA."),
  ("energie", "fa-solar-panel", "Énergie", "Solaire, électricité", "Installations solaires, groupes électrogènes, réseaux électriques pour maisons, boutiques et usines."),
- ("sourcing", "fa-globe", "Import & Sourcing", "Chine, Inde, Émirats…", "Nos Pôles Sounsouni achètent et vérifient vos marchandises sur place, puis les acheminent jusqu'à Bamako."),
+ ("sourcing", "fa-globe", "Import & Sourcing", "Chine, Inde, Europe, Golfe…", "Nos Pôles Sounsouni achètent et vérifient vos marchandises sur place, puis les acheminent jusqu'à Bamako."),
  ("conseil", "fa-briefcase", "Conseil & Services", "Projets d'entreprise", "Études de marché, montage de projets, accompagnement administratif et services généraux aux entreprises."),
 ]
 M = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vitrine.json')))
@@ -54,10 +54,10 @@ def svc_cards(link=True):
                    + '<i class="fa-solid %s"></i>Sounsouni<br>%s<small>%s</small></a>' % (ic, n, s) for k, ic, n, s, _ in SERVICES)
 def network(title=True):
     return ('<section class="sec" id="reseau"><div class="k rv">Notre réseau</div><h2 class="rv d1">Bamako <span class="serif" style="color:var(--g)">s\'illumine.</span></h2>'
-            '<p class="lead rv d2">De la Chine, de l\'Inde et des Émirats jusqu\'à Bamako, puis de quartier en quartier : chaque point lumineux est un quartier où Sounsouni livre.</p>'
+            '<p class="lead rv d2">De la Chine, de l\'Inde, de l\'Europe et des pays arabes jusqu\'à Bamako, puis de quartier en quartier : chaque point lumineux est un quartier où Sounsouni livre.</p>'
             '<div class="maps"><div class="map rv" data-sns-map="monde"></div><div class="map rv d1" data-sns-map="bamako"></div></div>'
             '<div class="legend"><span><i style="background:#ffd54a"></i>Point de Retrait Sounsouni</span><span><i style="background:#c8ff8a"></i>Livraison express</span><span><i style="background:#9aa79c"></i>Quartier desservi</span></div>'
-            '<div class="stats"><div><b class="counter" data-to="65">65</b><span>quartiers desservis</span></div><div><b class="counter" data-to="29">29</b><span>zones express</span></div><div><b class="counter" data-to="5">5</b><span>pays reliés</span></div><div><b class="counter" data-to="24" data-suf=" h">24 h</b><span>livraison à Bamako</span></div></div></section>')
+            '<div class="stats"><div><b class="counter" data-to="65">65</b><span>quartiers desservis</span></div><div><b class="counter" data-to="29">29</b><span>zones express</span></div><div><b class="counter" data-to="12">12</b><span>pays reliés</span></div><div><b class="counter" data-to="24" data-suf=" h">24 h</b><span>livraison à Bamako</span></div></div></section>')
 JOURNEY = [("chine", "Achat en Chine", "Votre Pôle Sounsouni va chez le vendeur, vérifie l'article, la couleur, la quantité et la qualité."),
            ("avion", "Le grand voyage", "Par avion ou par bateau, votre colis traverse le monde. Vous suivez chaque étape dans l'application."),
            ("aeroport", "Scanné à Bamako", "Notre équipe récupère le lot et scanne chaque colis : « Arrivé » s'affiche aussitôt, chez vous et chez l'expéditeur."),
@@ -93,7 +93,7 @@ def portail():
       '<div class="mgrid">' + "".join('<a href="p/%s.html"><span class="mi ph"><img src="img/site/m-%s.webp" alt="%s" loading="lazy"></span><span class="mn">%s</span><span class="mp">%s</span></a>' % (x[0], x[0], x[2], x[2], x[3]) for x in (M[0], M[7], M[11], M[2])) + '</div>'
       '<a href="./" class="gobtn" data-portail-fermer><i class="fa-solid fa-cart-shopping"></i> Cliquez ici pour accéder au marché <i class="fa-solid fa-arrow-right"></i></a></div>'
       '<a href="logistique.html" class="door photo rv d1"><img class="ph" src="img/site/camionnette.webp" alt="" loading="lazy"><div class="k">02 — Logistique</div><div class="t">Du monde<br><span class="serif" style="color:var(--glow)">à votre porte.</span></div>'
-      '<div style="font-size:13px;opacity:.85;margin-top:10px;padding-right:56px">Transit Chine · Inde → Bamako, livraison à domicile et Points de Retrait.</div><span class="go" style="background:var(--glow);color:var(--gd)"><i class="fa-solid fa-arrow-right"></i></span></a>'
+      '<div style="font-size:13px;opacity:.85;margin-top:10px;padding-right:56px">Transit Chine · Inde · Europe · Golfe → Bamako, livraison à domicile et Points de Retrait.</div><span class="go" style="background:var(--glow);color:var(--gd)"><i class="fa-solid fa-arrow-right"></i></span></a>'
       '</div></main>')
     out += carousel()
     out += journey()
@@ -125,14 +125,14 @@ def hero(on, kicker, h1, p, cta, dark=False):
     return ('<header class="top%s"><div class="glow-bg"></div><div class="wrap">%s<div class="hero"><div><div class="k" style="color:#d7f5c0">%s</div><h1>%s</h1><p>%s</p><div class="cta">%s</div></div>'
             '<div class="hero-art"><img src="img/3d/livraison-banner.webp" alt="" width="1000" height="465"></div></div></div></header>') % (" dark" if dark else "", nav(on), kicker, h1, p, cta)
 # ---------- Logistique ----------
-STEPS = [("fa-store", "Achat ou dépôt", "Votre fournisseur en Chine ou en Inde remet la marchandise à notre Pôle Sounsouni ou à votre transitaire.", "#1b5e20"),
+STEPS = [("fa-store", "Achat ou dépôt", "Votre fournisseur en Chine, en Inde, en Europe ou dans les pays arabes remet la marchandise à notre Pôle Sounsouni ou à votre transitaire.", "#1b5e20"),
          ("fa-magnifying-glass", "Vérification", "Le Pôle vérifie l'article, la couleur, la quantité et la qualité, puis colle le code Sounsouni sur le colis.", "#22662a"),
          ("fa-plane-departure", "Transit", "Le colis voyage par avion ou par bateau. Vous suivez chaque étape dans l'application.", "#1f4f6e"),
          ("fa-barcode", "Arrivé à Bamako", "Notre équipe récupère le lot à l'aéroport ou au port et scanne chaque colis : l'état « Arrivé » s'affiche aussitôt.", "#24452c"),
          ("fa-motorcycle", "Livraison", "Un livreur Sounsouni l'apporte à domicile, ou il attend dans le Point de Retrait le plus proche.", "#2e7d32"),
          ("fa-key", "Remise avec code", "Le client donne son code secret : le colis est remis, et tout le monde le voit en direct.", "#0f2e14")]
 logi = cine_hero(False, "Sounsouni Logistique", ["Du monde", '<span class="serif" style="color:var(--glow)">à votre porte.</span>'],
-            "Transit depuis la Chine et l'Inde, réception à Bamako, livraison express à domicile et réseau de Points de Retrait : Sounsouni s'occupe de tout, et vous suivez chaque étape.",
+            "Transit depuis la Chine, l'Inde, la France et l'Europe, les Émirats et les pays arabes, réception à Bamako, livraison express à domicile et réseau de Points de Retrait : Sounsouni s'occupe de tout, et vous suivez chaque étape.",
             '<a class="pill p-w" href="https://wa.me/%s?text=%s">Envoyer un colis</a><a class="pill p-o" href="#reseau">Voir le réseau</a>' % (WA, "Bonjour%20Sounsouni%2C%20je%20veux%20envoyer%20un%20colis."), "img/site/camionnette.webp", "logistique.html")
 logi += journey() + '<main class="wrap"><section class="sec"><div class="k rv">Le voyage d\'un colis</div><h2 class="rv d1">Six étapes, <span class="serif">zéro souci.</span></h2><div class="steps">'
 logi += "".join('<div class="step rv%s" style="background:%s"><span class="n">0%d</span><i class="fa-solid %s big"></i><h3>%s</h3><p>%s</p></div>' % ((" d1", " d2", "")[i % 3], c, i + 1, ic, t, d) for i, (ic, t, d, c) in enumerate(STEPS))
@@ -145,10 +145,10 @@ logi += ('<section class="sec"><div class="k rv">Tarifs de livraison à Bamako</
          '<p class="lead rv d2">Vous envoyez des colis vers le Mali ? Annoncez-les dans votre Espace Transitaire : nous les récupérons à Bamako, appelons vos clients et les livrons. Vous suivez tout en direct.</p>'
          '<div class="cta rv"><a class="pill p-g" href="https://wa.me/%s?text=%s">Devenir transitaire partenaire</a><a class="pill p-d" href="https://wa.me/%s?text=%s">Ouvrir un Point de Retrait</a></div></div>'
          '<div class="card rv d1" style="margin-top:20px"><div class="k">Pôles Sounsouni</div><h3 style="font-weight:900;font-size:26px;margin-top:8px;letter-spacing:-.5px">Nos yeux et nos mains à l\'étranger</h3>'
-         '<p class="lead">En Chine et en Inde, nos Pôles Sounsouni vont chez le vendeur, vérifient la marchandise, la paient et la remettent au transitaire. Vous achetez à l\'étranger en toute confiance.</p></div></section></main>'
+         '<p class="lead">En Chine, en Inde, en Europe et dans les pays arabes, nos Pôles Sounsouni vont chez le vendeur, vérifient la marchandise, la paient et la remettent au transitaire. Vous achetez à l\'étranger en toute confiance.</p></div></section></main>'
          ) % (WA, "Bonjour%20Sounsouni%2C%20je%20suis%20transitaire.", WA, "Bonjour%20Sounsouni%2C%20je%20veux%20ouvrir%20un%20Point%20de%20Retrait.")
-page("logistique.html", "Sounsouni Logistique — Transit Chine, Inde → Bamako, livraison et Points de Retrait",
-     "Sounsouni Logistique : transit de colis depuis la Chine et l'Inde vers Bamako, réception scannée à l'arrivée, livraison express à domicile et Points de Retrait dans plus de 60 quartiers de Bamako.", "logistique.html", logi)
+page("logistique.html", "Sounsouni Logistique — Transit Chine, Inde, Europe, pays arabes → Bamako, livraison et Points de Retrait",
+     "Sounsouni Logistique : transit de colis depuis la Chine, l'Inde, la France, l'Europe et les pays arabes vers Bamako, réception scannée à l'arrivée, livraison express à domicile et Points de Retrait dans plus de 60 quartiers de Bamako.", "logistique.html", logi)
 # ---------- Services ----------
 srv = cine_hero(False, "Sounsouni Services", ["Votre projet,", '<span class="serif" style="color:var(--glow)">notre expertise.</span>'],
            "Construction, industrie, immobilier, digital, intelligence artificielle, énergie : décrivez votre besoin, Sounsouni vous fait une offre.",
@@ -178,7 +178,7 @@ ap += ('<main class="wrap"><section class="sec two"><div><div style="display:fle
        '<p class="lead rv d2">Sounsouni est née à Bamako avec une idée simple : qu\'acheter, envoyer et entreprendre au Mali devienne aussi facile qu\'ailleurs. Aujourd\'hui, Sounsouni réunit trois métiers sur une seule plateforme.</p></div></section>'
        '<section class="sec"><div class="svc" style="grid-template-columns:1fr">'
        '<div class="rv"><i class="fa-solid fa-bag-shopping"></i>Le Marché<small style="font-size:13px">Un marché en ligne où des vendeurs vérifiés proposent leurs articles, avec paiement sécurisé (Orange Money, Moov Money ou à la livraison).</small></div>'
-       '<div class="rv d1"><i class="fa-solid fa-truck-fast"></i>La Logistique<small style="font-size:13px">Transit depuis la Chine et l\'Inde, réception scannée à Bamako, livraison express et réseau de Points de Retrait dans les quartiers.</small></div>'
+       '<div class="rv d1"><i class="fa-solid fa-truck-fast"></i>La Logistique<small style="font-size:13px">Transit depuis la Chine, l\'Inde, l\'Europe et les pays arabes, réception scannée à Bamako, livraison express et réseau de Points de Retrait dans les quartiers.</small></div>'
        '<div class="rv d2"><i class="fa-solid fa-helmet-safety"></i>Les Services<small style="font-size:13px">BTP, industrie, immobilier, digital, intelligence artificielle, énergie, sourcing et conseil pour les entreprises.</small></div></div></section>'
        '<section class="sec"><div class="card rv" style="background:var(--gd);color:#fff"><div class="k" style="color:var(--glow)">Notre mission</div><h2 style="font-size:clamp(26px,6vw,44px)">Rendre le commerce simple, sûr et transparent <span class="serif" style="color:var(--glow)">pour chaque Malien.</span></h2></div></section>'
        '<section class="sec two" id="contact"><div><div class="k rv">Fiche de l\'entreprise</div><h2 class="rv d1">SOUNSOUNI</h2></div>'

@@ -95,15 +95,15 @@
       on = on && ((Math.floor(x * 7 + y * 13)) % 11) > 1;
       el("circle", { cx: x, cy: y, r: on ? 4.2 : 1.8, fill: "#9fb8a3", opacity: on ? ".5" : ".12" }, g);
     }
-    var bko = [W * 0.445, H * 0.53], P = [["Chine", 0.83, 0.36], ["Inde", 0.72, 0.47], ["Émirats", 0.63, 0.43], ["France", 0.47, 0.24], ["Turquie", 0.58, 0.30]];
-    var fs = compact ? 36 : 26;
+    var bko = [W * 0.445, H * 0.53], P = [["Chine", 0.83, 0.36], ["Inde", 0.72, 0.47], ["Émirats", 0.63, 0.43, "Golfe"], ["", 0.585, 0.415], ["France", 0.455, 0.235, "France & Europe", "end"], ["", 0.47, 0.195], ["", 0.50, 0.20], ["", 0.51, 0.26], ["", 0.43, 0.28], ["Turquie", 0.565, 0.285], ["Maroc", 0.425, 0.335, "Maroc", "end"], ["", 0.55, 0.36]];
+    var fs = compact ? 34 : 24;
     P.forEach(function (p, ix) {
       var px = W * p[1], py = H * p[2], mx = (px + bko[0]) / 2, my = Math.min(py, bko[1]) - H * 0.22;
       var pd = "M" + px + " " + py + " Q" + mx + " " + my + " " + bko[0] + " " + bko[1];
       el("path", { d: pd, stroke: "#c8ff8a", "stroke-width": "4", fill: "none", opacity: ".8", filter: "url(#snsg)", "stroke-dasharray": "12 14", "class": "sns-dash" }, svg);
       traveller(svg, pd, 3.4, ix * 0.7, 8, "#ffffff");
-      el("circle", { cx: px, cy: py, r: 12, fill: "#c8ff8a", filter: "url(#snsg)" }, svg);
-      var tx = el("text", { x: px + 18, y: py - 16, "font-size": fs, fill: "#fff", "font-family": "Inter Tight, sans-serif", "font-weight": "700" }, svg); tx.textContent = p[0];
+      el("circle", { cx: px, cy: py, r: p[0] ? 12 : 8, fill: "#c8ff8a", filter: "url(#snsg)" }, svg);
+      var lab = p[3] || p[0]; if (lab) { var endA = p[4] === "end"; var tx = el("text", { x: px + (endA ? -18 : 18), y: py - 16, "text-anchor": endA ? "end" : "start", "font-size": fs, fill: "#fff", "font-family": "Inter Tight, sans-serif", "font-weight": "700" }, svg); tx.textContent = lab; }
     });
     var halo = el("circle", { cx: bko[0], cy: bko[1], r: 40, fill: "#c8ff8a", opacity: ".2" }, svg);
     if (!reduce) el("animate", { attributeName: "r", values: "30;54;30", dur: "2.6s", repeatCount: "indefinite" }, halo);
