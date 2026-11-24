@@ -23,9 +23,12 @@ with sync_playwright() as p:
                 pg.screenshot(path=O+f"{dev}-accueil.png")
                 chk(pg.evaluate("document.querySelectorAll('#portail [data-sns-map] svg').length")==2,f"{dev} cartes")
                 pg.set_viewport_size({"width":w,"height":h})
-                pg.click("#portail [data-vit]:nth-child(3)"); chk(pg.inner_text("#vit-feat [data-f=nom]")=="Sac à dos",f"{dev} vitrine")
+                chk(pg.evaluate("document.querySelectorAll('#portail .mrow .mc').length")==30,f"{dev} carrousel 30 articles")
+                chk(pg.evaluate("(function(r){return r.scrollWidth>r.clientWidth})(document.querySelector('#portail .mrows'))"),f"{dev} carrousel défilable")
                 pg.click("#portail .door.market .gobtn"); pg.wait_for_timeout(500)
                 chk(pg.evaluate("document.getElementById('portail').hidden"),f"{dev} porte marché ferme le portail")
+                pg.go_back(); pg.wait_for_timeout(1000)
+                chk(not pg.evaluate("document.getElementById('portail').hidden"),f"{dev} Retour ramène à l'accueil")
             else:
                 sw=pg.evaluate("document.documentElement.scrollWidth"); chk(sw<=w,f"{dev} {page} largeur {sw}")
                 pg.evaluate("document.querySelectorAll('.rv').forEach(e=>e.classList.add('in'))"); pg.wait_for_timeout(500)
