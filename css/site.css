@@ -249,3 +249,18 @@ body.snsv{margin:0}
 @media (max-width:420px){.snsv .nav .b{font-size:16px}.snsv .nav .b img{width:30px;height:30px}.snsv .nav .r{gap:8px}.snsv .nav .pill{padding:9px 13px;font-size:12px}.snsv .langbtn{padding:7px 10px}}
 @media (max-width:760px){.snsv .scrollcue{display:none}}
 
+
+.snsv .piliers{display:grid;gap:18px;margin-top:22px}
+.snsv .pilier{display:grid;grid-template-columns:1fr;border-radius:28px;overflow:hidden;background:var(--pb);color:#fff;box-shadow:0 20px 40px rgba(10,40,15,.18)}
+.snsv .pi-vis{position:relative;min-height:190px;background:linear-gradient(135deg,rgba(255,255,255,.08),rgba(0,0,0,.25))}
+.snsv .pi-vis img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.snsv .pi-ic{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:82px;color:#f5c04a;background:radial-gradient(circle at 50% 45%,rgba(245,192,74,.35),transparent 60%)}
+.snsv .pi-n{position:absolute;top:12px;left:18px;font-weight:900;font-size:54px;letter-spacing:-2px;color:#fff;text-shadow:0 4px 18px rgba(0,0,0,.45)}
+.snsv .pi-txt{padding:22px 22px 24px}
+.snsv .pi-txt h3{font-weight:900;font-size:clamp(22px,5vw,30px);letter-spacing:-.5px;margin:8px 0 10px;line-height:1.15}
+.snsv .pi-txt p{opacity:.9;font-size:14.5px;line-height:1.6;margin:0 0 12px}
+.snsv .pi-txt ul{margin:0;padding:0;list-style:none;display:grid;gap:7px}
+.snsv .pi-txt li{font-size:13.5px;font-weight:600;padding-left:22px;position:relative}
+.snsv .pi-txt li:before{content:"\2713";position:absolute;left:0;color:var(--glow);font-weight:900}
+.snsv .valeurs small{font-size:12px}
+@media (min-width:820px){.snsv .pilier{grid-template-columns:5fr 6fr}.snsv .pilier:nth-child(even) .pi-vis{order:2}.snsv .pi-vis{min-height:340px}.snsv .valeurs{grid-template-columns:repeat(4,1fr)}}

@@ -10,6 +10,7 @@ LOGO = "img/e/210deb8220be.webp"
 DESC_ORG = "Sounsouni, entreprise ouest-africaine née à Bamako : marché en ligne, logistique internationale (Chine, Inde, Europe, pays arabes) jusqu'au Mali (livraison, Points de Retrait, transit) et services aux entreprises (BTP, industrie, immobilier, digital, intelligence artificielle, énergie)."
 SERVICES = [
  ("btp", "fa-helmet-safety", "BTP & Construction", "Bâtiments, routes, rénovation", "Études, construction de bâtiments et d'ouvrages, rénovation, suivi de chantier et fourniture de matériaux."),
+ ("mines", "fa-gem", "Solutions minières", "Équipements, sourcing, conseil", "Équipements pour l'orpaillage, les petites mines et les carrières (détecteurs, motopompes, concasseurs, groupes électrogènes, sécurité), importés et vérifiés par nos Pôles, mise en relation et accompagnement des projets miniers."),
  ("industrie", "fa-industry", "Solutions industrielles", "Machines, installation, maintenance", "Achat et importation d'équipements, installation de lignes de production, maintenance et pièces détachées."),
  ("immobilier", "fa-building", "Immobilier", "Vente, location, gestion", "Recherche, vente et location de terrains, maisons et bureaux, gestion locative pour les propriétaires."),
  ("digital", "fa-code", "Digital", "Sites web & applications", "Sites internet, boutiques en ligne et applications mobiles sur mesure, comme l'application Sounsouni."),
@@ -104,7 +105,7 @@ def portail():
     out += journey()
     out += '<div class="darksec" style="margin-top:70px"><div class="wrap">' + network() + '</div></div>'
     out += ('<main class="wrap"><section class="sec"><div class="k rv">Sounsouni Services</div><h2 class="rv d1">Votre projet, <span class="serif">notre expertise.</span></h2>'
-      '<p class="lead rv d2">Un besoin en construction, industrie, immobilier, digital ou intelligence artificielle ? Dites-le-nous : Sounsouni vous fait une offre.</p>'
+      '<p class="lead rv d2">Un besoin en construction, mines, industrie, immobilier, digital ou intelligence artificielle ? Dites-le-nous : Sounsouni vous fait une offre.</p>'
       '<div class="svc-ph">'
       '<a href="services.html#btp" class="rv"><img src="img/site/btp.webp" alt="" loading="lazy"><b>Sounsouni BTP</b><small>Construction, routes, rénovation</small></a>'
       '<a href="services.html#digital" class="rv d1"><img src="img/site/digital.webp" alt="" loading="lazy"><b>Digital &amp; IA</b><small>Sites, applications, intelligence artificielle</small></a>'
@@ -156,11 +157,11 @@ page("logistique.html", "Sounsouni Logistique — Transit Chine, Inde, Europe, p
      "Sounsouni Logistique : transit de colis depuis la Chine, l'Inde, la France, l'Europe et les pays arabes vers Bamako, réception scannée à l'arrivée, livraison express à domicile et Points de Retrait dans plus de 60 quartiers de Bamako.", "logistique.html", logi)
 # ---------- Services ----------
 srv = cine_hero(False, "Sounsouni Services", ["Votre projet,", '<span class="serif" style="color:var(--glow)">notre expertise.</span>'],
-           "Construction, industrie, immobilier, digital, intelligence artificielle, énergie : décrivez votre besoin, Sounsouni vous fait une offre.",
+           "Construction, mines, industrie, immobilier, digital, intelligence artificielle, énergie : décrivez votre besoin, Sounsouni vous fait une offre.",
            '<a class="pill p-w" href="#demande">Demander une offre</a><a class="pill p-o" href="#domaines">Nos domaines</a>', "img/site/btp.webp", "services.html")
 srv += '<main class="wrap"><section class="sec" id="domaines"><div class="k rv">Nos domaines</div><h2 class="rv d1">Tout Sounsouni <span class="serif">au service des entreprises.</span></h2><div class="steps">'
 srv += "".join('<div class="step rv" id="%s" style="background:%s"><i class="fa-solid %s big"></i><h3>Sounsouni<br>%s</h3><p>%s</p><a class="pill p-w" style="margin-top:14px;align-self:flex-start" href="#demande" data-svc="%s">Demander une offre</a></div>'
-               % (k, ("#1b5e20", "#24452c", "#1f4f6e", "#2e7d32", "#0f2e14", "#22662a", "#1d3b49", "#3a4a1f", "#33502f")[i], ic, n, d, k) for i, (k, ic, n, s, d) in enumerate(SERVICES))
+               % (k, ("#1b5e20", "#6b4a12", "#24452c", "#1f4f6e", "#2e7d32", "#0f2e14", "#22662a", "#1d3b49", "#3a4a1f", "#33502f")[i], ic, n, d, k) for i, (k, ic, n, s, d) in enumerate(SERVICES))
 srv += '</div></section><section class="sec two" id="demande"><div><div class="k rv">Demande d\'offre</div><h2 class="rv d1">Parlez-nous <span class="serif">de votre projet.</span></h2><p class="lead rv d2">Votre demande arrive directement chez Sounsouni, sur WhatsApp. Nous vous répondons avec une offre adaptée.</p></div>'
 srv += ('<form class="card form rv d1" id="sns-offre"><select name="domaine" required><option value="">Domaine</option>%s</select><input name="nom" placeholder="Votre nom ou votre entreprise" required>'
         '<input name="tel" type="tel" placeholder="Votre téléphone" required><input name="ville" placeholder="Ville (ex. Bamako)"><textarea name="besoin" placeholder="Décrivez votre besoin" required></textarea>'
@@ -175,23 +176,43 @@ srv += ('<script>(function(){var f=document.getElementById("sns-offre");if(!f)re
 page("services.html", "Sounsouni Services — BTP, industrie, immobilier, digital, IA, énergie au Mali",
      "Sounsouni Services : construction et BTP, solutions industrielles, immobilier, sites web et applications, intelligence artificielle, énergie solaire, import et sourcing, conseil aux entreprises au Mali.", "services.html", srv)
 # ---------- À propos ----------
-ap = cine_hero(False, "À propos de nous", ["Née à Bamako,", '<span class="serif" style="color:var(--glow)">ouverte au monde.</span>'],
-          "Sounsouni est une entreprise ouest-africaine qui rapproche les Maliens de tout ce dont ils ont besoin : les produits, les colis du monde entier et les services pour bâtir.",
-          '<a class="pill p-w" href="./#marche">Découvrir le marché</a><a class="pill p-o" href="#contact">Nous contacter</a>', "img/site/bamako-nuit-2.webp", "a-propos.html")
-ap += ('<main class="wrap"><section class="sec two"><div><div style="display:flex;justify-content:center"><img class="rv" src="%s" alt="Logo Sounsouni" width="260" height="260" style="width:220px;height:220px;filter:drop-shadow(0 24px 30px rgba(40,90,20,.25))"></div></div>'
-       '<div><div class="k rv">Qui sommes-nous</div><h2 class="rv d1">Sounsouni, <span class="serif">toute l\'Afrique en un clic.</span></h2>'
-       '<p class="lead rv d2">Sounsouni est née à Bamako avec une idée simple : qu\'acheter, envoyer et entreprendre au Mali devienne aussi facile qu\'ailleurs. Aujourd\'hui, Sounsouni réunit trois métiers sur une seule plateforme.</p></div></section>'
-       '<section class="sec"><div class="svc" style="grid-template-columns:1fr">'
-       '<div class="rv"><i class="fa-solid fa-bag-shopping"></i>Le Marché<small style="font-size:13px">Un marché en ligne où des vendeurs vérifiés proposent leurs articles, avec paiement sécurisé (Orange Money, Moov Money ou à la livraison).</small></div>'
-       '<div class="rv d1"><i class="fa-solid fa-truck-fast"></i>La Logistique<small style="font-size:13px">Transit depuis la Chine, l\'Inde, l\'Europe et les pays arabes, réception scannée à Bamako, livraison express et réseau de Points de Retrait dans les quartiers.</small></div>'
-       '<div class="rv d2"><i class="fa-solid fa-helmet-safety"></i>Les Services<small style="font-size:13px">BTP, industrie, immobilier, digital, intelligence artificielle, énergie, sourcing et conseil pour les entreprises.</small></div></div></section>'
-       '<section class="sec"><div class="card rv" style="background:var(--gd);color:#fff"><div class="k" style="color:var(--glow)">Notre mission</div><h2 style="font-size:clamp(26px,6vw,44px)">Rendre le commerce simple, sûr et transparent <span class="serif" style="color:var(--glow)">pour chaque Malien.</span></h2></div></section>'
+def pilier(n, ic, k, t, d, items, img=None, bg="#0f2e14"):
+    vis = ('<img src="%s" alt="" loading="lazy">' % img) if img else ('<span class="pi-ic"><i class="fa-solid %s"></i></span>' % ic)
+    return ('<article class="pilier rv" style="--pb:%s"><div class="pi-vis">%s<span class="pi-n">%s</span></div><div class="pi-txt"><div class="k" style="color:var(--glow)"><i class="fa-solid %s"></i> %s</div>'
+            '<h3>%s</h3><p>%s</p><ul>%s</ul></div></article>') % (bg, vis, n, ic, k, t, d, "".join("<li>%s</li>" % x for x in items))
+ap = cine_hero(False, "À propos de nous", ["Un seul nom,", '<span class="serif" style="color:var(--glow)">tout un écosystème.</span>'],
+          "Marché en ligne, logistique internationale, solutions minières et services aux entreprises : Sounsouni rassemble, depuis Bamako, tout ce qu'il faut pour acheter, transporter, produire et bâtir.",
+          '<a class="pill p-w" href="#metiers">Nos métiers</a><a class="pill p-o" href="#contact">Nous contacter</a>', "img/site/bamako-nuit.webp", "a-propos.html")
+ap += ('<main class="wrap"><section class="sec two"><div style="display:flex;justify-content:center"><img class="rv" src="%s" alt="Logo Sounsouni" width="260" height="260" style="width:200px;height:200px;filter:drop-shadow(0 24px 30px rgba(40,90,20,.25))"></div>'
+       '<div><div class="k rv">Notre histoire</div><h2 class="rv d1">Née à Bamako, <span class="serif">pensée pour toute l\'Afrique.</span></h2>'
+       '<p class="lead rv d2">Tout a commencé par une question simple : pourquoi acheter, recevoir un colis ou lancer un projet au Mali serait-il plus compliqué qu\'ailleurs ? Sounsouni est née pour y répondre.</p>'
+       '<p class="lead rv d2">Aujourd\'hui, Sounsouni est une entreprise ouest-africaine qui relie les commerçants, les familles, les mineurs et les entrepreneurs du Mali au reste du monde. Elle a une seule exigence : la confiance, à chaque étape.</p></div></section>'
+       '<section class="sec" id="metiers"><div class="k rv">Ce que nous faisons</div><h2 class="rv d1">Quatre métiers, <span class="serif">une seule promesse.</span></h2><div class="piliers">') % LOGO
+ap += pilier("01", "fa-bag-shopping", "Sounsouni Marché", "Le grand marché du Mali, dans votre poche.",
+             "Des milliers d'articles de vendeurs vérifiés : mode, beauté, high-tech, maison, alimentation. Vous commandez en quelques secondes, vous payez par Orange Money, par Moov Money ou à la livraison, et vous suivez votre commande en direct.",
+             ["Vendeurs vérifiés et boutiques officielles", "Paiement sécurisé : l'argent est gardé jusqu'à la livraison", "Livraison à domicile ou au Point de Retrait"], "img/site/remise.webp", "#1b5e20")
+ap += pilier("02", "fa-truck-fast", "Sounsouni Logistique", "Du bout du monde jusqu'à votre porte.",
+             "Nos Pôles en Chine, en Inde, en Europe et dans les pays arabes achètent et vérifient vos marchandises sur place. Le colis est scanné à son arrivée à Bamako, puis livré dans plus de 60 quartiers ou envoyé vers les 19 régions du Mali.",
+             ["Transit Chine · Inde · France · Europe · Golfe", "Réception scannée et suivi en direct", "Livraison express et réseau de Points de Retrait"], "img/site/camionnette.webp", "#1f4f6e")
+ap += pilier("03", "fa-gem", "Sounsouni Mines", "Le marché de la mine, en toute confiance.",
+             "Le secteur minier est aussi un marché, et Sounsouni s'y engage. Nous fournissons aux orpailleurs, aux petites mines et aux carrières le matériel dont ils ont besoin, importé et vérifié par nos Pôles, et nous accompagnons les projets miniers du premier équipement jusqu'à la production.",
+             ["Détecteurs, motopompes, concasseurs, groupes électrogènes", "Équipements de sécurité et pièces détachées", "Mise en relation, conseil et suivi de projet"], None, "#6b4a12")
+ap += pilier("04", "fa-helmet-safety", "Sounsouni Services", "Les experts qui font avancer vos projets.",
+             "Pour les entreprises et les particuliers, Sounsouni réunit les savoir-faire qui permettent de bâtir et de grandir : construire, équiper, digitaliser, automatiser et gérer.",
+             ["BTP et construction · Immobilier", "Solutions industrielles · Énergie solaire", "Digital, applications et intelligence artificielle", "Caisse, étiquetage et gestion de stock (Gestion Pro)", "Import, sourcing et conseil aux entreprises"], "img/site/btp.webp", "#24452c")
+ap += ('</div></section>'
+       '<section class="sec"><div class="k rv">Nos valeurs</div><h2 class="rv d1">Ce qui nous guide <span class="serif">chaque jour.</span></h2><div class="svc valeurs">'
+       '<div class="rv"><i class="fa-solid fa-handshake"></i>Confiance<small>Des vendeurs vérifiés, des marchandises contrôlées et un argent protégé.</small></div>'
+       '<div class="rv d1"><i class="fa-solid fa-eye"></i>Transparence<small>Chaque étape est visible en direct, sans surprise sur les prix.</small></div>'
+       '<div class="rv d2"><i class="fa-solid fa-people-group"></i>Proximité<small>Des équipes et des Points de Retrait au cœur des quartiers.</small></div>'
+       '<div class="rv d3"><i class="fa-solid fa-rocket"></i>Ambition<small>Construire au Mali des services au niveau des meilleurs du monde.</small></div></div></section>'
+       '<section class="sec"><div class="card rv" style="background:var(--gd);color:#fff"><div class="k" style="color:var(--glow)">Notre mission</div><h2 style="font-size:clamp(26px,6vw,44px)">Rendre le commerce, le transport et l\'entreprise simples, sûrs et transparents <span class="serif" style="color:var(--glow)">pour chaque Malien.</span></h2></div></section>'
        '<section class="sec two" id="contact"><div><div class="k rv">Fiche de l\'entreprise</div><h2 class="rv d1">SOUNSOUNI</h2></div>'
        '<div class="card rv d1" style="font-size:15px;line-height:2">'
        '<div><b>Registre du commerce (RCCM)</b> : ML-BKO-01-2026-A-05755</div><div><b>D-U-N-S (Dun &amp; Bradstreet)</b> : 85-042-6646</div>'
-       '<div><b>Siège</b> : Sotelco, face à Bougouba, Bamako, Mali</div><div><b>Téléphone</b> : <a href="tel:+22393010123">+223 93 01 01 23</a></div><div><b>E-mail</b> : <a href="mailto:direction@sounsouni.pro">direction@sounsouni.pro</a></div></div></section></main>') % LOGO
+       '<div><b>Siège</b> : Sotelco, face à Bougouba, Bamako, Mali</div><div><b>Téléphone</b> : <a href="tel:+22393010123">+223 93 01 01 23</a></div><div><b>E-mail</b> : <a href="mailto:direction@sounsouni.pro">direction@sounsouni.pro</a></div></div></section></main>')
 page("a-propos.html", "À propos de Sounsouni — Entreprise ouest-africaine née à Bamako",
-     "Sounsouni, entreprise ouest-africaine née à Bamako (RCCM ML-BKO-01-2026-A-05755, D-U-N-S 85-042-6646) : marché en ligne, logistique et services aux entreprises.", "a-propos.html", ap)
+     "Sounsouni, entreprise ouest-africaine née à Bamako (RCCM ML-BKO-01-2026-A-05755, D-U-N-S 85-042-6646) : marché en ligne, logistique internationale, solutions minières et services aux entreprises.", "a-propos.html", ap)
 # ---------- Portail dans index.html ----------
 ix = open("index.html").read()
 GATE = ('<!--PORTAIL-->' + FONTS + '<link rel="stylesheet" href="css/site.css?v=%s">'
