@@ -245,7 +245,7 @@ body.snsv{margin:0}
 /* Menu du haut sur téléphone : « À propos » descend sous le titre, rien ne se chevauche */
 .snsv .nav .r .lnk{display:none}
 .snsv .nav .pill{white-space:nowrap}
-.snsv .aboutchip{display:inline-flex;align-self:flex-start;align-items:center;gap:8px;margin-top:14px;font-size:13.5px;font-weight:700;color:#fff;opacity:.92;border-bottom:1.5px solid rgba(200,255,138,.7);padding-bottom:3px}
+.snsv .aboutrow{position:relative;z-index:3;display:flex;justify-content:center;margin-top:8px}.snsv .aboutchip{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700;color:#fff;background:rgba(255,255,255,.14);border:1.5px solid rgba(200,255,138,.65);border-radius:999px;padding:7px 16px;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
 @media (max-width:420px){.snsv .nav .b{font-size:16px}.snsv .nav .b img{width:30px;height:30px}.snsv .nav .r{gap:8px}.snsv .nav .pill{padding:9px 13px;font-size:12px}.snsv .langbtn{padding:7px 10px}}
 @media (max-width:760px){.snsv .scrollcue{display:none}}
-@media (min-width:1100px){.snsv .aboutchip{display:none}}
+

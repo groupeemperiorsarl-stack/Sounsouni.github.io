@@ -128,6 +128,33 @@ Deno.serve(async (req) => {
         if (error) throw error;
         return json({ success: true, proUntil: until });
       }
+      // Documents de l'administration (grilles tarifaires, contrats…) : table privée, lue seulement ici.
+      if (op === "admin_docs_list") {
+        const { data } = await db.from("admin_documents").select("id, title, category, updated_at").order("updated_at", { ascending: false });
+        return json({ success: true, docs: data || [] });
+      }
+      if (op === "admin_doc_get") {
+        const { data } = await db.from("admin_documents").select("*").eq("id", String(body.id || "")).maybeSingle();
+        if (!data) return json({ success: false, error: "not_found" }, 404);
+        return json({ success: true, doc: data });
+      }
+      if (op === "admin_doc_save") {
+        const html = String(body.html || "");
+        if (!html || html.length > 3000000) return json({ success: false, error: "too_big" }, 413);
+        const id = String(body.id || "") || ("doc_" + Date.now().toString(36));
+        const row: any = { id, html, updated_at: new Date().toISOString(), updated_by: callerId };
+        if (body.title) row.title = String(body.title).slice(0, 160);
+        if (body.category) row.category = String(body.category).slice(0, 80);
+        const { data: old } = await db.from("admin_documents").select("id").eq("id", id).maybeSingle();
+        const { error } = old ? await db.from("admin_documents").update(row).eq("id", id)
+          : await db.from("admin_documents").insert({ title: "Document", category: "Documents", ...row });
+        if (error) throw error;
+        return json({ success: true, id });
+      }
+      if (op === "admin_doc_delete") {
+        await db.from("admin_documents").delete().eq("id", String(body.id || ""));
+        return json({ success: true });
+      }
       if (op === "admin_delete") {
         await db.from("gestion_companies").delete().eq("id", String(body.companyId || ""));
         return json({ success: true });

@@ -4699,7 +4699,7 @@ function mergeWithDefaults(saved) {
   if (!Array.isArray(merged.vipAds)) merged.vipAds = [];
   if (typeof merged.activeImageIndex !== "number") merged.activeImageIndex = 0;
   if (!["green-yellow", "orange-white", "red-white"].includes(merged.theme)) merged.theme = "green-yellow";
-  if (!["dashboard", "sellers", "products", "effects", "affiliate", "reviews", "pointsvente", "tarifs", "boosts", "accounts", "disputes", "marketdisplay", "textes", "vipads", "bgpattern", "relaisapplications", "quartiers", "livreurapplications", "messagerie"].includes(merged.adminTab)) merged.adminTab = "dashboard";
+  if (!["dashboard", "sellers", "products", "effects", "affiliate", "reviews", "pointsvente", "tarifs", "boosts", "accounts", "disputes", "marketdisplay", "textes", "vipads", "bgpattern", "relaisapplications", "quartiers", "livreurapplications", "messagerie", "documents"].includes(merged.adminTab)) merged.adminTab = "dashboard";
   return merged;
 }
 
@@ -21672,6 +21672,7 @@ var ADMIN_MODULES_META = {
   moderation:         { icon: "fa-shield-virus",           name: "Modération des articles", sub: "Articles signalés ou suspects, en attente de ta décision" },
   gestion:            { icon: "fa-book",                   get name() { return t("gx_admin_title"); }, sub: "Gestion et comptabilité des entreprises : gratuit / payant, tarif, abonnements" },
   versements:         { icon: "fa-money-bill-transfer",   name: "Versements", sub: "Vendeurs : chaque jour à 17 h · Points de retrait : le mardi" },
+  documents:          { icon: "fa-folder-open",            name: "Documents", sub: "Grilles tarifaires, contrats et bases de devis : consulter, modifier, télécharger" },
   test:               { icon: "fa-bug",                    name: "Test", sub: "Journaux d'erreurs et diagnostics" },
   claude:             { icon: "fa-robot",                  name: "Accès Claude", sub: "Ce que l'assistant Claude peut faire, et tout ce qu'il a fait" }
 };
@@ -21868,7 +21869,7 @@ function renderAdmin() {
   }
 
   // ---- Modules valides pour ce rôle (Groupe 1 complet, Groupe 2 restreint) ----
-  var validTabsOwner = ["dashboard","comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","moderation","versements","gestion","filature","test","claude"];
+  var validTabsOwner = ["dashboard","comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","moderation","versements","gestion","documents","filature","test","claude"];
   var validTabsEmployee = ["dashboard","comptes","vendeurs","disputes","relaisapplications","livreurapplications","quartiers","messagerie","pub","reviews","moderation","versements","partenaires"];
   var validTabs = isOwner ? validTabsOwner : validTabsEmployee;
   if (validTabs.indexOf(state.adminTab) === -1) state.adminTab = "dashboard";
@@ -21912,6 +21913,7 @@ function renderAdmin() {
   else if (state.adminTab === "filature" && currentAdminHasFilatureAccess()) html += renderAdminFilature();
   else if (state.adminTab === "versements") html += renderAdminVersements();
   else if (state.adminTab === "gestion") html += renderAdminGestion();
+  else if (state.adminTab === "documents") html += renderAdminDocuments();
   else if (state.adminTab === "test") html += renderAdminTest();
   else if (state.adminTab === "claude") html += renderAdminClaude();
 
@@ -23668,6 +23670,76 @@ function gestionAdminApi(op, body) {
   return fetch(supabaseConfig.url + "/functions/v1/gestion-sync", { method: "POST", headers: authHeaders(null, true), body: JSON.stringify(body) })
     .then(readServerJson).catch(function() { return { success: false, error: "network_error" }; });
 }
+// ---------- DOCUMENTS DE L'ADMINISTRATION (grilles tarifaires, contrats…) ----------
+// Stockés côté serveur (table privée admin_documents). La lecture s'ouvre dans
+// une fenêtre posée au-dessus de l'application, hors de render(), pour que les
+// modifications en cours ne soient jamais effacées par un rafraîchissement.
+function renderAdminDocuments() {
+  var d = state.admDocs;
+  if (!d) {
+    state.admDocs = d = { loading: true };
+    gestionAdminApi("admin_docs_list").then(function(r) { state.admDocs = r && r.success ? { docs: r.docs } : { error: (r && r.error) || "error" }; render(); });
+  }
+  if (d.loading) return '<div style="padding:20px;text-align:center;color:var(--mc-dim);"><i class="fa-solid fa-spinner fa-spin"></i></div>';
+  if (d.error) return '<div class="glass-card" style="padding:14px;">❌ ' + esc(d.error) + ' <button class="link-btn" data-action="adm-docs-reload">↻</button></div>';
+  if (!d.docs.length) return '<div class="glass-card" style="padding:14px;">Aucun document pour le moment.</div>';
+  var groups = {}, order = [], html = '';
+  d.docs.forEach(function(x) { if (!groups[x.category]) { groups[x.category] = []; order.push(x.category); } groups[x.category].push(x); });
+  order.forEach(function(cat) {
+    html += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--mc-dim);font-weight:700;margin:14px 0 8px;">' + esc(cat) + '</div>';
+    groups[cat].forEach(function(x) {
+      html += '<button class="glass-card" data-action="adm-doc-open" data-value="' + esc(x.id) + '" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:14px;margin-bottom:8px;cursor:pointer;">';
+      html += '<i class="fa-solid fa-file-lines" style="font-size:22px;color:#e8a317;"></i><span style="flex:1;min-width:0;"><b style="display:block;">' + esc(x.title) + '</b>';
+      html += '<small style="color:var(--mc-dim);">Mis à jour le ' + new Date(x.updated_at).toLocaleDateString("fr-FR") + '</small></span><i class="fa-solid fa-chevron-right" style="color:var(--mc-dim);"></i></button>';
+    });
+  });
+  return html;
+}
+function admDocOpen(id) {
+  var old = document.getElementById("adm-doc"); if (old) old.remove();
+  var w = document.createElement("div");
+  w.id = "adm-doc";
+  w.style.cssText = "position:fixed;inset:0;z-index:2147483200;background:#e9ecf1;display:flex;flex-direction:column;";
+  var bs = "border:0;border-radius:10px;padding:9px 12px;font-weight:700;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;";
+  w.innerHTML = '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:10px;padding-top:calc(10px + env(safe-area-inset-top));background:#0f3d2e;color:#fff;">'
+    + '<button data-k="close" style="' + bs + 'background:rgba(255,255,255,.15);color:#fff;"><i class="fa-solid fa-arrow-left"></i></button>'
+    + '<b data-k="title" style="flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">…</b>'
+    + '<button data-k="edit" style="' + bs + 'background:#fff;color:#0f3d2e;"><i class="fa-solid fa-pen"></i> Modifier</button>'
+    + '<button data-k="pdf" style="' + bs + 'background:#e8a317;color:#1d2433;"><i class="fa-solid fa-download"></i> PDF</button></div>'
+    + '<div data-k="hint" style="display:none;background:#fff4d6;color:#5a4300;font-size:12.5px;padding:8px 12px;">Mode modification : touchez un texte pour le changer, puis appuyez sur « Enregistrer ».</div>'
+    + '<iframe data-k="fr" style="flex:1;width:100%;border:0;background:#fff;"></iframe>';
+  document.body.appendChild(w);
+  var q = function(k) { return w.querySelector('[data-k="' + k + '"]'); }, fr = q("fr"), doc = null, editing = false;
+  var html0 = function() { var d = fr.contentDocument; d.designMode = "off"; return "<!doctype html>\n" + d.documentElement.outerHTML; };
+  q("close").onclick = function() { if (editing && !confirm("Quitter sans enregistrer les modifications ?")) return; w.remove(); };
+  gestionAdminApi("admin_doc_get", { id: id }).then(function(r) {
+    if (!r || !r.success) { showToast("❌ " + ((r && r.error) || "erreur")); w.remove(); return; }
+    doc = r.doc; q("title").textContent = doc.title; fr.srcdoc = doc.html;
+  });
+  q("edit").onclick = function() {
+    if (!doc) return;
+    if (!editing) { editing = true; fr.contentDocument.designMode = "on"; q("hint").style.display = "block"; q("edit").innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Enregistrer'; return; }
+    var h = html0(); q("edit").disabled = true;
+    gestionAdminApi("admin_doc_save", { id: doc.id, html: h }).then(function(r) {
+      q("edit").disabled = false;
+      if (!r || !r.success) { fr.contentDocument.designMode = "on"; showToast("❌ " + ((r && r.error) || "erreur")); return; }
+      editing = false; doc.html = h; q("hint").style.display = "none"; q("edit").innerHTML = '<i class="fa-solid fa-pen"></i> Modifier';
+      showToast("✅ Document enregistré"); state.admDocs = null; render();
+    });
+  };
+  q("pdf").onclick = function() {
+    if (!doc) return;
+    var h = editing ? html0() : doc.html; if (editing) fr.contentDocument.designMode = "on";
+    var C = window.Capacitor, native = !!(C && C.isNativePlatform && C.isNativePlatform());
+    if (!native) { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { showToast("❌ Impression impossible"); } return; }
+    showToast("⏳ Préparation du PDF…");
+    gestionAdminApi("doc_put", { kind: "print", name: doc.title, mime: "text/html", data: btoa(unescape(encodeURIComponent(h))) }).then(function(r) {
+      if (!r || !r.success || !r.id) { showToast("❌ Connexion nécessaire"); return; }
+      var url = "https://sounsouni.pro/doc.html#" + r.id, B = C.Plugins && C.Plugins.Browser;
+      if (B && B.open) B.open({ url: url }); else window.open(url, "_system");
+    });
+  };
+}
 function gestionAdminLoad() {
   state.gxAdmin = state.gxAdmin || { loading: true };
   gestionAdminApi("admin_list").then(function(r) {
@@ -23829,7 +23901,7 @@ function renderAdminDashboard(stats) {
 
   // ---- Grille des modules — cœur de la navigation du centre de contrôle ----
   var tileList = state.adminIsOwner
-    ? ["comptes","vendeurs","versements","gestion","disputes","moderation","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","claude","test"]
+    ? ["comptes","vendeurs","versements","gestion","documents","disputes","moderation","relaisapplications","livreurapplications","quartiers","messagerie","tarifs","pub","apparence","partenaires","international","security","reviews","claude","test"]
     : ["comptes","vendeurs","versements","disputes","moderation","relaisapplications","livreurapplications","quartiers","messagerie","pub","reviews","partenaires"];
   html += '<div class="section-head" style="display:flex;align-items:baseline;justify-content:space-between;margin:20px 0 12px;"><h2 style="font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--mc-dim);font-weight:700;margin:0;">' + t("ad_modules_title") + '</h2></div>';
   html += renderAdminTileGrid(tileList);
@@ -28541,6 +28613,8 @@ root.addEventListener("click", function(e) {
     }
     case "gx-admin-offer": gestionAdminApi("admin_set_plan", { companyId: value, plan: btn.dataset.plan }).then(function(r) { if (!r.success) showToast("❌ " + r.error); state.gxAdmin = null; render(); }); break;
     case "gx-admin-pro": { var gxDays = Number(btn.dataset.days) || 0; if (!gxDays && !confirm("Retirer Gestion Pro à cette entreprise ?")) break; gestionAdminApi("admin_set_pro", { companyId: value, addDays: gxDays }).then(function(r) { showToast(r.success ? (gxDays ? "✅ Gestion Pro activée" : "Gestion Pro retirée") : "❌ " + r.error); state.gxAdmin = null; render(); }); break; }
+    case "adm-doc-open": admDocOpen(value); break;
+    case "adm-docs-reload": state.admDocs = null; render(); break;
     case "gx-admin-add30": gestionAdminApi("admin_set_plan", { companyId: value, addDays: 30 }).then(function(r) { if (!r.success) showToast("❌ " + r.error); state.gxAdmin = null; render(); }); break;
     case "gx-create": gestionCreate(); break;
     case "gx-accept": gestionRespond(value, true); break;

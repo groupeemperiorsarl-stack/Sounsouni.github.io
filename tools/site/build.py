@@ -79,10 +79,10 @@ def journey():
 def cine_hero(portail_mode, kicker, h1_lines, p, cta, bg="img/site/bamako-nuit.webp", on=None):
     h1 = "<br>".join('<span class="split"><span style="animation-delay:%.2fs">%s</span></span>' % (0.15 + i * 0.12, l) for i, l in enumerate(h1_lines))
     return ('<header class="cine-hero"><div class="bg" style="background-image:url(%s)"></div><div class="veil"></div>'
-            '<div class="navx"><div class="wrap">%s</div></div>'
+            '<div class="navx"><div class="wrap">%s</div></div>' + ('' if on == "a-propos.html" else '<div class="aboutrow fadein" style="animation-delay:.3s"><a class="aboutchip" href="a-propos.html"><i class="fa-solid fa-circle-info"></i> À propos de nous</a></div>') +
             '<img class="hero-colis fadein" style="animation-delay:.9s" src="img/site/colis-seul.webp" alt="">'
             '<div class="inner wrap"><div class="k fadein" style="color:var(--glow);animation-delay:.1s">%s</div><h1 style="margin-top:14px">%s</h1>'
-            '<p class="fadein" style="animation-delay:.6s">%s</p><div class="cta fadein" style="animation-delay:.8s">%s</div>' + ('' if on == "a-propos.html" else '<a class="aboutchip fadein" style="animation-delay:1s" href="a-propos.html"><i class="fa-solid fa-circle-info"></i> À propos de nous</a>') + '</div>'
+            '<p class="fadein" style="animation-delay:.6s">%s</p><div class="cta fadein" style="animation-delay:.8s">%s</div>' + '</div>'
             '<div class="scrollcue">Défiler<i></i></div></header>') % (bg, nav(on, portail_mode), kicker, h1, p, cta)
 def portail():
     vt = VIT[0]
