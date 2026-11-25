@@ -6854,6 +6854,7 @@ function digitalOpen(orderId, productId, attempt) {
       save();
     }
     if (o && o.isDigital) { try { settleOrderPayouts(o); } catch (e) {} }
+    if (res.kind === "lessons") { render(); lessonOpen(productId, lessonResumeIdx(findProductById(productId)), orderId); return; }
     state.digitalReady = { url: res.url, kind: res.kind, fileName: res.fileName || "" };
     render();
     var isNative = false; try { isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch (e) {}
@@ -19486,7 +19487,7 @@ function renderOrders() {
     if (o.isDigital && o.paymentStatus === "paid" && o.status !== "Annulée") {
       for (var dgi = 0; dgi < o.items.length; dgi++) {
         var dgp = findProductById(o.items[dgi].productId);
-        var dlink = dgp && dgp.digitalKind === "link";
+        var dlink = dgp && (dgp.digitalKind === "link" || dgp.digitalKind === "lessons");
         html += '<button class="btn-primary" style="width:100%;margin-top:8px;padding:10px 8px;font-size:13px;" data-action="digital-open" data-order="' + o.id + '" data-value="' + esc(o.items[dgi].productId) + '"><i class="fa-solid ' + (dlink ? 'fa-circle-play' : 'fa-download') + '"></i> ' + t(dlink ? "dig_open_link" : "dig_download") + (o.items.length > 1 ? ' — ' + esc(o.items[dgi].name) : '') + '</button>';
       }
     }
@@ -19862,8 +19863,11 @@ function renderDigitalPublishFields(d) {
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;">';
   h += '<button type="button" class="chip ' + (d.digitalKind === "file" ? 'active' : '') + '" style="flex:1 1 130px;white-space:normal;text-align:center;" data-action="set-digital-kind" data-value="file"><i class="fa-solid fa-file-arrow-down"></i> ' + t("dig_pub_kind_file") + '</button>';
   h += '<button type="button" class="chip ' + (d.digitalKind === "link" ? 'active' : '') + '" style="flex:1 1 130px;white-space:normal;text-align:center;" data-action="set-digital-kind" data-value="link"><i class="fa-solid fa-link"></i> ' + t("dig_pub_kind_link") + '</button>';
+  if (d.category === "Formations & Cours en ligne") h += '<button type="button" class="chip ' + (d.digitalKind === "lessons" ? 'active' : '') + '" style="flex:1 1 130px;white-space:normal;text-align:center;" data-action="set-digital-kind" data-value="lessons"><i class="fa-solid fa-chalkboard-user"></i> ' + lt("kind") + '</button>';
   h += '</div>';
-  if (d.digitalKind === "file") {
+  if (d.digitalKind === "lessons") {
+    h += renderLessonsEditor(d);
+  } else if (d.digitalKind === "file") {
     h += '<label class="field-label">' + t("dig_pub_file") + '</label>';
     if (d.digitalUploading) {
       h += '<div style="padding:12px;border-radius:12px;background:var(--bg-body);font-size:12.5px;"><i class="fa-solid fa-spinner fa-spin"></i> ' + t("dig_pub_uploading") + '</div>';
@@ -19907,6 +19911,139 @@ function uploadDigitalFile(file) {
       render(); showToast("✅ " + t("dig_pub_uploaded"));
     }, function() { d.digitalUploading = false; render(); showToast("❌ " + t("dig_err_upload")); });
   });
+}
+// ---------- FORMATION EN LEÇONS (vidéos + PDF dans Cloudflare R2) ----------
+// Le vendeur ajoute ses leçons ; chaque fichier part directement vers le
+// stockage privé (adresse d'envoi signée par le serveur). Le client voit le
+// programme, regarde les leçons gratuites, puis tout le reste après paiement,
+// dans un lecteur intégré (lecture en ligne, pas de téléchargement).
+var LT = {
+  fr: { kind: "Leçons vidéo (dans l'appli)", lesson: "Leçon", title: "Titre de la leçon", video: "Vidéo", pdf: "PDF (facultatif)", add: "Ajouter une leçon", free: "Gratuite (aperçu)", need: "Ajoutez au moins une leçon avec une vidéo ou un PDF.", info: "Ajoutez vos leçons une par une : une vidéo (MP4, 600 Mo max) et, si vous voulez, un PDF. Cochez « Gratuite » pour la leçon de présentation. La formation sera vérifiée par Sounsouni avant d'être en ligne.", choose: "Choisir", replace: "Remplacer", programme: "Programme de la formation", lessons: "leçons", free_badge: "Gratuit", watch: "Regarder", locked: "Après achat", continue: "Continuer la formation", done: "terminées", prev: "Précédente", next: "Suivante", openpdf: "Ouvrir le PDF", loading: "Chargement de la leçon…", err: "Impossible d'ouvrir la leçon. Vérifiez votre connexion.", uploading: "Envoi", buyfirst: "Achetez la formation pour voir cette leçon." },
+  en: { kind: "Video lessons (in the app)", lesson: "Lesson", title: "Lesson title", video: "Video", pdf: "PDF (optional)", add: "Add a lesson", free: "Free (preview)", need: "Add at least one lesson with a video or a PDF.", info: "Add your lessons one by one: a video (MP4, 600 MB max) and, if you like, a PDF. Tick \"Free\" for the introduction lesson. Sounsouni reviews the course before it goes online.", choose: "Choose", replace: "Replace", programme: "Course programme", lessons: "lessons", free_badge: "Free", watch: "Watch", locked: "After purchase", continue: "Continue the course", done: "completed", prev: "Previous", next: "Next", openpdf: "Open the PDF", loading: "Loading the lesson…", err: "Could not open the lesson. Check your connection.", uploading: "Uploading", buyfirst: "Buy the course to watch this lesson." },
+  hi: { kind: "वीडियो पाठ (ऐप में)", lesson: "पाठ", title: "पाठ का शीर्षक", video: "वीडियो", pdf: "PDF (वैकल्पिक)", add: "पाठ जोड़ें", free: "मुफ़्त (झलक)", need: "कम से कम एक पाठ वीडियो या PDF के साथ जोड़ें।", info: "अपने पाठ एक-एक करके जोड़ें: एक वीडियो (MP4, अधिकतम 600 MB) और चाहें तो एक PDF। परिचय पाठ के लिए « मुफ़्त » चुनें। ऑनलाइन होने से पहले Sounsouni जाँच करेगा।", choose: "चुनें", replace: "बदलें", programme: "पाठ्यक्रम", lessons: "पाठ", free_badge: "मुफ़्त", watch: "देखें", locked: "ख़रीदने के बाद", continue: "पाठ्यक्रम जारी रखें", done: "पूरे", prev: "पिछला", next: "अगला", openpdf: "PDF खोलें", loading: "पाठ लोड हो रहा है…", err: "पाठ नहीं खुल सका। अपना कनेक्शन जाँचें।", uploading: "भेजा जा रहा है", buyfirst: "यह पाठ देखने के लिए पाठ्यक्रम ख़रीदें।" }
+};
+function lt(k) { var l = state.language === "en" ? "en" : (state.language === "hi" ? "hi" : "fr"); return (LT[l] && LT[l][k]) || LT.fr[k] || k; }
+function fmtDur(s) { s = Math.round(Number(s) || 0); if (!s) return ""; var m = Math.floor(s / 60), r = s % 60; return m + ":" + (r < 10 ? "0" : "") + r; }
+function renderLessonsEditor(d) {
+  var L = d.lessons = d.lessons || [];
+  var h = '<div style="font-size:11.5px;color:var(--text-dim);line-height:1.5;margin:8px 0;">' + lt("info") + '</div>';
+  L.forEach(function(l, i) {
+    h += '<div class="glass-card" style="padding:10px;margin-bottom:8px;">';
+    h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><b style="font-size:13px;flex:1;">' + lt("lesson") + ' ' + (i + 1) + '</b>';
+    if (i > 0) h += '<button type="button" class="link-btn" aria-label="↑" data-action="lesson-up" data-value="' + i + '"><i class="fa-solid fa-arrow-up"></i></button>';
+    h += '<button type="button" class="link-btn" style="color:var(--danger,#c0392b);" aria-label="×" data-action="lesson-del" data-value="' + i + '"><i class="fa-solid fa-trash"></i></button></div>';
+    h += '<input class="input" placeholder="' + esc(lt("title")) + '" value="' + esc(l.title || "") + '" data-bind="productDraft.lessons.' + i + '.title" />';
+    ["video", "pdf"].forEach(function(w) {
+      var nm = l[w + "Name"] || (l[w] ? "✓" : "");
+      h += '<div style="display:flex;align-items:center;gap:8px;margin-top:6px;"><span style="font-size:12px;font-weight:700;min-width:64px;">' + lt(w) + '</span>';
+      if (l.up === w) h += '<span style="flex:1;font-size:12px;"><i class="fa-solid fa-spinner fa-spin"></i> ' + lt("uploading") + ' ' + (l.pct || 0) + ' %</span>';
+      else {
+        h += '<span style="flex:1;min-width:0;font-size:11.5px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (nm ? '<i class="fa-solid fa-circle-check" style="color:var(--success);"></i> ' + esc(nm) + (w === "video" && l.dur ? ' · ' + fmtDur(l.dur) : '') : '') + '</span>';
+        h += '<span style="position:relative;flex:none;"><span class="chip" style="pointer-events:none;">' + (nm ? lt("replace") : lt("choose")) + '</span><input type="file" accept="' + (w === "video" ? "video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.m4v" : "application/pdf,.pdf") + '" data-action-file="lesson-' + w + '" data-idx="' + i + '" style="position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;" /></span>';
+      }
+      h += '</div>';
+    });
+    h += '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12.5px;cursor:pointer;"><input type="checkbox" ' + (l.free ? 'checked' : '') + ' data-action="lesson-free" data-value="' + i + '" style="width:18px;height:18px;"> ' + lt("free") + '</label>';
+    h += '</div>';
+  });
+  h += '<button type="button" class="btn-secondary" style="width:100%;" data-action="lesson-add"><i class="fa-solid fa-plus"></i> ' + lt("add") + '</button>';
+  return h;
+}
+function uploadLessonFile(i, what, file) {
+  var d = state.productDraft; if (!d || !file || !d.lessons || !d.lessons[i]) return;
+  var l = d.lessons[i];
+  if (!FIREBASE_ENABLED) { showToast(t("toast_payment_unavailable_offline")); return; }
+  if (file.size > 600 * 1024 * 1024) { showToast("❌ " + t("dig_err_too_big")); return; }
+  l.up = what; l.pct = 0; render();
+  if (what === "video") { try { var vu = URL.createObjectURL(file), ve = document.createElement("video"); ve.preload = "metadata"; ve.onloadedmetadata = function() { l.dur = Math.round(ve.duration || 0); URL.revokeObjectURL(vu); }; ve.src = vu; } catch (e) {} }
+  callLigdiFunction("digital-access", { operation: "lesson_upload_url", fileName: file.name, size: file.size }).then(function(res) {
+    if (!res || !res.success) { l.up = null; render(); showToast("❌ " + t(res && res.error === "bad_file_type" ? "dig_err_type" : res && res.error === "file_too_big" ? "dig_err_too_big" : "dig_err_upload")); return; }
+    var x = new XMLHttpRequest();
+    x.open("PUT", res.url, true);
+    x.setRequestHeader("Content-Type", res.contentType || file.type || "application/octet-stream");
+    var lastR = 0;
+    x.upload.onprogress = function(e) { if (e.lengthComputable) { l.pct = Math.round(e.loaded * 100 / e.total); if (Date.now() - lastR > 700) { lastR = Date.now(); render(); } } };
+    x.onload = function() {
+      l.up = null;
+      if (x.status >= 200 && x.status < 300) { l[what] = res.key; l[what + "Name"] = file.name; if (!l.title) l.title = file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").slice(0, 80); showToast("✅ " + t("dig_pub_uploaded")); }
+      else showToast("❌ " + t("dig_err_upload"));
+      render();
+    };
+    x.onerror = function() { l.up = null; render(); showToast("❌ " + t("dig_err_upload")); };
+    x.send(file);
+  });
+}
+function lessonProgress(pid) { try { return JSON.parse(localStorage.getItem("sns_lprog_" + pid) || "{}") || {}; } catch (e) { return {}; } }
+function lessonMarkSeen(pid, i) { try { var pr = lessonProgress(pid); pr[i] = 1; pr.last = i; localStorage.setItem("sns_lprog_" + pid, JSON.stringify(pr)); } catch (e) {} }
+function lessonResumeIdx(p) { var pr = p ? lessonProgress(p.id) : {}; return typeof pr.last === "number" ? pr.last : 0; }
+function renderLessonsProgramme(p, paid) {
+  var L = p.lessonsInfo || [], pr = lessonProgress(p.id), own = state.profile && p.sellerId === state.profile.id;
+  var seen = L.filter(function(x, i) { return pr[i]; }).length, tot = L.reduce(function(a, x) { return a + (Number(x.dur) || 0); }, 0);
+  var h = '<div class="glass-card" style="padding:12px;margin:10px 0;">';
+  h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><i class="fa-solid fa-chalkboard-user" style="color:var(--accent);"></i><b style="flex:1;font-size:14px;">' + lt("programme") + '</b><span style="font-size:11.5px;color:var(--text-dim);">' + L.length + ' ' + lt("lessons") + (tot ? ' · ' + Math.round(tot / 60) + ' min' : '') + '</span></div>';
+  if (paid && L.length) h += '<div style="height:6px;border-radius:3px;background:var(--bg-body);overflow:hidden;margin-bottom:4px;"><div style="height:100%;width:' + Math.round(seen * 100 / L.length) + '%;background:var(--success);"></div></div><div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">' + seen + '/' + L.length + ' ' + lt("done") + '</div>';
+  L.forEach(function(l, i) {
+    var open = l.free || paid || own;
+    h += '<button type="button" ' + (open ? 'data-action="lesson-play" data-value="' + p.id + '" data-idx="' + i + '"' + (paid ? ' data-order="' + paid.id + '"' : '') : 'disabled') + ' style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 4px;border:0;border-top:1px solid var(--border-color);background:none;color:inherit;cursor:' + (open ? 'pointer' : 'default') + ';">';
+    h += '<span style="flex:none;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:' + (pr[i] ? 'var(--success)' : 'var(--bg-body)') + ';color:' + (pr[i] ? '#fff' : 'inherit') + ';">' + (pr[i] ? '<i class="fa-solid fa-check"></i>' : (i + 1)) + '</span>';
+    h += '<span style="flex:1;min-width:0;"><span style="display:block;font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(l.t) + '</span><span style="font-size:11px;color:var(--text-dim);">' + (l.v ? '<i class="fa-solid fa-video"></i> ' + (fmtDur(l.dur) || lt("video")) : '') + (l.pdf ? ' · <i class="fa-solid fa-file-pdf"></i> PDF' : '') + '</span></span>';
+    h += l.free && !paid ? '<span style="flex:none;font-size:10.5px;font-weight:800;color:#fff;background:var(--success);padding:3px 8px;border-radius:999px;">' + lt("free_badge") + '</span>' : (open ? '<i class="fa-solid fa-circle-play" style="color:var(--accent);font-size:20px;"></i>' : '<i class="fa-solid fa-lock" style="color:var(--text-dim);"></i>');
+    h += '</button>';
+  });
+  h += '</div>';
+  return h;
+}
+// Lecteur plein écran, posé au-dessus de l'application (hors render(), pour
+// que la vidéo ne soit jamais coupée par un rafraîchissement de l'écran).
+function lessonOpen(productId, idx, orderId) {
+  var p = findProductById(productId); if (!p) return;
+  var L = p.lessonsInfo || [];
+  if (!state.profile) { showToast(lt("buyfirst")); return; }
+  var old = document.getElementById("lesson-player"); if (old) old.remove();
+  var w = document.createElement("div");
+  w.id = "lesson-player";
+  w.style.cssText = "position:fixed;inset:0;z-index:2147483200;background:#0b0f14;color:#fff;display:flex;flex-direction:column;";
+  document.body.appendChild(w);
+  try { history.pushState({ lessonPlayer: 1 }, ""); } catch (e) {}
+  var close = function() { var v = w.querySelector("video"); if (v) { try { v.pause(); } catch (e) {} } w.remove(); window.removeEventListener("popstate", onPop); render(); };
+  var onPop = function() { close(); };
+  window.addEventListener("popstate", onPop);
+  var show = function(i) {
+    idx = i;
+    var l = L[i] || {}, own = p.sellerId === state.profile.id;
+    var can = l.free || orderId || own;
+    var bs = "border:0;border-radius:10px;padding:10px 12px;font-weight:700;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;";
+    var list = L.map(function(x, j) { var ok = x.free || orderId || own; return '<button data-j="' + j + '" ' + (ok ? '' : 'disabled') + ' style="display:flex;gap:10px;align-items:center;width:100%;text-align:left;padding:10px 12px;border:0;border-bottom:1px solid rgba(255,255,255,.08);background:' + (j === i ? 'rgba(200,255,138,.12)' : 'transparent') + ';color:' + (ok ? '#fff' : '#77808c') + ';font-size:13px;"><b style="width:22px;">' + (j + 1) + '</b><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(x.t) + '</span>' + (ok ? (lessonProgress(p.id)[j] ? '<i class="fa-solid fa-check" style="color:#c8ff8a;"></i>' : '') : '<i class="fa-solid fa-lock"></i>') + '</button>'; }).join("");
+    w.innerHTML = '<div style="display:flex;align-items:center;gap:8px;padding:10px;padding-top:calc(10px + env(safe-area-inset-top));"><button data-k="close" aria-label="Retour" style="' + bs + 'background:rgba(255,255,255,.12);color:#fff;"><i class="fa-solid fa-arrow-left"></i></button><div style="flex:1;min-width:0;"><div style="font-size:11px;color:#9aa4b2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(productDisplayName(p)) + '</div><b style="font-size:14px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (i + 1) + '. ' + esc(l.t || "") + '</b></div></div>'
+      + '<div data-k="stage" style="background:#000;aspect-ratio:16/9;max-height:60vh;display:flex;align-items:center;justify-content:center;color:#9aa4b2;font-size:13px;">' + (can ? '<i class="fa-solid fa-spinner fa-spin"></i>&nbsp;' + lt("loading") : '<i class="fa-solid fa-lock"></i>&nbsp;' + lt("buyfirst")) + '</div>'
+      + '<div style="display:flex;gap:6px;padding:10px;flex-wrap:wrap;"><button data-k="prev" ' + (i > 0 ? '' : 'disabled') + ' style="' + bs + 'background:rgba(255,255,255,.12);color:#fff;"><i class="fa-solid fa-backward-step"></i> ' + lt("prev") + '</button><button data-k="next" ' + (i < L.length - 1 ? '' : 'disabled') + ' style="' + bs + 'background:rgba(255,255,255,.12);color:#fff;">' + lt("next") + ' <i class="fa-solid fa-forward-step"></i></button>' + (l.pdf && can ? '<button data-k="pdf" style="' + bs + 'background:#c8ff8a;color:#0b3d12;"><i class="fa-solid fa-file-pdf"></i> ' + lt("openpdf") + '</button>' : '') + '</div>'
+      + '<div style="flex:1;overflow:auto;border-top:1px solid rgba(255,255,255,.08);">' + list + '</div>';
+    w.querySelector('[data-k="close"]').onclick = function() { try { history.back(); } catch (e) { close(); } };
+    w.querySelector('[data-k="prev"]').onclick = function() { if (idx > 0) show(idx - 1); };
+    w.querySelector('[data-k="next"]').onclick = function() { if (idx < L.length - 1) show(idx + 1); };
+    w.querySelectorAll("[data-j]").forEach(function(b) { b.onclick = function() { show(Number(b.getAttribute("data-j"))); }; });
+    var pb = w.querySelector('[data-k="pdf"]');
+    if (pb) pb.onclick = function() {
+      callLigdiFunction("digital-access", { operation: "lesson_url", productId: p.id, index: idx, orderId: orderId || "", what: "pdf" }).then(function(r) {
+        if (!r || !r.success) { showToast("❌ " + lt("err")); return; }
+        var C = window.Capacitor; if (C && C.Plugins && C.Plugins.Browser && C.isNativePlatform && C.isNativePlatform()) C.Plugins.Browser.open({ url: r.url }); else window.open(r.url, "_blank");
+      });
+    };
+    if (!can) return;
+    if (!l.v) { w.querySelector('[data-k="stage"]').innerHTML = '<i class="fa-solid fa-file-pdf" style="font-size:40px;color:#c8ff8a;"></i>'; lessonMarkSeen(p.id, i); return; }
+    callLigdiFunction("digital-access", { operation: "lesson_url", productId: p.id, index: i, orderId: orderId || "", what: "video" }).then(function(r) {
+      if (idx !== i || !document.body.contains(w)) return;
+      var st = w.querySelector('[data-k="stage"]');
+      if (!r || !r.success) { st.innerHTML = '<span style="padding:16px;text-align:center;">❌ ' + (r && r.error === "not_paid" ? lt("buyfirst") : lt("err")) + '</span>'; return; }
+      st.innerHTML = '<video controls playsinline autoplay controlsList="nodownload noplaybackrate" disablePictureInPicture oncontextmenu="return false" style="width:100%;height:100%;background:#000;"></video>';
+      var v = st.querySelector("video");
+      v.src = r.url;
+      v.addEventListener("timeupdate", function() { if (v.duration && v.currentTime / v.duration > 0.8) lessonMarkSeen(p.id, i); });
+      v.addEventListener("ended", function() { lessonMarkSeen(p.id, i); if (idx < L.length - 1 && (L[idx + 1].free || orderId || p.sellerId === state.profile.id)) show(idx + 1); });
+      try { var pr0 = lessonProgress(p.id); pr0.last = i; localStorage.setItem("sns_lprog_" + p.id, JSON.stringify(pr0)); } catch (e) {}
+    });
+  };
+  show(Math.max(0, Math.min(idx || 0, L.length - 1)));
 }
 // Enregistre côté serveur (zone protégée) le fichier ou le lien du produit.
 function saveDigitalSecret(productId, sec, attempt) {
@@ -25950,8 +26087,10 @@ function renderProductModal() {
     html += '<button class="btn-primary" style="margin-top:10px;" data-action="reserve-service" data-value="' + p.id + '" ' + (p.stock <= 0 ? 'disabled' : '') + '><i class="fa-solid fa-calendar-check"></i> ' + t("pd_reserve") + '</button>';
   } else if (isDigitalProduct(p)) {
     var dpaid = digitalPaidOrderFor(p.id);
-    html += '<div class="glass-card" style="padding:12px;margin:10px 0;font-size:12px;line-height:1.5;"><i class="fa-solid fa-cloud-arrow-down" style="color:var(--success);"></i> ' + t(p.digitalKind === "link" ? "dig_pd_info_link" : "dig_pd_info_file") + '</div>';
-    if (dpaid) html += '<button class="btn-primary" style="margin-top:6px;" data-action="digital-open" data-order="' + dpaid.id + '" data-value="' + p.id + '"><i class="fa-solid ' + (p.digitalKind === "link" ? 'fa-circle-play' : 'fa-download') + '"></i> ' + t(p.digitalKind === "link" ? "dig_open_link" : "dig_download") + '</button>';
+    if (p.digitalKind === "lessons") html += renderLessonsProgramme(p, dpaid);
+    else html += '<div class="glass-card" style="padding:12px;margin:10px 0;font-size:12px;line-height:1.5;"><i class="fa-solid fa-cloud-arrow-down" style="color:var(--success);"></i> ' + t(p.digitalKind === "link" ? "dig_pd_info_link" : "dig_pd_info_file") + '</div>';
+    if (dpaid && p.digitalKind === "lessons") html += '<button class="btn-primary" style="margin-top:6px;" data-action="lesson-play" data-order="' + dpaid.id + '" data-value="' + p.id + '" data-idx="' + lessonResumeIdx(p) + '"><i class="fa-solid fa-circle-play"></i> ' + lt("continue") + '</button>';
+    else if (dpaid) html += '<button class="btn-primary" style="margin-top:6px;" data-action="digital-open" data-order="' + dpaid.id + '" data-value="' + p.id + '"><i class="fa-solid ' + (p.digitalKind === "link" ? 'fa-circle-play' : 'fa-download') + '"></i> ' + t(p.digitalKind === "link" ? "dig_open_link" : "dig_download") + '</button>';
     else html += '<button class="btn-primary" style="margin-top:6px;" data-action="buy-digital" data-value="' + p.id + '"><i class="fa-solid fa-bolt"></i> ' + t("dig_buy_btn") + ' — ' + money(getTieredPrice(p, 1), p.country, state.profile ? state.profile.country : null) + '</button>';
   } else {
     html += '<label class="field-label">' + t("pd_quantity") + '</label>';
@@ -26689,6 +26828,7 @@ function handleFileInput(el) {
     if (!files || files.length === 0) return;
     var action = el.dataset.actionFile;
     if (action === "digital-file") { uploadDigitalFile(files[0]); try { el.value = ""; } catch (e) {} return; }
+    if (action === "lesson-video" || action === "lesson-pdf") { uploadLessonFile(Number(el.dataset.idx), action === "lesson-pdf" ? "pdf" : "video", files[0]); try { el.value = ""; } catch (e) {} return; }
 
     if (action === "shop-cover-photo" || action === "shop-profile-photo" || action === "personal-avatar-photo") {
       var shopPhotoFile = files[0];
@@ -26983,7 +27123,14 @@ function submitProductDraft() {
     if (digitalDraft) {
       d.isQuantifiable = false; d.colors = []; d.sizes = [];
       if (d.digitalUploading) { showToast(t("dig_err_wait_upload")); return; }
-      if (d.digitalKind === "link") {
+      if (d.digitalKind === "lessons") {
+        var Lz = (d.lessons || []);
+        if (Lz.some(function(l) { return l.up; })) { showToast(t("dig_err_wait_upload")); return; }
+        var Lok = Lz.filter(function(l) { return l.video || l.pdf; });
+        if (!Lok.length) { showToast("❌ " + lt("need")); return; }
+        digitalSecret = { kind: "lessons", lessons: Lok.map(function(l, i) { return { title: String(l.title || "").trim() || (lt("lesson") + " " + (i + 1)), video: l.video || "", pdf: l.pdf || "", free: !!l.free, dur: l.dur || 0 }; }) };
+        d.lessonsInfo = digitalSecret.lessons.map(function(l) { return { t: l.title, free: l.free, dur: l.dur, v: !!l.video, pdf: !!l.pdf }; });
+      } else if (d.digitalKind === "link") {
         var dl = String(d.digitalLink || "").trim();
         if (!/^https:\/\/\S{4,}$/.test(dl)) { showToast("❌ " + t("dig_err_link")); return; }
         digitalSecret = { kind: "link", link: dl };
@@ -27086,6 +27233,8 @@ function submitProductDraft() {
       if (d[fn] !== undefined && d[fn] !== '') product[fn] = d[fn];
     }
 
+    // Formation en leçons : contrôlée par l'administration avant d'être visible.
+    if (digitalSecret && digitalSecret.kind === "lessons" && !editing && !(state.profile && (state.profile.id === "admin_owner" || state.profile.role === "admin"))) product.moderationStatus = "pending";
     state.pendingDigitalSecret = digitalSecret ? { productId: product.id, sec: digitalSecret } : null;
     if (!editing) {
       // Nouvelle publication : on montre d'abord le rappel de commission
@@ -27170,7 +27319,7 @@ function finalizeProductSave(product, editing) {
 // fois pour sauvegarder un produit ET pour recharger le brouillon quand on
 // modifie un produit existant (les deux doivent toujours rester synchronisées).
 var SECTOR_SPECIFIC_FIELD_NAMES = ['tempsPreparation', 'ingredients', 'disponibleAujourdhui', 'provenance',
-  'digitalAuthor', 'digitalLanguage', 'digitalLength', 'digitalFormat', 'digitalLevel', 'digitalPlatform', 'digitalVersion', 'digitalLicense', 'digitalKind', 'digitalFileName', 'digitalFileSize',
+  'digitalAuthor', 'digitalLanguage', 'digitalLength', 'digitalFormat', 'digitalLevel', 'digitalPlatform', 'digitalVersion', 'digitalLicense', 'digitalKind', 'digitalFileName', 'digitalFileSize', 'lessonsInfo',
   'dureeFormation', 'niveauRequis', 'diplomeDelivre', 'modeFormation', 'prochaineRentree',
   'dureeActe', 'surRendezVous', 'dureeSoin', 'serviceADomicile',
   'typeServiceAuto', 'delaiIntervention', 'garantie', 'capacite', 'petitDejeuner',
@@ -27201,7 +27350,7 @@ var SECTOR_SPECIFIC_FIELD_NAMES = ['tempsPreparation', 'ingredients', 'disponibl
 // avaient une valeur par défaut non vide — d'où des fiches produit avec des
 // caractéristiques répétées ou hors sujet (ex: "Fait main" sur un champignon).
 function getRelevantSectorFields(sellerType, sellerSector, category) {
-  if (isDigitalCategory(category)) return (DIGITAL_FIELDS_BY_CAT[category] || []).concat(["digitalKind", "digitalFileName", "digitalFileSize"]);
+  if (isDigitalCategory(category)) return (DIGITAL_FIELDS_BY_CAT[category] || []).concat(["digitalKind", "digitalFileName", "digitalFileSize", "lessonsInfo"]);
   if (sellerType === "restaurant") return ["tempsPreparation", "ingredients", "disponibleAujourdhui"];
   if (sellerType === "agriculteur") return ["provenance"];
   if (sellerType === "international") return ["moq", "poidsKg", "volumeM3", "dimL", "dimW", "dimH", "transportModes", "materiau", "garantie"];
@@ -27280,6 +27429,7 @@ function startEditProduct(productId) {
       dd.digitalKind = res.secret.kind;
       if (res.secret.kind === "link" && !dd.digitalLink) dd.digitalLink = res.secret.link || "";
       if (res.secret.kind === "file") { dd.digitalFileName = res.secret.fileName || dd.digitalFileName; dd.digitalFileSize = res.secret.size || dd.digitalFileSize; }
+      if (res.secret.kind === "lessons") dd.lessons = (res.secret.lessons || []).map(function(l) { return { title: l.title, video: l.video || "", pdf: l.pdf || "", free: !!l.free, dur: l.dur || 0, videoName: l.video ? "✓" : "", pdfName: l.pdf ? "✓" : "" }; });
       render();
     });
   }
@@ -32213,7 +32363,12 @@ root.addEventListener("click", function(e) {
     case "digital-open": digitalOpen(btn.dataset.order, value); break;
     case "ligdi-digital-open": state.ligdiResult = null; digitalOpen(btn.dataset.order, value); break;
     case "digital-ready-close": state.digitalReady = null; render(); break;
-    case "set-digital-kind": if (state.productDraft) { state.productDraft.digitalKind = value === "link" ? "link" : "file"; render(); } break;
+    case "set-digital-kind": if (state.productDraft) { state.productDraft.digitalKind = value === "link" ? "link" : value === "lessons" ? "lessons" : "file"; if (value === "lessons" && !(state.productDraft.lessons || []).length) state.productDraft.lessons = [{ title: "", free: true }]; render(); } break;
+    case "lesson-add": if (state.productDraft) { (state.productDraft.lessons = state.productDraft.lessons || []).push({ title: "", free: false }); render(); } break;
+    case "lesson-del": if (state.productDraft && state.productDraft.lessons) { state.productDraft.lessons.splice(Number(value), 1); render(); } break;
+    case "lesson-up": if (state.productDraft && state.productDraft.lessons && Number(value) > 0) { var Ls = state.productDraft.lessons, li0 = Number(value); var tmpL = Ls[li0 - 1]; Ls[li0 - 1] = Ls[li0]; Ls[li0] = tmpL; render(); } break;
+    case "lesson-free": if (state.productDraft && state.productDraft.lessons) { var Lf = state.productDraft.lessons[Number(value)]; if (Lf) { Lf.free = !Lf.free; render(); } } break;
+    case "lesson-play": lessonOpen(value, Number(btn.dataset.idx || 0), btn.dataset.order || ""); break;
     case "submit-product": submitProductDraft(); break;
     case "confirm-publish-product": {
       if (state.pendingProductPublish) finalizeProductSave(state.pendingProductPublish, false);
