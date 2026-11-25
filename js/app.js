@@ -12643,6 +12643,8 @@ var lastHistoryOverlayKey = null;
 // l'emporte — les overlays "flottants" comme le chat ou la visionneuse
 // d'image passent avant les pages de fond).
 var OVERLAY_REGISTRY = [
+  { key: "vitrine", isOpen: function () { return !!state.vitrineDraft; }, close: function () { state.vitrineDraft = null; } },
+  { key: "metaCatalog", isOpen: function () { return !!state.showMetaCatalog; }, close: function () { state.showMetaCatalog = false; } },
   { key: "lightbox", isOpen: function () { return state.lightboxOpen; }, close: function () { state.lightboxOpen = false; } },
   { key: "chat", isOpen: function () { return state.chatOpen; }, close: function () { state.chatOpen = false; } },
   { key: "scanner", isOpen: function () { return state.showScannerModal; }, close: function () { state.showScannerModal = false; state.scannerSearchMode = false; } },
@@ -14697,7 +14699,7 @@ function renderVitrineModal() {
   var link = "https://sounsouni.pro/" + slug;
   var live = window._vtLive && window._vtLive.boutiques && window._vtLive.boutiques[slug] === me.id;
   var html = '<div class="modal-overlay" data-action="close-vitrine"><div class="modal-sheet">';
-  html += '<button class="modal-close" data-action="close-vitrine"><i class="fa-solid fa-xmark"></i></button>';
+  html += '<div style="position:sticky;top:-1px;z-index:5;display:flex;align-items:center;gap:10px;margin:-6px -4px 12px;padding:8px 4px;background:var(--bg-card,#fff);border-bottom:1px solid var(--border-color);"><button type="button" class="link-btn" style="margin:0;font-weight:700;font-size:15px;display:inline-flex;align-items:center;gap:8px;padding:8px 4px;" data-action="close-vitrine"><i class="fa-solid fa-arrow-left"></i> ' + t("seller_back") + '</button></div>';
   html += '<div class="section-title" style="margin-bottom:8px;"><i class="fa-solid fa-store"></i> ' + vt("title") + '</div>';
   html += '<div style="font-size:12.5px;color:var(--text-dim);line-height:1.5;margin-bottom:14px;">' + vt("intro") + '</div>';
   html += '<label class="field-label" style="margin-top:0;">' + vt("addr") + '</label>';
@@ -14745,7 +14747,7 @@ function renderMetaCatalogModal() {
   var me = state.profile; if (!me) return "";
   var url = metaCatalogUrl(me.id);
   var html = '<div class="modal-overlay" data-action="close-meta-catalog"><div class="modal-sheet">';
-  html += '<button class="modal-close" data-action="close-meta-catalog"><i class="fa-solid fa-xmark"></i></button>';
+  html += '<div style="position:sticky;top:-1px;z-index:5;display:flex;align-items:center;gap:10px;margin:-6px -4px 12px;padding:8px 4px;background:var(--bg-card,#fff);border-bottom:1px solid var(--border-color);"><button type="button" class="link-btn" style="margin:0;font-weight:700;font-size:15px;display:inline-flex;align-items:center;gap:8px;padding:8px 4px;" data-action="close-meta-catalog"><i class="fa-solid fa-arrow-left"></i> ' + t("seller_back") + '</button></div>';
   html += '<div class="section-title" style="margin-bottom:10px;"><i class="fa-brands fa-facebook"></i> ' + t("meta_title") + '</div>';
   html += '<div style="font-size:12.5px;color:var(--text-dim);line-height:1.5;margin-bottom:12px;">' + t("meta_intro") + '</div>';
   html += '<div style="font-weight:700;font-size:13px;margin-bottom:6px;">' + t("meta_link") + '</div>';
