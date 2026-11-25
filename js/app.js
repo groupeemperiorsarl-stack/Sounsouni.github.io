@@ -34102,7 +34102,7 @@ if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App
   window.Capacitor.Plugins.App.addListener("appStateChange", function(st) {
     if (!st) return;
     if (!st.isActive) { snsMarkHidden(); return; }
-    // 5 minutes ou plus d'absence : la pomme cannelle ; sinon la mascotte.
+    // 2 heures ou plus d'absence : le grand écran d'accueil ; sinon la mascotte.
     var away = snsAwayMs(); _snsHiddenAt = 0;
     runBackgroundResync({ splash: away >= SNS_AWAY_SPLASH_MS });
   });
@@ -34183,7 +34183,13 @@ function renderSplashScreen() {
 // mise à l'échelle de l'écran ; ciel et terre débordent sur les côtés.
 var SNS_SP_IMG = { fruit: "img/e/16fcc21b503f.webp", leaf: "img/e/46edff4ff165.webp", sound: "img/e/83d96455068c.mp3", video: "img/e/dabe307e121f.mp4", poster: "img/e/9e38dc9ad8bd.webp", end: "img/e/e58989f1d2f9.webp" };
 var SNS_SPLASH_MIN_MS = 8000;
-var SNS_AWAY_SPLASH_MS = 5 * 60 * 1000;
+// Le grand écran d'accueil (marché animé, 8 s) ne se rejoue qu'après 2 heures
+// d'absence. En dessous : la petite mascotte seulement, le temps du chargement.
+var SNS_AWAY_SPLASH_MS = 2 * 60 * 60 * 1000;
+function snsLastSeen() { var a = 0, b = 0; try { a = Number(localStorage.getItem("sns_last_seen")) || 0; b = Number(localStorage.getItem("sns_hidden_at")) || 0; } catch (e) {} return Math.max(a, b); }
+function snsMarkSeen() { try { localStorage.setItem("sns_last_seen", String(Date.now())); } catch (e) {} }
+setInterval(function () { if (document.visibilityState !== "hidden") snsMarkSeen(); }, 60000);
+window.addEventListener("pagehide", snsMarkSeen);
 function snsSplashHtml(asOverlay) {
   var letters = "", w = "Sounsouni";
   for (var i = 0; i < w.length; i++) letters += "<span>" + w.charAt(i) + "</span>";
@@ -34363,7 +34369,7 @@ function snsMarkHidden() { _snsHiddenAt = Date.now(); try { localStorage.setItem
 function snsAwayMs() { var h = _snsHiddenAt; if (!h) { try { h = Number(localStorage.getItem("sns_hidden_at")) || 0; } catch (e) {} } return h ? Date.now() - h : 0; }
 document.addEventListener("visibilitychange", function () {
   if (document.visibilityState === "hidden") { snsMarkHidden(); return; }
-  // Site et Windows (l'application Android passe par appStateChange) : retour après 5 min ou plus.
+  // Site et Windows (l'application Android passe par appStateChange) : retour après 2 heures ou plus.
   var isNative = false; try { isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch (e) {}
   if (isNative || typeof _splashFinished === "undefined" || !_splashFinished) return;
   if (snsAwayMs() >= SNS_AWAY_SPLASH_MS) { _snsHiddenAt = 0; runBackgroundResync({ splash: true }); }
@@ -34445,10 +34451,19 @@ var _splashAppDataReady = false;
 var _splashFinished = false;
 
 applyScaleMotif();
-root.innerHTML = renderSplashScreen();
-snsSplashStart(root.querySelector(".sns-sp"));
-setTimeout(snsSplashSound, 150);
-setTimeout(function () { var sp = document.querySelector("#root .sns-sp"); if (sp && !_splashFinished) sp.classList.add("sns-sp-isslow"); }, 15000);
+// Retour rapide (moins de 2 heures depuis la dernière utilisation) : pas de
+// grand écran d'accueil, juste la mascotte pendant le chargement.
+var SNS_QUICK_BOOT = (function () { var l = snsLastSeen(); return l > 0 && Date.now() - l < SNS_AWAY_SPLASH_MS; })();
+snsMarkSeen();
+if (SNS_QUICK_BOOT) {
+  root.innerHTML = '<div class="splash-screen" style="background:var(--bg-body,#fff);"></div>';
+  showUploadLoader();
+} else {
+  root.innerHTML = renderSplashScreen();
+  snsSplashStart(root.querySelector(".sns-sp"));
+  setTimeout(snsSplashSound, 150);
+  setTimeout(function () { var sp = document.querySelector("#root .sns-sp"); if (sp && !_splashFinished) sp.classList.add("sns-sp-isslow"); }, 15000);
+}
   if (window.__bootMark) window.__bootMark("logo affiché");
 refreshAutoExchangeRateIfNeeded();
 
@@ -35188,6 +35203,7 @@ function trySplashFinish() {
   if (_splashFinished) return;
   if (_splashMinTimeDone && _splashAppDataReady) {
     _splashFinished = true;
+    if (SNS_QUICK_BOOT) { try { hideUploadLoader(); } catch (eQ) {} }
     // Copie figée de l'écran posée par-dessus, qui s'efface en douceur pendant que l'app s'affiche dessous.
     try { var spOld = document.querySelector("#root .sns-sp"); if (spOld && spOld.classList.contains("sns-sp-v")) { spOld.classList.add("sns-sp-ov", "sns-sp-static"); document.body.appendChild(spOld); setTimeout(function () { snsSplashFadeOut(spOld); }, 60); } else if (spOld) { var spCopy = spOld.cloneNode(true); spCopy.classList.add("sns-sp-ov", "sns-sp-static"); document.body.appendChild(spCopy); var cvO = spOld.querySelectorAll("canvas"), cvN = spCopy.querySelectorAll("canvas"); for (var ci = 0; ci < cvO.length; ci++) { try { cvN[ci].width = cvO[ci].width; cvN[ci].height = cvO[ci].height; cvN[ci].getContext("2d").drawImage(cvO[ci], 0, 0); } catch (eC) {} } setTimeout(function () { snsSplashFadeOut(spCopy); }, 60); } } catch (eFade) {}
     // Chaque étape ci-dessous est isolée : si l'une plante, on l'enregistre
@@ -35248,7 +35264,7 @@ setTimeout(function() {
   }
 }, 15000);
 
-setTimeout(function() { _splashMinTimeDone = true; trySplashFinish(); }, SNS_SPLASH_MIN_MS);
+setTimeout(function() { _splashMinTimeDone = true; trySplashFinish(); }, SNS_QUICK_BOOT ? 0 : SNS_SPLASH_MIN_MS);
 
 function bootAppWithLocalData() {
   if (window.__bootMark) window.__bootMark("démarrage des données");
