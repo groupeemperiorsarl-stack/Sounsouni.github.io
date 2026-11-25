@@ -13443,6 +13443,7 @@ function buildHTML() {
   if (state.showNotifPanel) html += renderNotifPanel();
   if (state.showRoleMenu) html += renderRoleMenuModal();
   if (state.showMetaCatalog) html += renderMetaCatalogModal();
+  if (state.vitrineDraft) html += renderVitrineModal();
   if (state.showVendorHub) html += renderVendorHubModal();
   if (state.showProfileScreen) html += renderProfileModal();
   html += renderContractGate();
@@ -14652,6 +14653,93 @@ function renderGestionRoleSection() {
 // Le fichier c/<boutique>.csv est fabriqué par GitHub toutes les 10 min
 // (tools/make-share-pages.mjs) : rien sur Supabase. Le vendeur colle le lien
 // une fois dans Meta Commerce Manager. Pixel Meta facultatif (metaPixelId).
+// ---------- MA VITRINE : la page de la boutique sur sounsouni.pro/<nom> ----------
+// Le vendeur choisit son adresse, un des 5 modèles et sa couleur. Ces choix
+// partent dans son profil (champ « vitrine », public) ; le site fabrique la
+// page toutes les 10 minutes (tools/make-vitrines.mjs), dès 3 articles en ligne.
+var VT_THEMES = [
+  { id: "classique", c: ["#1b5e20", "#0f5c6e", "#8a3b12", "#5b2a86"], bg: "#f4f7f2", fg: "#17251a" },
+  { id: "elegance", c: ["#d9b46a", "#e8e1d3", "#c98a6b"], bg: "#0e0d0b", fg: "#efe7d6" },
+  { id: "wax", c: ["#d2541f", "#b8185a", "#1d4fa3", "#6a2c91"], bg: "#fff6e8", fg: "#2b1a0e" },
+  { id: "minimal", c: ["#111111", "#1b5e20", "#1d4fa3", "#b8185a"], bg: "#ffffff", fg: "#111111" },
+  { id: "nuit", c: ["#c8ff8a", "#7cc7ff", "#ffb86b", "#ff8ad8"], bg: "#0b1220", fg: "#e8edf6" }
+];
+var VT_TXT = {
+  fr: { btn: "Ma vitrine en ligne", title: "Ma vitrine en ligne", intro: "Une belle page pour votre boutique, à partager sur WhatsApp, Facebook ou TikTok. Les clients y voient vos articles et commandent par Sounsouni.", addr: "Adresse de votre vitrine", taken: "Cette adresse est déjà prise : choisissez-en une autre.", short: "Au moins 3 lettres ou chiffres.", model: "Choisissez un modèle", color: "Couleur principale", bio: "Présentation de la boutique", bioPh: "Ex. : Mode femme et enfant, sacs et accessoires. Livraison rapide à Bamako.", on: "Vitrine visible sur internet", save: "Enregistrer", open: "Voir ma vitrine", copy: "Copier le lien", copied: "Lien copié", saved: "Vitrine enregistrée. La page est mise à jour dans 10 minutes environ.", min: "Votre vitrine apparaîtra dès que vous aurez au moins 3 articles en ligne.", wait: "Vitrine en préparation : revenez dans quelques minutes.", m_classique: "Classique", m_elegance: "Élégance", m_wax: "Wax coloré", m_minimal: "Minimal", m_nuit: "Moderne sombre" },
+  en: { btn: "My online storefront", title: "My online storefront", intro: "A beautiful page for your shop to share on WhatsApp, Facebook or TikTok. Customers see your items and order through Sounsouni.", addr: "Your storefront address", taken: "This address is already taken: choose another one.", short: "At least 3 letters or digits.", model: "Choose a design", color: "Main colour", bio: "Shop description", bioPh: "E.g. Women's and kids' fashion, bags and accessories. Fast delivery in Bamako.", on: "Storefront visible online", save: "Save", open: "View my storefront", copy: "Copy link", copied: "Link copied", saved: "Storefront saved. The page updates in about 10 minutes.", min: "Your storefront will appear once you have at least 3 items online.", wait: "Storefront being prepared: come back in a few minutes.", m_classique: "Classic", m_elegance: "Elegance", m_wax: "Colourful wax", m_minimal: "Minimal", m_nuit: "Modern dark" },
+  hi: { btn: "मेरी ऑनलाइन दुकान", title: "मेरी ऑनलाइन दुकान", intro: "आपकी दुकान के लिए एक सुंदर पेज, WhatsApp, Facebook या TikTok पर साझा करने के लिए। ग्राहक आपके सामान देखते हैं और Sounsouni से ऑर्डर करते हैं।", addr: "आपकी दुकान का पता", taken: "यह पता पहले से लिया गया है: दूसरा चुनें।", short: "कम से कम 3 अक्षर या अंक।", model: "डिज़ाइन चुनें", color: "मुख्य रंग", bio: "दुकान का परिचय", bioPh: "जैसे: महिलाओं और बच्चों के कपड़े, बैग। बामाको में तेज़ डिलीवरी।", on: "दुकान इंटरनेट पर दिखे", save: "सहेजें", open: "मेरी दुकान देखें", copy: "लिंक कॉपी करें", copied: "लिंक कॉपी हुआ", saved: "दुकान सहेजी गई। पेज लगभग 10 मिनट में अपडेट होगा।", min: "कम से कम 3 सामान ऑनलाइन होने पर आपकी दुकान दिखेगी।", wait: "दुकान तैयार हो रही है: कुछ मिनट बाद देखें।", m_classique: "क्लासिक", m_elegance: "एलिगेंस", m_wax: "रंगीन वैक्स", m_minimal: "मिनिमल", m_nuit: "मॉडर्न डार्क" }
+};
+function vt(k) { var l = state.language === "en" ? "en" : (state.language === "hi" ? "hi" : "fr"); return (VT_TXT[l] && VT_TXT[l][k]) || VT_TXT.fr[k] || k; }
+function vtSlug(s) {
+  return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/^boutique\s+de\s+/, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "");
+}
+var VT_RESERVED = ["index", "services", "logistique", "a-propos", "partenaires", "privacy", "doc", "404", "p", "c", "site", "img", "js", "css", "admin", "app", "boutique", "boutiques", "marche", "sounsouni", "api", "www", "aide", "contact", "guides", "offline", "sw", "manifest"];
+function vtSlugTaken(slug) {
+  if (VT_RESERVED.indexOf(slug) !== -1) return true;
+  var me = state.profile && state.profile.id;
+  var live = (window._vtLive && window._vtLive.boutiques) || {};
+  if (live[slug] && live[slug] !== me) return true;
+  return (state.accounts || []).some(function(a) { return a && a.id !== me && a.shopName && ((a.vitrine && a.vitrine.slug) || vtSlug(a.shopName)) === slug; });
+}
+function vtLoadLive() {
+  if (window._vtLiveLoading) return; window._vtLiveLoading = true;
+  fetch("https://sounsouni.pro/site/vitrines.json?t=" + Date.now()).then(function(r) { return r.json(); }).then(function(j) { window._vtLive = j; if (state.vitrineDraft) render(); }).catch(function() {}).finally(function() { window._vtLiveLoading = false; });
+}
+function vtMyCount() {
+  var me = state.profile && state.profile.id;
+  return (state.products || []).filter(function(p) { return p && p.sellerId === me && !p.banned && !p.deleted && !p.hidden && p.moderationStatus !== "pending" && p.moderationStatus !== "rejected" && Number(p.price) > 0; }).length;
+}
+function renderVitrineModal() {
+  var d = state.vitrineDraft, me = state.profile; if (!me) return "";
+  var slug = vtSlug(d.slug), bad = slug.length < 3 ? vt("short") : (vtSlugTaken(slug) ? vt("taken") : "");
+  var th = VT_THEMES.filter(function(x) { return x.id === d.theme; })[0] || VT_THEMES[0];
+  var link = "https://sounsouni.pro/" + slug;
+  var live = window._vtLive && window._vtLive.boutiques && window._vtLive.boutiques[slug] === me.id;
+  var html = '<div class="modal-overlay" data-action="close-vitrine"><div class="modal-sheet">';
+  html += '<button class="modal-close" data-action="close-vitrine"><i class="fa-solid fa-xmark"></i></button>';
+  html += '<div class="section-title" style="margin-bottom:8px;"><i class="fa-solid fa-store"></i> ' + vt("title") + '</div>';
+  html += '<div style="font-size:12.5px;color:var(--text-dim);line-height:1.5;margin-bottom:14px;">' + vt("intro") + '</div>';
+  html += '<label class="field-label" style="margin-top:0;">' + vt("addr") + '</label>';
+  html += '<div style="display:flex;align-items:center;border:1.5px solid ' + (bad ? 'var(--danger,#c0392b)' : 'var(--border-color)') + ';border-radius:12px;overflow:hidden;background:var(--bg-card,#fff);"><span style="padding:0 0 0 12px;font-size:13px;color:var(--text-dim);white-space:nowrap;">sounsouni.pro/</span>';
+  html += '<input class="input" id="vt-slug" maxlength="40" style="border:0;margin:0;flex:1 1 auto;min-width:0;width:auto;padding-left:2px;" value="' + esc(d.slug) + '" data-vt="slug" /></div>';
+  if (bad) html += '<div style="font-size:12px;color:var(--danger,#c0392b);margin-top:4px;">' + bad + '</div>';
+  html += '<label class="field-label">' + vt("model") + '</label><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;">';
+  VT_THEMES.forEach(function(x) {
+    var on = x.id === th.id;
+    html += '<button type="button" data-action="vt-theme" data-value="' + x.id + '" style="cursor:pointer;border-radius:14px;padding:0;overflow:hidden;border:2.5px solid ' + (on ? 'var(--primary,#2e7d32)' : 'transparent') + ';background:' + x.bg + ';color:' + x.fg + ';text-align:left;">';
+    html += '<div style="height:34px;background:' + (x.id === "elegance" || x.id === "minimal" || x.id === "nuit" ? x.bg : x.c[0]) + ';display:flex;align-items:flex-end;padding:4px 6px;"><span style="width:18px;height:18px;border-radius:5px;background:' + (x.id === "nuit" ? x.c[0] : x.id === "elegance" ? 'transparent;border:1px solid ' + x.c[0] : '#fff') + ';"></span></div>';
+    html += '<div style="padding:6px 7px 8px;font-size:11.5px;font-weight:700;">' + vt("m_" + x.id) + (on ? ' ✓' : '') + '</div></button>';
+  });
+  html += '</div><label class="field-label">' + vt("color") + '</label><div style="display:flex;gap:10px;flex-wrap:wrap;">';
+  th.c.forEach(function(c) {
+    var on = (d.color || th.c[0]) === c;
+    html += '<button type="button" aria-label="' + c + '" data-action="vt-color" data-value="' + c + '" style="width:40px;height:40px;border-radius:50%;cursor:pointer;background:' + c + ';border:3px solid ' + (on ? 'var(--text-primary)' : 'var(--border-color)') + ';"></button>';
+  });
+  html += '</div><label class="field-label">' + vt("bio") + '</label>';
+  html += '<textarea class="input" id="vt-bio" rows="3" maxlength="400" style="resize:vertical;" placeholder="' + esc(vt("bioPh")) + '" data-vt="bio">' + esc(d.bio) + '</textarea>';
+  html += '<label style="display:flex;align-items:center;gap:10px;margin:12px 0;font-size:13.5px;cursor:pointer;"><input type="checkbox" id="vt-on" data-vt="on"' + (d.on ? ' checked' : '') + ' style="width:20px;height:20px;"> ' + vt("on") + '</label>';
+  if (vtMyCount() < 3) html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;"><i class="fa-solid fa-circle-info"></i> ' + vt("min") + '</div>';
+  html += '<button class="btn-primary" style="margin-bottom:10px;" data-action="vt-save"' + (bad ? ' disabled' : '') + '><i class="fa-solid fa-floppy-disk"></i> ' + vt("save") + '</button>';
+  html += '<div style="display:flex;gap:8px;"><button class="btn-secondary" style="flex:1;min-width:0;" data-action="vt-open" data-value="' + esc(link) + '"><i class="fa-solid fa-arrow-up-right-from-square"></i> ' + vt("open") + '</button>';
+  html += '<button class="btn-secondary" style="flex:1;min-width:0;" data-action="vt-copy" data-value="' + esc(link) + '"><i class="fa-solid fa-copy"></i> ' + vt("copy") + '</button></div>';
+  if (!live && window._vtLive) html += '<div style="font-size:11.5px;color:var(--text-dim);margin-top:8px;text-align:center;">' + vt("wait") + '</div>';
+  html += '</div></div>';
+  return html;
+}
+function vtReadInputs() {
+  var d = state.vitrineDraft; if (!d) return;
+  var s = document.getElementById("vt-slug"), b = document.getElementById("vt-bio"), o = document.getElementById("vt-on");
+  if (s) d.slug = s.value; if (b) d.bio = b.value; if (o) d.on = !!o.checked;
+}
+document.addEventListener("input", function(e) {
+  var k = e.target && e.target.getAttribute && e.target.getAttribute("data-vt");
+  if (!k || !state.vitrineDraft) return;
+  if (k === "slug") {
+    state.vitrineDraft.slug = e.target.value;
+    clearTimeout(window._vtT); window._vtT = setTimeout(function() { var pos = e.target.selectionStart; render(); var n = document.getElementById("vt-slug"); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (x) {} } }, 500);
+  } else if (k === "bio") state.vitrineDraft.bio = e.target.value;
+}, true);
 function metaCatalogUrl(sellerId) { return "https://sounsouni.pro/c/" + encodeURIComponent(sellerId) + ".csv"; }
 function renderMetaCatalogModal() {
   var me = state.profile; if (!me) return "";
@@ -19628,6 +19716,7 @@ function renderSeller() {
   html += '<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">';
   html += '<button class="btn-secondary" style="flex:1 1 140px;min-width:0;" data-action="' + (gxOwned ? 'gx-open' : 'gx-create') + '" data-value="' + (gxOwned ? esc(gxOwned.id) : '') + '"><i class="fa-solid fa-book"></i> ' + t("gx_my") + '</button>';
   html += '<button class="btn-secondary" style="flex:1 1 140px;min-width:0;" data-action="open-meta-catalog"><i class="fa-brands fa-facebook"></i> ' + t("meta_btn") + '</button></div>';
+  html += '<button class="btn-secondary" style="width:100%;margin-bottom:14px;" data-action="open-vitrine"><i class="fa-solid fa-store"></i> ' + vt("btn") + '</button>';
   if (state.profile.sellerType !== "international") {
     html += '<button class="link-btn" style="width:100%;text-align:center;margin-bottom:10px;" data-action="view-seller-policy"><i class="fa-solid fa-file-lines"></i> Relire la politique d\'utilisation</button>';
   }
@@ -28594,6 +28683,27 @@ root.addEventListener("click", function(e) {
     case "switch-role": switchRole(value); break;
     case "gx-open": gestionOpen(value); break;
     case "open-meta-catalog": state.showMetaCatalog = true; render(); break;
+    case "open-vitrine": {
+      var vv = state.profile.vitrine || {};
+      state.vitrineDraft = { slug: vv.slug || vtSlug(state.profile.shopName) || "", theme: vv.theme || "classique", color: vv.color || "", bio: state.profile.shopDescription || "", on: vv.on !== false };
+      vtLoadLive(); render(); break;
+    }
+    case "close-vitrine": state.vitrineDraft = null; render(); break;
+    case "vt-theme": vtReadInputs(); state.vitrineDraft.theme = value; state.vitrineDraft.color = ""; render(); break;
+    case "vt-color": vtReadInputs(); state.vitrineDraft.color = value; render(); break;
+    case "vt-copy": { var vl = value; try { navigator.clipboard.writeText(vl).then(function() { showToast("✅ " + vt("copied")); }, function() { prompt("", vl); }); } catch (e) { prompt("", vl); } break; }
+    case "vt-open": { var C = window.Capacitor; if (C && C.Plugins && C.Plugins.Browser && C.isNativePlatform && C.isNativePlatform()) C.Plugins.Browser.open({ url: value }); else window.open(value, "_blank"); break; }
+    case "vt-save": {
+      vtReadInputs();
+      var vd = state.vitrineDraft, vs = vtSlug(vd.slug);
+      if (vs.length < 3) { showToast("❌ " + vt("short")); break; }
+      if (vtSlugTaken(vs)) { showToast("❌ " + vt("taken")); break; }
+      var vth = VT_THEMES.filter(function(x) { return x.id === vd.theme; })[0] || VT_THEMES[0];
+      state.profile.vitrine = { slug: vs, theme: vth.id, color: vth.c.indexOf(vd.color) !== -1 ? vd.color : vth.c[0], on: !!vd.on };
+      state.profile.shopDescription = String(vd.bio || "").trim().slice(0, 400) || null;
+      vd.slug = vs;
+      persistProfileToAccounts(); showToast("✅ " + vt("saved")); render(); break;
+    }
     case "close-meta-catalog": state.showMetaCatalog = false; render(); break;
     case "copy-meta-link": { var mu = metaCatalogUrl(state.profile.id); try { navigator.clipboard.writeText(mu).then(function() { showToast("✅ " + t("meta_copied")); }, function() { prompt("", mu); }); } catch (e) { prompt("", mu); } break; }
     case "save-meta-pixel": {

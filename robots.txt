@@ -3,3 +3,4 @@ Allow: /
 
 Sitemap: https://sounsouni.pro/sitemap.xml
 Sitemap: https://sounsouni.pro/sitemap-produits.xml
+Sitemap: https://sounsouni.pro/sitemap-boutiques.xml

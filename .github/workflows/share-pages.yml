@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ["tools/make-share-pages.mjs", ".github/workflows/share-pages.yml"]
+    paths: ["tools/make-share-pages.mjs", "tools/make-vitrines.mjs", ".github/workflows/share-pages.yml"]
 permissions:
   contents: write
 concurrency:
@@ -20,12 +20,13 @@ jobs:
         with:
           node-version: 20
       - run: node tools/make-share-pages.mjs
+      - run: node tools/make-vitrines.mjs
       - name: Enregistrer les pages si elles ont changé
         run: |
           git config user.name "sounsouni-bot"
           git config user.email "bot@sounsouni.pro"
-          git add -A p c site sitemap-produits.xml
+          git add -A
           if git diff --cached --quiet; then echo "Rien de nouveau"; exit 0; fi
-          git commit -m "Pages de partage des articles (mise à jour automatique)"
+          git commit -m "Pages des articles et vitrines des boutiques (mise à jour automatique)"
           git pull --rebase -q origin main
           git push -q origin HEAD:main

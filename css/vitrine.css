@@ -1,0 +1,146 @@
+/* Vitrines des boutiques Sounsouni : une structure, 5 modèles (t-classique, t-elegance, t-wax, t-minimal, t-nuit). --a = couleur choisie par le vendeur. */
+*{box-sizing:border-box}
+body.vt{margin:0;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.vt a{color:inherit}
+.vt .pg{max-width:1080px;margin:0 auto;padding-bottom:20px}
+.vt .bar{display:flex;align-items:center;gap:8px;padding:10px 16px;font-size:12px;opacity:.85}
+.vt .bar img{width:22px;height:22px;border-radius:6px;display:block}
+.vt .bar b{color:var(--a)}
+.vt .cv{height:170px;background-color:var(--a);background-size:cover;background-position:center;position:relative;display:flex;align-items:flex-end;padding:14px}
+.vt .cv .tag{display:none}
+.vt .id{padding:0 18px;display:flex;flex-direction:column;gap:9px}
+.vt .lg{width:88px;height:88px;border-radius:24px;object-fit:cover;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:26px;background:#fff;color:var(--a)}
+.vt h1{margin:0;font-size:28px;font-weight:800;line-height:1.1}
+.vt .kk,.vt .sl,.vt .st{display:none}
+.vt .vf{font-size:12.5px;font-weight:600;color:var(--a)}
+.vt .bio{margin:0;font-size:14.5px;line-height:1.55;opacity:.85;max-width:640px}
+.vt .bt{display:flex;gap:8px;margin-top:4px}
+.vt .bt a{flex:1;text-align:center;text-decoration:none;font-weight:700;padding:13px;border-radius:14px}
+.vt .b1{background:var(--a);color:#fff}
+.vt .b2{border:1.5px solid currentColor;opacity:.9}
+.vt .ft{display:none}
+.vt .ch{display:flex;gap:8px;overflow-x:auto;padding:18px 18px 12px;scrollbar-width:none}
+.vt .ch button{flex:0 0 auto;font:inherit;font-size:12.5px;padding:8px 14px;border-radius:999px;border:1px solid rgba(127,127,127,.3);background:transparent;color:inherit;cursor:pointer}
+.vt .ch button.on{background:currentColor}
+.vt .ch button.on{background:#17251a;color:#fff;border-color:#17251a}
+.vt .gr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:0 18px}
+.vt .it{display:flex;flex-direction:column;gap:4px;text-decoration:none;position:relative;overflow:hidden}
+.vt .it img{width:100%;aspect-ratio:4/5;object-fit:cover;display:block;background:#eee}
+.vt .nm{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 10px}
+.vt .pr{font-size:15px;color:var(--a);padding:0 10px 10px}
+.vt .add{display:none}
+.vt .inf{margin:18px 18px 0;padding:16px;border-radius:18px;font-size:13px;line-height:1.6}
+.vt .inf b{display:block}
+.vt .pw{text-align:center;font-size:12px;opacity:.7;margin:16px 0}
+.vt .pw a{font-weight:700;color:var(--a)}
+@media(min-width:720px){.vt .gr{grid-template-columns:repeat(3,minmax(0,1fr))}.vt .cv{height:260px}.vt .bt{max-width:460px}}
+@media(min-width:1000px){.vt .gr{grid-template-columns:repeat(4,minmax(0,1fr))}}
+
+/* 1 · Classique Sounsouni */
+.t-classique{background:#f4f7f2;color:#17251a}
+.t-classique .bar{background:#fff;border-bottom:1px solid #e3e9e0}
+.t-classique .cv:not([style]){background-image:radial-gradient(circle at 80% 20%,rgba(200,255,138,.35),transparent 55%)}
+.t-classique .id{margin-top:-44px;position:relative}
+.t-classique .lg{border:4px solid #f4f7f2;box-shadow:0 8px 20px rgba(0,0,0,.12)}
+.t-classique .b2{background:#fff;color:var(--a);border-color:#cfe0c8}
+.t-classique .it{background:#fff;border-radius:18px;box-shadow:0 4px 14px rgba(20,50,20,.07)}
+.t-classique .it .nm{padding-top:8px}
+.t-classique .inf{background:#fff}
+
+/* 2 · Élégance noir & or */
+.t-elegance{background:#0e0d0b;color:#efe7d6}
+.t-elegance .bar{border-bottom:1px solid #2a261f}
+.t-elegance .cv{display:none}
+.t-elegance .id{align-items:center;text-align:center;padding-top:34px}
+.t-elegance .lg{border-radius:50%;width:78px;height:78px;background:transparent;border:1.5px solid var(--a);font-family:'Playfair Display',serif;font-weight:600;font-size:24px}
+.t-elegance .kk{display:block;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--a)}
+.t-elegance h1{font-family:'Playfair Display',serif;font-weight:600;font-size:40px;letter-spacing:1px}
+.t-elegance .sl{display:block;margin:0;font-family:'Playfair Display',serif;font-style:italic;font-size:17px;color:#c9bfa9}
+.t-elegance .vf{color:#9c927f;font-weight:400}
+.t-elegance .bio{color:#c9bfa9}
+.t-elegance .bt{justify-content:center}
+.t-elegance .bt a{flex:0 1 auto;border-radius:0;font-weight:400;font-size:12px;letter-spacing:2px;text-transform:uppercase;padding:13px 22px}
+.t-elegance .b1{background:transparent;border:1px solid var(--a);color:var(--a)}
+.t-elegance .b2{border:1px solid #3a342a;color:#c9bfa9}
+.t-elegance .ft{display:block;position:relative;margin:26px 18px 0;text-decoration:none}
+.t-elegance .ft img{width:100%;height:380px;object-fit:cover;display:block}
+.t-elegance .ft span{position:absolute;left:0;right:0;bottom:0;padding:18px;background:linear-gradient(transparent,rgba(0,0,0,.85));font-family:'Playfair Display',serif;font-size:21px}
+.t-elegance .ft i{display:block;font-family:Inter,sans-serif;font-style:normal;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--a)}
+.t-elegance .ch{justify-content:center;flex-wrap:wrap}
+.t-elegance .ch button{border:0;border-radius:0;font-size:11.5px;letter-spacing:2px;text-transform:uppercase;color:#9c927f;padding:8px 6px}
+.t-elegance .ch button.on{background:transparent;color:var(--a);border-bottom:1px solid var(--a)}
+.t-elegance .gr{gap:24px 14px}
+.t-elegance .nm{font-family:'Playfair Display',serif;font-weight:600;font-size:15px;padding:6px 0 0}
+.t-elegance .pr{font-weight:400;font-size:12.5px;padding:0}
+.t-elegance .inf{border-top:1px solid #2a261f;border-radius:0;text-align:center;color:#9c927f}
+.t-elegance .inf b{color:#efe7d6;font-family:'Playfair Display',serif;font-weight:600}
+.t-elegance .pw{letter-spacing:2px;text-transform:uppercase;font-size:11px}
+
+/* 3 · Wax coloré */
+.t-wax{background:#fff6e8;color:#2b1a0e}
+.t-wax .cv:not([style]){background-image:radial-gradient(circle at 25px 25px,#ffcc33 9px,transparent 10px),radial-gradient(circle at 75px 75px,#0f7a5c 13px,transparent 14px),repeating-linear-gradient(45deg,rgba(255,255,255,.14) 0 10px,transparent 10px 30px);background-size:100px 100px,100px 100px,auto}
+.t-wax .cv .tag{display:inline-block;background:#ffcc33;color:#2b1a0e;font-weight:800;font-size:12px;padding:6px 12px;border-radius:999px}
+.t-wax .id{padding-top:16px}
+.t-wax .lg{width:64px;height:64px;border-radius:18px;background:#0f7a5c;color:#fff;font-family:'Baloo 2',sans-serif;font-size:22px}
+.t-wax h1{font-family:'Baloo 2',sans-serif;font-size:32px;line-height:1}
+.t-wax .vf{color:#0f7a5c}
+.t-wax .bt a{font-family:'Baloo 2',sans-serif;font-weight:800;font-size:17px;padding:10px;border-radius:16px}
+.t-wax .b2{background:#0f7a5c;color:#fff;border:0;opacity:1}
+.t-wax .ch button{border:2px solid #f3dcc0;background:#fff;border-radius:12px;font-weight:600}
+.t-wax .ch button.on{background:#ffcc33;color:#2b1a0e;border-color:#ffcc33}
+.t-wax .it{background:#fff;border-radius:20px;padding:8px;border:2px solid #f3dcc0}
+.t-wax .it img{border-radius:14px}
+.t-wax .nm{padding:6px 4px 0}
+.t-wax .pr{font-family:'Baloo 2',sans-serif;font-size:17px;padding:0 4px 2px}
+.t-wax .add{display:flex;position:absolute;right:10px;bottom:10px;width:30px;height:30px;border-radius:10px;background:#ffcc33;align-items:center;justify-content:center;font-weight:800}
+.t-wax .inf{background:#0f7a5c;color:#fff;border-radius:20px}
+.t-wax .inf b{font-family:'Baloo 2',sans-serif;font-size:17px}
+
+/* 4 · Minimal blanc */
+.t-minimal{background:#fff;color:#111}
+.t-minimal .bar{color:#767676}
+.t-minimal .cv{display:none}
+.t-minimal .lg{display:none}
+.t-minimal .id{padding-top:26px}
+.t-minimal h1{font-family:'Space Grotesk',sans-serif;font-size:54px;line-height:.95;letter-spacing:-2px;text-transform:uppercase}
+.t-minimal h1::after{content:"."}
+.t-minimal .vf{color:#767676;font-weight:400}
+.t-minimal .bio{color:#555}
+.t-minimal .bt a{border-radius:0;font-weight:500}
+.t-minimal .b2{border:1px solid #111}
+.t-minimal .ch{border-bottom:1px solid #eee;margin:22px 18px 18px;padding:0 0 12px;gap:18px}
+.t-minimal .ch button{border:0;padding:0;border-radius:0;color:#767676;font-size:13px}
+.t-minimal .ch button.on{background:transparent;color:#111;font-weight:500}
+.t-minimal .gr{gap:26px 12px}
+.t-minimal .it img{background:#f3f3f3}
+.t-minimal .nm{font-weight:400;font-size:12.5px;padding:6px 0 0}
+.t-minimal .pr{color:#111;font-weight:500;font-size:12.5px;padding:0}
+.t-minimal .inf{border-top:1px solid #eee;border-radius:0;color:#555;padding:18px 0;margin:30px 18px 0}
+.t-minimal .pw{text-align:left;padding:0 18px}
+.t-minimal .pw a{color:#111}
+
+/* 5 · Moderne sombre */
+.t-nuit{background:#0b1220;color:#e8edf6}
+.t-nuit .bar{color:#8a96ab}
+.t-nuit .cv{display:none}
+.t-nuit .id{margin:0 16px;padding:22px;border-radius:26px;background:linear-gradient(150deg,#16233d,#0f1a2e);border:1px solid #22314f;display:grid;grid-template-columns:58px 1fr;column-gap:12px;align-items:center}
+.t-nuit .lg{width:58px;height:58px;border-radius:16px;background:var(--a);color:#0b1220;font-family:Sora,sans-serif;font-size:19px;grid-row:span 2}
+.t-nuit h1{font-family:Sora,sans-serif;font-size:25px}
+.t-nuit .vf{grid-column:2}
+.t-nuit .bio,.t-nuit .st,.t-nuit .bt{grid-column:1/-1}
+.t-nuit .bio{color:#b4bfd2;margin-top:6px}
+.t-nuit .st{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;text-align:center}
+.t-nuit .st div{background:#0b1220;border-radius:14px;padding:10px 4px}
+.t-nuit .st b{display:block;font-family:Sora,sans-serif;font-size:18px}
+.t-nuit .st span{font-size:11px;color:#8a96ab}
+.t-nuit .bt a{border-radius:999px}
+.t-nuit .b1{color:#0b1220}
+.t-nuit .b2{border-color:#22314f;color:#e8edf6}
+.t-nuit .ch button{background:#16233d;border:0}
+.t-nuit .ch button.on{background:#e8edf6;color:#0b1220}
+.t-nuit .gr{padding:0 16px}
+.t-nuit .it{background:#121c30;border:1px solid #1f2c47;border-radius:20px}
+.t-nuit .nm{font-weight:400;padding-top:8px}
+.t-nuit .pr{font-family:Sora,sans-serif}
+.t-nuit .inf{background:#121c30;border:1px solid #1f2c47;color:#b4bfd2;border-radius:20px;margin:16px 16px 0}
+.t-nuit .inf b{color:#e8edf6}
