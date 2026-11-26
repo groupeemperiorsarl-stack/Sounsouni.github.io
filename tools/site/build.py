@@ -18,6 +18,7 @@ SERVICES = [
  ("energie", "fa-solar-panel", "Énergie", "Solaire, électricité", "Installations solaires, groupes électrogènes, réseaux électriques pour maisons, boutiques et usines."),
  ("sourcing", "fa-globe", "Import & Sourcing", "Chine, Inde, Europe, Golfe…", "Nos Pôles Sounsouni achètent et vérifient vos marchandises sur place, puis les acheminent jusqu'à Bamako."),
  ("etiquetage", "fa-barcode", "Étiquetage & Caisse", "Codes-barres, caisse, matériel", "Inventaire et étiquetage de vos produits, caisse avec scanner Sounsouni Gestion Pro, fourniture de douchettes et d'imprimantes d'étiquettes. Sur devis."),
+ ("croissance", "fa-chart-line", "Croissance des entreprises", "Marketing & Ventes", "Communication digitale et réseaux sociaux, référencement Google (SEO), prospection de nouveaux clients et conclusion des ventes : nous faisons grandir votre chiffre d'affaires."),
  ("conseil", "fa-briefcase", "Conseil & Services", "Projets d'entreprise", "Études de marché, montage de projets, accompagnement administratif et services généraux aux entreprises."),
 ]
 M = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vitrine.json')))
@@ -102,6 +103,8 @@ def portail():
       '<div style="font-size:13px;opacity:.85;margin-top:10px;padding-right:56px">Transit Chine · Inde · France · Europe → Bamako, livraison à domicile et Points de Retrait.</div><span class="go" style="background:var(--glow);color:var(--gd)"><i class="fa-solid fa-arrow-right"></i></span></a>'
       '<a href="services.html#etiquetage" class="door photo wide rv"><img class="ph" src="img/site/etiquetage.webp" alt="" loading="lazy"><div class="k">03 — Étiquetage &amp; Caisse</div><div class="t">Votre magasin,<br><span class="serif" style="color:var(--glow)">au code-barres près.</span></div>'
       '<div style="font-size:13.5px;opacity:.9;margin-top:10px;max-width:560px;padding-right:56px">Supermarchés, alimentations et boutiques : nous enregistrons et étiquetons toute votre marchandise, installons la caisse avec scanner Sounsouni Gestion Pro et suivons votre stock à chaque arrivage.</div><span class="go" style="background:var(--glow);color:var(--gd)"><i class="fa-solid fa-arrow-right"></i></span></a>'
+      '<a href="services.html#croissance" class="door photo wide rv"><img class="ph" src="img/site/croissance.webp" alt="" loading="lazy"><div class="k">04 — Croissance des entreprises</div><div class="t">Marketing &amp; Ventes :<br><span class="serif" style="color:var(--glow)">on fait grandir votre entreprise.</span></div>'
+      '<div style="font-size:13.5px;opacity:.9;margin-top:10px;max-width:560px;padding-right:56px">Communication digitale et réseaux sociaux, référencement Google, prospection de nouveaux clients et conclusion des ventes. Vous vous occupez de votre métier, nous trouvons vos clients.</div><span class="go" style="background:var(--glow);color:var(--gd)"><i class="fa-solid fa-arrow-right"></i></span></a>'
       '</div></main>')
     out += carousel()
     out += journey()
@@ -162,9 +165,9 @@ srv = cine_hero(False, "Sounsouni Services", ["Votre projet,", '<span class="ser
            "Construction, mines, industrie, immobilier, digital, intelligence artificielle, énergie : décrivez votre besoin, Sounsouni vous fait une offre.",
            '<a class="pill p-w" href="#demande">Demander une offre</a><a class="pill p-o" href="#domaines">Nos domaines</a>', "img/site/btp.webp", "services.html")
 srv += '<main class="wrap"><section class="sec" id="domaines"><div class="k rv">Nos domaines</div><h2 class="rv d1">Tout Sounsouni <span class="serif">au service des entreprises.</span></h2><div class="steps">'
-PH = {"etiquetage": "img/site/etiquetage.webp", "mines": "img/site/mines.webp", "btp": "img/site/btp.webp", "energie": "img/site/solaire.webp", "digital": "img/site/digital.webp"}
+PH = {"croissance": "img/site/croissance.webp", "etiquetage": "img/site/etiquetage.webp", "mines": "img/site/mines.webp", "btp": "img/site/btp.webp", "energie": "img/site/solaire.webp", "digital": "img/site/digital.webp"}
 srv += "".join('<div class="step rv" id="%s" style="background:%s"><i class="fa-solid %s big"></i><h3>Sounsouni<br>%s</h3><p>%s</p><a class="pill p-w" style="margin-top:14px;align-self:flex-start" href="#demande" data-svc="%s">Demander une offre</a></div>'
-               % (k, ("#1b5e20", "#6b4a12", "#24452c", "#1f4f6e", "#2e7d32", "#0f2e14", "#22662a", "#1d3b49", "#3a4a1f", "#33502f")[i], ic, n, d, k) for i, (k, ic, n, s, d) in enumerate(SERVICES))
+               % (k, ("#1b5e20", "#6b4a12", "#24452c", "#1f4f6e", "#2e7d32", "#0f2e14", "#22662a", "#1d3b49", "#3a4a1f", "#33502f", "#5a2a6e", "#2b3f1d", "#1d3b49")[i % 13], ic, n, d, k) for i, (k, ic, n, s, d) in enumerate(SERVICES))
 for _k, _img in PH.items():
     srv = srv.replace('id="%s" style="background:' % _k, 'id="%s" style="background:linear-gradient(180deg,rgba(0,0,0,.05) 0%%,rgba(4,20,10,.88) 62%%),url(%s) center/cover,' % (_k, _img), 1)
 srv += '</div></section><section class="sec two" id="demande"><div><div class="k rv">Demande d\'offre</div><h2 class="rv d1">Parlez-nous <span class="serif">de votre projet.</span></h2><p class="lead rv d2">Votre demande arrive directement chez Sounsouni, sur WhatsApp. Nous vous répondons avec une offre adaptée.</p></div>'
@@ -192,7 +195,7 @@ ap += ('<main class="wrap"><section class="sec two"><div style="display:flex;jus
        '<div><div class="k rv">Notre histoire</div><h2 class="rv d1">Née à Bamako, <span class="serif">pensée pour toute l\'Afrique.</span></h2>'
        '<p class="lead rv d2">Tout a commencé par une question simple : pourquoi acheter, recevoir un colis ou lancer un projet au Mali serait-il plus compliqué qu\'ailleurs ? Sounsouni est née pour y répondre.</p>'
        '<p class="lead rv d2">Aujourd\'hui, Sounsouni est une entreprise ouest-africaine qui relie les commerçants, les familles et les entrepreneurs du Mali au reste du monde. Elle a une seule exigence : la confiance, à chaque étape.</p></div></section>'
-       '<section class="sec" id="metiers"><div class="k rv">Ce que nous faisons</div><h2 class="rv d1">Quatre métiers, <span class="serif">une seule promesse.</span></h2><div class="piliers">') % LOGO
+       '<section class="sec" id="metiers"><div class="k rv">Ce que nous faisons</div><h2 class="rv d1">Cinq métiers, <span class="serif">une seule promesse.</span></h2><div class="piliers">') % LOGO
 ap += pilier("01", "fa-bag-shopping", "Sounsouni Marché", "Le grand marché du Mali, dans votre poche.",
              "Des milliers d'articles de vendeurs vérifiés : mode, beauté, high-tech, maison, alimentation. Vous commandez en quelques secondes, vous payez par Orange Money, par Moov Money ou à la livraison, et vous suivez votre commande en direct.",
              ["Vendeurs vérifiés et boutiques officielles", "Paiement sécurisé : l'argent est gardé jusqu'à la livraison", "Livraison à domicile ou au Point de Retrait"], "img/site/remise.webp", "#1b5e20")
@@ -202,7 +205,10 @@ ap += pilier("02", "fa-truck-fast", "Sounsouni Logistique", "Du bout du monde ju
 ap += pilier("03", "fa-barcode", "Sounsouni Étiquetage & Caisse", "Votre magasin, au code-barres près.",
              "Pour les supermarchés, les alimentations et les boutiques, Sounsouni enregistre et étiquette toute la marchandise, installe la caisse avec scanner Sounsouni Gestion Pro et revient à chaque arrivage de stock. Le commerçant encaisse plus vite, connaît son stock à l'article près et stoppe les pertes.",
              ["Enregistrement et étiquetage de chaque article", "Caisse avec douchette, tickets et rapports chaque jour", "Matériel fourni, installation, assistance et inventaires"], "img/site/etiquetage.webp", "#1d3b49")
-ap += pilier("04", "fa-helmet-safety", "Sounsouni Services", "Les experts qui font avancer vos projets.",
+ap += pilier("04", "fa-chart-line", "Sounsouni Croissance des entreprises", "Marketing & Ventes : on fait grandir votre entreprise.",
+             "Beaucoup d'entreprises ont un bon produit mais pas assez de clients. Sounsouni prend en main leur communication digitale, les rend visibles sur Google, va chercher de nouveaux clients et conclut les ventes avec eux. Le chef d'entreprise se concentre sur son métier, Sounsouni s'occupe de faire grandir son chiffre d'affaires.",
+             ["Communication digitale et gestion des réseaux sociaux", "Référencement Google (SEO) et image de marque", "Prospection : trouver de nouveaux clients", "Conclusion des ventes et suivi des clients"], "img/site/croissance.webp", "#3b2457")
+ap += pilier("05", "fa-helmet-safety", "Sounsouni Services", "Les experts qui font avancer vos projets.",
              "Pour les entreprises et les particuliers, Sounsouni réunit les savoir-faire qui permettent de bâtir et de grandir : construire, exploiter les mines, équiper, digitaliser et automatiser.",
              ["BTP et construction · Immobilier", "Solutions minières : équipements, sourcing, conseil", "Solutions industrielles · Énergie solaire", "Digital, applications et intelligence artificielle", "Import, sourcing et conseil aux entreprises"], "img/site/btp.webp", "#24452c")
 ap += ('</div></section>'
