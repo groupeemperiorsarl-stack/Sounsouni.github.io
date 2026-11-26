@@ -77,33 +77,50 @@ function page(slug, a) {
     paymentAccepted: "Orange Money, Moov Money, espèces à la livraison", currenciesAccepted: "XOF",
     hasOfferCatalog: { "@type": "OfferCatalog", name: "Articles de " + name, itemListElement: items.slice(0, 30).map((x) => ({ "@type": "Offer", url: `${SITE}/p/${x.id}.html`, priceCurrency: "XOF", price: Number(x.price.replace(/\D/g, "")), itemOffered: { "@type": "Product", name: x.name, image: x.img } })) } };
   const logoHtml = logo ? `<img class="lg" src="${esc(logo)}" alt="${esc(name)}">` : `<div class="lg">${esc(initials)}</div>`;
-  const card = (x) => `<a class="it" data-c="${esc(x.cat)}" href="/p/${x.id}.html"><img src="${esc(x.img)}" alt="${esc(x.name)}" loading="lazy"><span class="nm">${esc(x.name)}</span><b class="pr">${esc(x.price)}</b><span class="add" aria-hidden="true">+</span></a>`;
+  const link = (x) => `/p/${x.id}.html?from=${slug}`;
+  const card = (x) => `<a class="it" data-c="${esc(x.cat)}" data-n="${esc(x.name.toLowerCase())}" href="${link(x)}"><img src="${esc(x.img)}" alt="${esc(x.name)}" loading="lazy"><span class="nm">${esc(x.name)}</span><b class="pr">${esc(x.price)}</b><span class="add" aria-hidden="true">+</span></a>`;
   const feat = items[0];
+  const since = Number(a.createdAt) ? new Date(Number(a.createdAt)).getFullYear() : null;
+  const rayons = cats.map((c) => { const l = items.filter((x) => x.cat === c); return `<button class="ry" data-go="${esc(c)}"><img src="${esc(l[0].img)}" alt="" loading="lazy"><span><b>${esc(c)}</b><small>${l.length} article${l.length > 1 ? "s" : ""}</small></span></button>`; }).join("");
+  const news = items.slice(0, 8).map((x) => `<a class="nw" href="${link(x)}"><img src="${esc(x.img)}" alt="${esc(x.name)}" loading="lazy"><span class="nm">${esc(x.name)}</span><b class="pr">${esc(x.price)}</b></a>`).join("");
+  const cta = theme === "wax" ? "Je commande" : theme === "elegance" ? "Découvrir la collection" : "Voir les articles";
   return `<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)}</title><meta name="description" content="${esc(desc)}"><link rel="canonical" href="${SITE}/${slug}">
 <meta property="og:type" content="website"><meta property="og:site_name" content="Sounsouni"><meta property="og:title" content="${esc(name)} — sur Sounsouni"><meta property="og:description" content="${esc(desc)}">
 <meta property="og:url" content="${SITE}/${slug}"><meta property="og:image" content="${esc(ogimg)}"><meta name="twitter:card" content="summary_large_image">
-<link rel="icon" type="image/png" href="/favicon-192.png"><meta name="theme-color" content="${color}">
+<link rel="icon" type="image/png" href="${esc(logo || "/favicon-192.png")}"><meta name="theme-color" content="${color}">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Playfair+Display:ital,wght@0,600;1,500&family=Baloo+2:wght@600;800&family=Space+Grotesk:wght@500;700&family=Sora:wght@600;800&display=swap">
-<link rel="stylesheet" href="/css/vitrine.css?v=1">
+<link rel="stylesheet" href="/css/vitrine.css?v=2">
 <script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>
-</head><body class="vt t-${theme}" style="--a:${color}"><div class="pg">
-<div class="bar"><a href="/"><img src="/favicon-192.png" alt="Sounsouni"></a><span>sounsouni.pro/<b>${esc(slug)}</b></span></div>
+</head><body class="vt t-${theme}" style="--a:${color}">
+<header class="nav"><a class="nb" href="#top">${logo ? `<img src="${esc(logo)}" alt="">` : `<i>${esc(initials)}</i>`}<span>${esc(name)}</span></a><nav><a href="#articles">Articles</a><a href="#apropos">À propos</a><a href="#commander">Commander</a></nav></header>
+<div class="pg" id="top">
 <div class="cv"${cover ? ` style="background-image:url('${esc(cover)}')"` : ""}><span class="tag">Nouveautés chaque semaine</span></div>
-<header class="id">${logoHtml}<div class="kk">Boutique · ${esc(place || "Mali")}</div>
+<section class="id">${logoHtml}<div class="kk">Boutique · ${esc(place || "Mali")}</div>
 <h1>${esc(name)}</h1>${theme === "elegance" ? `<p class="sl">${esc(cats[0] || "Sélection")}, livrée chez vous.</p>` : ""}
-<div class="vf">${a.verified ? "✓ Vendeur vérifié Sounsouni · " : ""}${items.length} article${items.length > 1 ? "s" : ""}</div>
-<p class="bio">${esc(bio)}</p>
+<div class="vf">${a.verified ? "✓ Vendeur vérifié Sounsouni · " : ""}📍 ${esc(place || "Bamako, Mali")}</div>
+<p class="bio">${esc(bio.length > 220 ? bio.slice(0, 217) + "…" : bio)}</p>
 <div class="st"><div><b>${items.length}</b><span>articles</span></div><div><b>24 h</b><span>livraison</span></div><div><b>${cats.length}</b><span>rayons</span></div></div>
-<div class="bt"><a class="b1" href="#articles">${theme === "wax" ? "Je commande" : theme === "elegance" ? "Découvrir la collection" : "Voir les articles"}</a><a class="b2" href="#" id="share">Partager</a></div></header>
-<a class="ft" href="/p/${feat.id}.html"><img src="${esc(feat.img)}" alt="${esc(feat.name)}"><span><i>Pièce du moment</i>${esc(feat.name)} · ${esc(feat.price)}</span></a>
-<nav class="ch" id="articles"><button class="on" data-c="">Tout</button>${cats.map((c) => `<button data-c="${esc(c)}">${esc(c)}</button>`).join("")}</nav>
-<main class="gr">${items.map(card).join("")}</main>
-<div class="inf"><b>Commandez en toute confiance</b>Paiement Orange Money, Moov Money ou à la livraison. Livraison à domicile ou au Point de Retrait Sounsouni, partout au Mali.</div>
-<p class="pw">Boutique propulsée par <a href="/">Sounsouni</a></p></div>
-<script>document.querySelectorAll(".ch button").forEach(function(b){b.onclick=function(){document.querySelectorAll(".ch button").forEach(function(x){x.classList.toggle("on",x===b)});var c=b.getAttribute("data-c");document.querySelectorAll(".it").forEach(function(i){i.style.display=!c||i.getAttribute("data-c")===c?"":"none"})}});
-document.getElementById("share").onclick=function(e){e.preventDefault();var u=location.href.split("#")[0];if(navigator.share)navigator.share({title:document.title,url:u}).catch(function(){});else{try{navigator.clipboard.writeText(u);alert("Lien copié")}catch(x){prompt("",u)}}};</script>
+<div class="bt"><a class="b1" href="#articles">${cta}</a><a class="b2" href="#" id="share">Partager</a></div></section>
+<section class="ok"><div><i>🚚</i><b>Livraison rapide</b><span>À domicile ou en Point de Retrait</span></div><div><i>💳</i><b>Paiement facile</b><span>Orange Money, Moov ou à la livraison</span></div><div><i>🛡️</i><b>Commande protégée</b><span>Suivie par Sounsouni</span></div><div><i>💬</i><b>Service client</b><span>Une équipe à Bamako</span></div></section>
+<a class="ft" href="${link(feat)}"><img src="${esc(feat.img)}" alt="${esc(feat.name)}"><span><i>Pièce du moment</i>${esc(feat.name)}<em>${esc(feat.price)} · Commander →</em></span></a>
+${cats.length > 1 ? `<section class="sc"><h2>Nos rayons</h2><div class="rys">${rayons}</div></section>` : ""}
+${items.length > 4 ? `<section class="sc"><h2>Nouveautés</h2><div class="nws">${news}</div></section>` : ""}
+<section class="sc" id="articles"><h2>Tous nos articles <small>${items.length}</small></h2>
+<input class="se" id="se" type="search" placeholder="Rechercher un article…" autocomplete="off">
+<nav class="ch"><button class="on" data-c="">Tout</button>${cats.map((c) => `<button data-c="${esc(c)}">${esc(c)}</button>`).join("")}</nav>
+<main class="gr">${items.map(card).join("")}</main><p class="none" id="none" hidden>Aucun article ne correspond.</p></section>
+<section class="sc ab" id="apropos"><h2>À propos de ${esc(name)}</h2><div class="abx">${logoHtml}<div><p>${esc(bio)}</p>
+<ul><li>📍 ${esc(place || "Bamako, Mali")}</li>${since ? `<li>🗓️ Sur Sounsouni depuis ${since}</li>` : ""}<li>🛍️ ${items.length} articles en ligne, ${cats.length} rayon${cats.length > 1 ? "s" : ""}</li>${a.verified ? "<li>✓ Vendeur vérifié par Sounsouni</li>" : ""}</ul></div></div></section>
+<section class="sc hw" id="commander"><h2>Comment commander ?</h2><ol><li><b>Choisissez</b><span>Touchez un article pour voir les photos, les tailles et le prix.</span></li><li><b>Commandez</b><span>Indiquez votre adresse ou un Point de Retrait Sounsouni.</span></li><li><b>Recevez</b><span>Payez par Orange Money, Moov Money ou à la livraison.</span></li></ol><a class="b1 big" href="#articles">${cta}</a></section>
+<footer class="pw"><div><b>${esc(name)}</b><span>Boutique en ligne · ${esc(place || "Bamako, Mali")}</span></div><a class="mk" href="/">Découvrir tout le marché Sounsouni →</a><small>Boutique propulsée par <a href="/">Sounsouni</a> · Bamako, Mali</small></footer></div>
+<script>(function(){var cat="",q="";function f(){var n=0;document.querySelectorAll(".it").forEach(function(i){var ok=(!cat||i.getAttribute("data-c")===cat)&&(!q||i.getAttribute("data-n").indexOf(q)>-1);i.style.display=ok?"":"none";if(ok)n++});document.getElementById("none").hidden=n>0}
+function setCat(c){cat=c;document.querySelectorAll(".ch button").forEach(function(x){x.classList.toggle("on",x.getAttribute("data-c")===c)});f()}
+document.querySelectorAll(".ch button").forEach(function(b){b.onclick=function(){setCat(b.getAttribute("data-c"))}});
+document.querySelectorAll(".ry").forEach(function(b){b.onclick=function(){setCat(b.getAttribute("data-go"));document.getElementById("articles").scrollIntoView({behavior:"smooth"})}});
+document.getElementById("se").oninput=function(e){q=e.target.value.trim().toLowerCase();f()};
+document.getElementById("share").onclick=function(e){e.preventDefault();var u=location.href.split("#")[0];if(navigator.share)navigator.share({title:document.title,url:u}).catch(function(){});else{try{navigator.clipboard.writeText(u);alert("Lien copié")}catch(x){prompt("",u)}}};})();</script>
 </body></html>
 `;
 }

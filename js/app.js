@@ -9586,6 +9586,11 @@ function getReferralCode() {
 try {
   var _linkParams = new URLSearchParams(window.location.search);
   if (_linkParams.get("product")) window._pendingProductLink = _linkParams.get("product");
+  // Article ouvert depuis une vitrine en ligne (sounsouni.pro/<boutique>) :
+  // on retient la boutique pour que « Retour » y ramène.
+  var _vtFrom = _linkParams.get("from");
+  if (_vtFrom && /^[a-z0-9\-]{2,40}$/.test(_vtFrom)) { window._vitrineFrom = _vtFrom; try { sessionStorage.setItem("sns_vt_from", _vtFrom); if (!localStorage.getItem("sounsouni_language")) localStorage.setItem("sounsouni_language", detectInitialLanguage()); } catch (eV) {} }
+  else { try { var _vs = sessionStorage.getItem("sns_vt_from"); if (_vs && _linkParams.get("product")) window._vitrineFrom = _vs; } catch (eV) {} }
   // Code de parrainage : enregistré DÈS l'arrivée (avant, il n'était lu dans
   // l'adresse qu'au moment de l'inscription — et pouvait être perdu entre-temps).
   if (_linkParams.get("ref")) localStorage.setItem("gems_referral", _linkParams.get("ref"));
@@ -9638,6 +9643,7 @@ function openPendingProductLink() {
   try {
     var u = new URL(window.location.href);
     u.searchParams.delete("product");
+    u.searchParams.delete("from");
     history.replaceState(history.state, "", u.pathname + (u.search || "") + u.hash);
   } catch (e) {}
 }
@@ -11707,7 +11713,7 @@ function cartOwnerId() {
 // se connecter, pour qu'aucun écran prévu pour un compte connecté ne
 // s'ouvre avec un visiteur.
 var GUEST_ALLOWED_ACTIONS = {
-  "open-product": 1, "close-product": 1, "modal-qty": 1, "select-color": 1, "select-size": 1,
+  "open-product": 1, "close-product": 1, "vt-back-shop": 1, "vt-go-market": 1, "modal-qty": 1, "select-color": 1, "select-size": 1,
   "set-active-image": 1, "open-lightbox": 1, "close-lightbox": 1, "lightbox-next": 1, "lightbox-prev": 1,
   "download-lightbox-image": 1, "share-product": 1, "view-cart-from-product": 1, "view-seller-shop": 1,
   "close-shop-page": 1, "cart-qty": 1, "remove-cart-item": 1, "continue-shopping": 1,
@@ -25943,6 +25949,12 @@ function renderProductModal() {
   
   var html = '<div class="modal-overlay ' + (isFreshOpen ? '' : 'no-anim') + '" id="modal-overlay" data-action="close-product">';
   html += '<div class="modal-sheet ' + (isFreshOpen ? '' : 'no-anim') + '">';
+  if (window._vitrineFrom) {
+    html += '<div style="position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;padding:10px 56px 10px 12px;background:var(--bg-card,#fff);border-bottom:1px solid rgba(127,127,127,.18)">';
+    html += '<button data-action="vt-back-shop" style="flex:1 1 auto;min-width:0;display:flex;align-items:center;justify-content:center;gap:6px;border:0;background:#1b5e20;color:#fff;font-weight:700;font-size:12.5px;padding:10px 8px;border-radius:12px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><i class="fa-solid fa-arrow-left"></i> Retour à la boutique</button>';
+    html += '<button data-action="vt-go-market" style="flex:0 1 auto;min-width:0;border:1.5px solid #1b5e20;background:transparent;color:#1b5e20;font-weight:700;font-size:12px;padding:8px;border-radius:12px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><i class="fa-solid fa-store"></i> Marché</button>';
+    html += '</div>';
+  }
   html += '<button class="modal-close" data-action="close-product"><i class="fa-solid fa-xmark"></i></button>';
   html += '<button class="modal-close" style="right:56px" data-action="share-product" data-value="' + p.id + '"><i class="fa-solid fa-share-nodes"></i></button>';
   html += '<div class="pd-layout"><div class="pd-media">';
@@ -30767,7 +30779,13 @@ root.addEventListener("click", function(e) {
       snsZoomFromTap(document.querySelector("#modal-overlay:not(.no-anim) .modal-sheet"));
       break;
     }
+    case "vt-back-shop": { location.href = "/" + window._vitrineFrom; break; }
+    case "vt-go-market": {
+      window._vitrineFrom = null; try { sessionStorage.removeItem("sns_vt_from"); } catch (eV) {}
+      state.detailProductId = null; modalWasOpenFor = null; state.view = "market"; render(); window.scrollTo(0, 0); break;
+    }
     case "close-product": {
+      if (window._vitrineFrom) { location.href = "/" + window._vitrineFrom; break; }
       if (state.filatureProductOpenedAt && state.detailProductId) {
         var dwellSec = Math.round((Date.now() - state.filatureProductOpenedAt) / 1000);
         var closedProd = null;
@@ -34213,6 +34231,7 @@ window.addEventListener("popstate", function(e) {
   // d'abord, quelle qu'elle soit — voir OVERLAY_REGISTRY plus haut, qui
   // couvre désormais TOUTES les fenêtres de l'app en un seul endroit.
   var openKey = currentOverlayKey();
+  if (openKey === "detailProduct" && window._vitrineFrom) { location.replace("/" + window._vitrineFrom); return; }
   if (openKey) {
     closeOverlayByKey(openKey);
     lastHistoryOverlayKey = null;
@@ -34610,7 +34629,7 @@ var _splashFinished = false;
 applyScaleMotif();
 // Retour rapide (moins de 2 heures depuis la dernière utilisation) : pas de
 // grand écran d'accueil, juste la mascotte pendant le chargement.
-var SNS_QUICK_BOOT = (function () { var l = snsLastSeen(); return l > 0 && Date.now() - l < SNS_AWAY_SPLASH_MS; })();
+var SNS_QUICK_BOOT = !!window._vitrineFrom || (function () { var l = snsLastSeen(); return l > 0 && Date.now() - l < SNS_AWAY_SPLASH_MS; })();
 snsMarkSeen();
 if (SNS_QUICK_BOOT) {
   root.innerHTML = '<div class="splash-screen" style="background:var(--bg-body,#fff);"></div>';

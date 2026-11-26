@@ -61,7 +61,7 @@ ${price ? `<meta property="product:price:amount" content="${Math.round(Number(p.
 <link rel="icon" type="image/png" href="/favicon-192.png">
 <script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>
 <script type="application/ld+json">${JSON.stringify(crumbs).replace(/</g, "\\u003c")}</script>
-<script>if(!/bot|crawl|spider|slurp|google|bing|yandex|baidu|duckduck|facebookexternalhit|whatsapp|telegram|twitter|linkedin|lighthouse/i.test(navigator.userAgent)){var q=new URLSearchParams(location.search),r=q.get("ref");location.replace("/?product=${id}"+(r?"&ref="+encodeURIComponent(r):""));}</script>
+<script>if(!/bot|crawl|spider|slurp|google|bing|yandex|baidu|duckduck|facebookexternalhit|whatsapp|telegram|twitter|linkedin|lighthouse/i.test(navigator.userAgent)){var q=new URLSearchParams(location.search),r=q.get("ref"),f=q.get("from");location.replace("/?product=${id}"+(r?"&ref="+encodeURIComponent(r):"")+(f?"&from="+encodeURIComponent(f):""));}</script>
 <style>body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1d2433;background:#f5f7f3}a{color:inherit}.w{max-width:960px;margin:auto;padding:16px}
 .h{display:flex;align-items:center;gap:10px;font-weight:800;text-decoration:none;color:#1b5e20}.h img{width:34px;height:34px;border-radius:9px}
 .g{display:grid;gap:20px;margin-top:16px}.ph{display:grid;gap:8px}.ph img{width:100%;border-radius:18px;background:#fff;aspect-ratio:1;object-fit:cover}.ph .t{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.ph .t img{border-radius:10px}
